@@ -1,0 +1,14 @@
+export type LanguageId = string;
+export type EnvironmentProfileId = string;
+export type RuntimeProviderId = string;
+export type SurfaceId = string;
+export type SurfaceOptionId = string;
+export type EnvironmentActionId = string;
+export type ValidatorId = string;
+export type LocatorId = string;
+export type InteractionAnchorId = string;
+export type TargetResolverId = string;
+export type GuidanceEffectId = string;
+export type AssistantStateId = string;
+export type AssistantPlacementId = string;
+export type InteractionEventTypeId = string;
