@@ -1,9 +1,15 @@
 import type {
+  AssistantPlacementDefinition,
+  AssistantStateDefinition,
   EnvironmentActionDefinition,
   EnvironmentProfile,
+  GuidanceEffectDefinition,
+  InteractionAnchorDefinition,
+  InteractionEventTypeDefinition,
   LanguageProvider,
   RuntimeProvider,
   SurfaceDefinition,
+  TargetResolverDefinition,
 } from "@/core/platform/contracts";
 import type { ClosedJsonObjectSchema } from "@/core/platform/json-schema";
 import { ProviderPlatformRegistries } from "@/core/platform/registries";
@@ -41,11 +47,61 @@ export const P0_ENVIRONMENT_ACTION_IDS = {
   reloadPreview: "surface.preview.reload",
 } as const;
 
+export const P0_TARGET_RESOLVER_IDS = {
+  codeRange: "target.code-range",
+  previewAnchor: "target.preview-anchor",
+  consoleEntry: "target.console-entry",
+  surfaceAnchor: "target.surface-anchor",
+} as const;
+
+export const P0_GUIDANCE_EFFECT_IDS = {
+  focus: "effect.focus",
+  spotlight: "effect.spotlight",
+  point: "effect.point",
+} as const;
+
+export const P0_ASSISTANT_STATE_IDS = {
+  idle: "assistant.idle",
+  explaining: "assistant.explaining",
+  pointing: "assistant.pointing",
+  thinking: "assistant.thinking",
+  success: "assistant.success",
+  warning: "assistant.warning",
+} as const;
+
+export const P0_ASSISTANT_PLACEMENT_IDS = {
+  floating: "placement.floating",
+  nearTarget: "placement.near-target",
+} as const;
+
+export const P0_INTERACTION_EVENT_TYPE_IDS = {
+  editorChange: "interaction.editor-change",
+  previewClick: "interaction.preview-click",
+  previewChange: "interaction.preview-change",
+  previewSubmit: "interaction.preview-submit",
+  surfaceActivate: "interaction.surface-activate",
+} as const;
+
+export const P0_INTERACTION_ANCHOR_IDS = {
+  editor: "anchor.workspace-editor",
+  preview: "anchor.workspace-preview",
+  console: "anchor.workspace-console",
+  plan: "anchor.learning-plan",
+  activity: "anchor.live-activity",
+} as const;
+
 const EMPTY_INPUT_SCHEMA = {
   type: "object",
   properties: {},
   additionalProperties: false,
 } as const satisfies ClosedJsonObjectSchema;
+
+const SEMANTIC_ID_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 128,
+  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+} as const;
 
 const RUNTIME_ACTION_IDS = [
   P0_ENVIRONMENT_ACTION_IDS.run,
@@ -352,6 +408,169 @@ const ENVIRONMENT_ACTIONS = [
   },
 ] satisfies readonly EnvironmentActionDefinition[];
 
+const GUIDANCE_EFFECTS = [
+  {
+    id: P0_GUIDANCE_EFFECT_IDS.focus,
+    displayName: "Focus",
+    inputSchema: EMPTY_INPUT_SCHEMA,
+  },
+  {
+    id: P0_GUIDANCE_EFFECT_IDS.spotlight,
+    displayName: "Spotlight",
+    inputSchema: EMPTY_INPUT_SCHEMA,
+  },
+  {
+    id: P0_GUIDANCE_EFFECT_IDS.point,
+    displayName: "Point",
+    inputSchema: EMPTY_INPUT_SCHEMA,
+  },
+] satisfies readonly GuidanceEffectDefinition[];
+
+const INTERACTION_EVENT_TYPES = [
+  { id: P0_INTERACTION_EVENT_TYPE_IDS.editorChange, displayName: "Editor change" },
+  { id: P0_INTERACTION_EVENT_TYPE_IDS.previewClick, displayName: "Preview click" },
+  { id: P0_INTERACTION_EVENT_TYPE_IDS.previewChange, displayName: "Preview change" },
+  { id: P0_INTERACTION_EVENT_TYPE_IDS.previewSubmit, displayName: "Preview submit" },
+  { id: P0_INTERACTION_EVENT_TYPE_IDS.surfaceActivate, displayName: "Surface activation" },
+] satisfies readonly InteractionEventTypeDefinition[];
+
+const ASSISTANT_STATES = [
+  { id: P0_ASSISTANT_STATE_IDS.idle, displayName: "Idle" },
+  { id: P0_ASSISTANT_STATE_IDS.explaining, displayName: "Explaining" },
+  { id: P0_ASSISTANT_STATE_IDS.pointing, displayName: "Pointing" },
+  { id: P0_ASSISTANT_STATE_IDS.thinking, displayName: "Thinking" },
+  { id: P0_ASSISTANT_STATE_IDS.success, displayName: "Success" },
+  { id: P0_ASSISTANT_STATE_IDS.warning, displayName: "Warning" },
+] satisfies readonly AssistantStateDefinition[];
+
+const ASSISTANT_PLACEMENTS = [
+  {
+    id: P0_ASSISTANT_PLACEMENT_IDS.floating,
+    displayName: "Floating",
+    requiresTarget: false,
+  },
+  {
+    id: P0_ASSISTANT_PLACEMENT_IDS.nearTarget,
+    displayName: "Near target",
+    requiresTarget: true,
+  },
+] satisfies readonly AssistantPlacementDefinition[];
+
+const TARGET_RESOLVERS: readonly TargetResolverDefinition[] = [
+  {
+    id: P0_TARGET_RESOLVER_IDS.codeRange,
+    displayName: "Code range",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filePath: { type: "string", minLength: 1, maxLength: 256 },
+        startLine: { type: "integer", minimum: 1 },
+        startColumn: { type: "integer", minimum: 1 },
+        endLine: { type: "integer", minimum: 1 },
+        endColumn: { type: "integer", minimum: 1 },
+      },
+      required: [
+        "filePath",
+        "startLine",
+        "startColumn",
+        "endLine",
+        "endColumn",
+      ],
+      additionalProperties: false,
+    },
+    supportedEffectIds: [
+      P0_GUIDANCE_EFFECT_IDS.focus,
+      P0_GUIDANCE_EFFECT_IDS.spotlight,
+      P0_GUIDANCE_EFFECT_IDS.point,
+    ],
+    supportedInteractionEventTypeIds: [
+      P0_INTERACTION_EVENT_TYPE_IDS.editorChange,
+    ],
+  },
+  {
+    id: P0_TARGET_RESOLVER_IDS.previewAnchor,
+    displayName: "Preview semantic anchor",
+    inputSchema: {
+      type: "object",
+      properties: { anchorId: SEMANTIC_ID_SCHEMA },
+      required: ["anchorId"],
+      additionalProperties: false,
+    },
+    supportedEffectIds: [
+      P0_GUIDANCE_EFFECT_IDS.focus,
+      P0_GUIDANCE_EFFECT_IDS.spotlight,
+      P0_GUIDANCE_EFFECT_IDS.point,
+    ],
+    supportedInteractionEventTypeIds: [
+      P0_INTERACTION_EVENT_TYPE_IDS.previewClick,
+      P0_INTERACTION_EVENT_TYPE_IDS.previewChange,
+      P0_INTERACTION_EVENT_TYPE_IDS.previewSubmit,
+    ],
+  },
+  {
+    id: P0_TARGET_RESOLVER_IDS.consoleEntry,
+    displayName: "Console entry",
+    inputSchema: {
+      type: "object",
+      properties: { entryId: SEMANTIC_ID_SCHEMA },
+      required: ["entryId"],
+      additionalProperties: false,
+    },
+    supportedEffectIds: [
+      P0_GUIDANCE_EFFECT_IDS.focus,
+      P0_GUIDANCE_EFFECT_IDS.spotlight,
+      P0_GUIDANCE_EFFECT_IDS.point,
+    ],
+    supportedInteractionEventTypeIds: [],
+  },
+  {
+    id: P0_TARGET_RESOLVER_IDS.surfaceAnchor,
+    displayName: "Registered surface anchor",
+    inputSchema: {
+      type: "object",
+      properties: { anchorId: SEMANTIC_ID_SCHEMA },
+      required: ["anchorId"],
+      additionalProperties: false,
+    },
+    supportedEffectIds: [
+      P0_GUIDANCE_EFFECT_IDS.focus,
+      P0_GUIDANCE_EFFECT_IDS.spotlight,
+      P0_GUIDANCE_EFFECT_IDS.point,
+    ],
+    supportedInteractionEventTypeIds: [
+      P0_INTERACTION_EVENT_TYPE_IDS.surfaceActivate,
+    ],
+  },
+];
+
+const INTERACTION_ANCHORS = [
+  {
+    id: P0_INTERACTION_ANCHOR_IDS.editor,
+    displayName: "Workspace editor",
+    surfaceId: P0_SURFACE_IDS.editor,
+  },
+  {
+    id: P0_INTERACTION_ANCHOR_IDS.preview,
+    displayName: "Workspace preview",
+    surfaceId: P0_SURFACE_IDS.preview,
+  },
+  {
+    id: P0_INTERACTION_ANCHOR_IDS.console,
+    displayName: "Workspace console",
+    surfaceId: P0_SURFACE_IDS.console,
+  },
+  {
+    id: P0_INTERACTION_ANCHOR_IDS.plan,
+    displayName: "Learning plan",
+    surfaceId: P0_SURFACE_IDS.plan,
+  },
+  {
+    id: P0_INTERACTION_ANCHOR_IDS.activity,
+    displayName: "Live activity",
+    surfaceId: P0_SURFACE_IDS.activity,
+  },
+] satisfies readonly InteractionAnchorDefinition[];
+
 export function registerP0ProviderPlatform(
   registries: ProviderPlatformRegistries,
 ): ProviderPlatformRegistries {
@@ -367,6 +586,24 @@ export function registerP0ProviderPlatform(
   );
   ENVIRONMENT_ACTIONS.forEach((action) =>
     registries.actions.register(action),
+  );
+  GUIDANCE_EFFECTS.forEach((effect) =>
+    registries.guidance.effects.register(effect),
+  );
+  INTERACTION_EVENT_TYPES.forEach((eventType) =>
+    registries.guidance.interactionEventTypes.register(eventType),
+  );
+  ASSISTANT_STATES.forEach((state) =>
+    registries.guidance.assistantStates.register(state),
+  );
+  ASSISTANT_PLACEMENTS.forEach((placement) =>
+    registries.guidance.assistantPlacements.register(placement),
+  );
+  TARGET_RESOLVERS.forEach((resolver) =>
+    registries.targetResolvers.register(resolver),
+  );
+  INTERACTION_ANCHORS.forEach((anchor) =>
+    registries.interactionAnchors.register(anchor),
   );
 
   return registries;

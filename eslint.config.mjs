@@ -11,5 +11,8 @@ export default defineConfig([
     "coverage/**",
     "next-env.d.ts",
     "out/**",
+    "playwright-report/**",
+    "public/vendor/monaco/**",
+    "test-results/**",
   ]),
 ]);

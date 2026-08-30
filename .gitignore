@@ -9,6 +9,7 @@ build/
 coverage/
 playwright-report/
 test-results/
+public/vendor/monaco/
 *.tsbuildinfo
 next-env.d.ts
 

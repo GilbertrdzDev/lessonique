@@ -100,4 +100,96 @@ test.describe("classroom shell", () => {
     const persistedTheme = await page.locator("html").getAttribute("class");
     expect(persistedTheme).not.toBe(initialTheme);
   });
+
+  test("switches provider profiles without reloading the classroom", async ({
+    page,
+  }) => {
+    const profile = page.getByRole("combobox", { name: "Environment profile" });
+    await expect(profile).toBeEnabled();
+    await expect(page.getByRole("tab", { name: "index.html" })).toBeVisible();
+    await expect(page.getByText("Live Preview", { exact: true })).toBeVisible();
+
+    const startedAt = Date.now();
+    await profile.selectOption("profile.javascript-console");
+    await expect(page.getByRole("tab", { name: "script.js" })).toBeVisible();
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    await expect(page.getByRole("tab", { name: "index.html" })).toHaveCount(0);
+    await expect(page.getByText("Live Preview", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("log", { name: "Runtime console" })).toBeVisible();
+
+    await profile.selectOption("profile.vanilla-web");
+    await expect(page.getByRole("tab", { name: "index.html" })).toBeVisible();
+    await expect(page.getByText("Live Preview", { exact: true })).toBeVisible();
+  });
+
+  test("applies preview viewport configuration through the surface adapter", async ({
+    page,
+  }) => {
+    const profile = page.getByRole("combobox", { name: "Environment profile" });
+    await expect(profile).toBeEnabled();
+    const preview = page.locator("[data-preview-viewport]:visible");
+    await expect(preview).toHaveAttribute("data-preview-viewport", "desktop");
+
+    await page.getByRole("button", { name: "Mobile preview" }).click();
+
+    await expect(preview).toHaveAttribute("data-preview-viewport", "mobile");
+    await expect(page.getByRole("button", { name: "Mobile preview" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  test("restores the active workspace profile from local persistence", async ({
+    page,
+  }) => {
+    const profile = page.getByRole("combobox", { name: "Environment profile" });
+    await expect(profile).toBeEnabled();
+    await profile.selectOption("profile.javascript-console");
+    await expect(page.getByRole("tab", { name: "script.js" })).toBeVisible();
+
+    await page.reload();
+
+    await expect(profile).toHaveValue("profile.javascript-console");
+    await expect(page.getByRole("tab", { name: "script.js" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "index.html" })).toHaveCount(0);
+  });
+
+  test("updates the preview and console from independent HTML, CSS, and JavaScript models", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    const profile = page.getByRole("combobox", { name: "Environment profile" });
+    await expect(profile).toBeEnabled();
+    const editor = page.getByRole("textbox", { name: "Workspace code editor" });
+    await expect(editor).toBeVisible({ timeout: 15_000 });
+
+    async function replaceActiveFile(content: string) {
+      await editor.press("Control+A");
+      await page.keyboard.insertText(content);
+      await page.waitForTimeout(350);
+    }
+
+    await page.getByRole("tab", { name: "index.html" }).click();
+    await replaceActiveFile(
+      '<!doctype html><html lang="en"><head><link rel="stylesheet" href="./styles.css"></head><body><button id="lessonique-demo">Waiting</button><script src="./script.js"></script></body></html>',
+    );
+    await page.getByRole("tab", { name: "styles.css" }).click();
+    await replaceActiveFile(
+      "#lessonique-demo { color: rgb(255, 0, 0); font-weight: 700; }",
+    );
+    await page.getByRole("tab", { name: "script.js" }).click();
+    await replaceActiveFile(
+      'document.querySelector("#lessonique-demo").textContent = "Preview updated"; console.log("workspace-ready");',
+    );
+    await page.getByRole("button", { name: "Run workspace" }).click();
+
+    const preview = page.frameLocator("[data-preview-viewport]:visible iframe");
+    const button = preview.getByRole("button", { name: "Preview updated" });
+    await expect(button).toBeVisible({ timeout: 20_000 });
+    await expect(button).toHaveCSS("color", "rgb(255, 0, 0)");
+    await expect(page.getByRole("log", { name: "Runtime console" })).toContainText(
+      "workspace-ready",
+      { timeout: 20_000 },
+    );
+  });
 });

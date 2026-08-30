@@ -183,6 +183,10 @@
   }
 }
 
+.dark .monaco-editor .dimmed-line-number {
+  color: #a3a3a3 !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
