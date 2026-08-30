@@ -135,7 +135,8 @@ export function MonacoEditorSurface({
           automaticLayout: true,
           contextmenu: true,
           fontFamily:
-            "var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace",
+            '"Fantasque Sans Mono", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace',
+          fontLigatures: true,
           lineNumbersMinChars: 3,
           padding: { top: 14, bottom: 14 },
           scrollBeyondLastLine: false,

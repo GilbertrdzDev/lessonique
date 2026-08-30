@@ -145,6 +145,52 @@ test.describe("classroom shell", () => {
     ).toEqual([]);
   });
 
+  test("uses the bundled Fantasque Sans Mono font with programming ligatures", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+
+    const editor = page.getByRole("textbox", { name: "Workspace code editor" });
+    await expect(editor).toBeVisible({ timeout: 15_000 });
+
+    await page.evaluate(async () => {
+      await document.fonts.load('14px "Fantasque Sans Mono"');
+    });
+
+    const typography = await page
+      .locator(".monaco-editor .view-lines")
+      .evaluate((element) => {
+        const styles = window.getComputedStyle(element);
+        return {
+          fontFamily: styles.fontFamily,
+          fontFeatureSettings: styles.fontFeatureSettings,
+          fontLoaded: document.fonts.check('14px "Fantasque Sans Mono"'),
+          localFontRequested: performance
+            .getEntriesByType("resource")
+            .some(
+              (entry) =>
+                new URL(entry.name).pathname ===
+                "/fonts/fantasque-sans-mono/FantasqueSansMono-Regular.woff2",
+            ),
+        };
+    });
+
+    expect(typography.fontFamily).toContain("Fantasque Sans Mono");
+    expect(typography.fontFeatureSettings).toContain('"liga"');
+    expect(typography.fontFeatureSettings).toContain('"calt"');
+    expect(typography.fontFeatureSettings).not.toContain("off");
+    expect(typography.fontLoaded).toBe(true);
+    expect(typography.localFontRequested).toBe(true);
+
+    const licenseResponse = await page.request.get(
+      "/fonts/fantasque-sans-mono/LICENSE.txt",
+    );
+    expect(licenseResponse.ok()).toBe(true);
+    await expect(licenseResponse.text()).resolves.toContain(
+      "SIL OPEN FONT LICENSE Version 1.1",
+    );
+  });
+
   test("runs one console log per edit without resizing the workspace", async ({
     page,
   }, testInfo) => {
