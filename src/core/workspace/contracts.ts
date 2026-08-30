@@ -6,7 +6,11 @@ import type {
   SurfaceId,
   SurfaceOptionId,
 } from "@/core/platform/identifiers";
-import type { InteractionEvent, SurfaceOptionValue } from "@/core/platform/contracts";
+import type {
+  InteractionEvent,
+  SurfaceConfiguration,
+  SurfaceOptionValue,
+} from "@/core/platform/contracts";
 
 export type WorkspaceStatus =
   | "idle"
@@ -78,6 +82,18 @@ export interface WorkspaceState {
   runtime: RuntimeState;
   environmentRevision: number;
   errorMessage?: string;
+}
+
+export interface WorkspaceEnvironmentConfiguration {
+  profileId: EnvironmentProfileId;
+  runtimeProviderId: RuntimeProviderId;
+  languageIds: readonly LanguageId[];
+  files: readonly WorkspaceFile[];
+  surfaces: readonly SurfaceConfiguration[];
+  activeFilePath?: string;
+  activeSurfaceId?: SurfaceId;
+  focusActiveSurface?: boolean;
+  clearConsole?: boolean;
 }
 
 export type WorkspaceFileOperation =

@@ -151,6 +151,58 @@ describe("WorkspaceController", () => {
     expect(editor.adapter.getSnapshot()).toEqual(previousEditor);
     expect(preview.adapter.getSnapshot()).toEqual(previousPreview);
   });
+
+  it("restores runtime files when a full environment transaction cannot configure a surface", async () => {
+    const registries = createP0ProviderPlatform();
+    const store = new WorkspaceStore();
+    const surfaceAdapters = new SurfaceAdapterRegistry();
+    const editor = createTransactionalSurfaceAdapter("editor");
+    const preview = createTransactionalSurfaceAdapter("preview");
+    surfaceAdapters.register(editor.adapter);
+    surfaceAdapters.register(preview.adapter);
+    ["console", "values", "plan", "activity"].forEach((id) =>
+      surfaceAdapters.register(new InMemorySurfaceAdapter(id)),
+    );
+    const runtime = createRuntimeAdapter();
+    const controller = new WorkspaceController({
+      registries,
+      store,
+      surfaceAdapters,
+      runtimeAdapters: { get: () => runtime },
+    });
+    await controller.activateProfile("profile.vanilla-web");
+    const previousState = store.getSnapshot();
+    const previousRuntimeFiles = runtime.getSnapshot().files;
+    preview.failNextConfiguration();
+
+    await expect(
+      controller.configureEnvironment({
+        profileId: "profile.vanilla-web",
+        runtimeProviderId: "runtime.sandpack-vanilla",
+        languageIds: previousState.languageIds,
+        files: previousState.files.map((file) => ({
+          ...file,
+          visible: file.path === "script.js",
+        })),
+        surfaces: previousState.surfaces.map((surface) => ({
+          id: surface.id,
+          visible: surface.visible,
+          order: surface.order,
+          placementId: surface.placementId,
+          modeId: surface.id === "preview" ? "mobile" : surface.modeId,
+          options: Object.entries(surface.options).map(([optionId, value]) => ({
+            optionId,
+            value,
+          })),
+        })),
+        activeFilePath: "script.js",
+        activeSurfaceId: "editor",
+      }),
+    ).rejects.toThrow("Surface configuration failed.");
+
+    expect(store.getSnapshot()).toEqual(previousState);
+    expect(runtime.getSnapshot().files).toEqual(previousRuntimeFiles);
+  });
 });
 
 function createHarness() {

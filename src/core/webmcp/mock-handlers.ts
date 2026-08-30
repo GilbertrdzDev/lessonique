@@ -1,16 +1,14 @@
 import { CapabilityCatalog } from "@/core/platform/capability-catalog";
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
+import type { WorkspaceController } from "@/core/workspace/workspace-controller";
 import type { z } from "zod";
 
 import {
   CapabilityValidator,
   GetSystemCapabilitiesService,
 } from "./capabilities";
-import type {
-  ToolHandler,
-  ToolResult,
-  WebMCPToolInputMap,
-} from "./contracts";
+import { ConfigureLearningEnvironmentService } from "./configure-learning-environment";
+import type { ToolHandler, ToolExecutionResult, WebMCPToolInputMap } from "./contracts";
 import { WEBMCP_TOOL_INPUT_SCHEMAS } from "./schemas";
 import { ToolRegistry, type ToolDefinition } from "./tool-registry";
 import { WEBMCP_TOOL_NAMES, type WebMCPToolName } from "./tool-names";
@@ -66,31 +64,51 @@ const TOOL_METADATA = {
   },
 } as const satisfies Record<WebMCPToolName, { title: string; description: string }>;
 
+export type EarlyWebMCPIntegrations = {
+  workspaceController?: WorkspaceController;
+};
+
 export function createEarlyWebMCPToolRegistry(
   registries: ProviderPlatformRegistries,
+  integrations: EarlyWebMCPIntegrations = {},
 ): ToolRegistry {
   const registry = new ToolRegistry();
   const capabilities = new GetSystemCapabilitiesService(
     new CapabilityCatalog(registries),
     new CapabilityValidator(registries),
   );
-  let operationSequence = 0;
-
   registerDefinition(registry, {
     name: "get_system_capabilities",
     ...TOOL_METADATA.get_system_capabilities,
     inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.get_system_capabilities,
     handler: (input) => ({
       ok: true,
-      operationId: `early-capabilities-${++operationSequence}`,
       status: "completed",
       data: capabilities.execute(input),
     }),
   });
 
-  WEBMCP_TOOL_NAMES.filter((name) => name !== "get_system_capabilities").forEach((name) => {
-    registerMockDefinition(registry, name, () => ++operationSequence);
-  });
+  const configuration = integrations.workspaceController
+    ? new ConfigureLearningEnvironmentService(
+        integrations.workspaceController,
+        registries,
+      )
+    : undefined;
+
+  for (const name of WEBMCP_TOOL_NAMES) {
+    if (name === "get_system_capabilities") continue;
+    if (name === "configure_learning_environment" && configuration) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.configure_learning_environment,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.configure_learning_environment,
+        capabilityCheck: (input) => configuration.validate(input),
+        handler: (input) => configuration.execute(input),
+      });
+      continue;
+    }
+    registerMockDefinition(registry, name);
+  }
 
   return registry;
 }
@@ -98,12 +116,10 @@ export function createEarlyWebMCPToolRegistry(
 function registerMockDefinition<TName extends Exclude<WebMCPToolName, "get_system_capabilities">>(
   registry: ToolRegistry,
   name: TName,
-  nextOperationSequence: () => number,
 ): void {
   const handler: ToolHandler<TName> = () => {
-    const result: ToolResult<{ mock: true; toolName: TName }> = {
+    const result: ToolExecutionResult<{ mock: true; toolName: TName }> = {
       ok: true,
-      operationId: `early-${name}-${nextOperationSequence()}`,
       status: name === "play_teaching_scene" ? "started" : "completed",
       data: { mock: true, toolName: name },
     };

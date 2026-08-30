@@ -74,6 +74,19 @@ export type ToolResult<T> = {
   error?: ToolResultError;
 };
 
+export type ToolExecutionResult<T> = Omit<ToolResult<T>, "operationId">;
+
+export type ToolInvocationContext = {
+  operationId: string;
+  signal: AbortSignal;
+};
+
 export type ToolHandler<TName extends WebMCPToolName> = (
   input: WebMCPToolInputMap[TName],
-) => Promise<ToolResult<unknown>> | ToolResult<unknown>;
+  context: ToolInvocationContext,
+) => Promise<ToolExecutionResult<unknown>> | ToolExecutionResult<unknown>;
+
+export type ToolCapabilityCheck<TName extends WebMCPToolName> = (
+  input: WebMCPToolInputMap[TName],
+  context: ToolInvocationContext,
+) => Promise<void> | void;

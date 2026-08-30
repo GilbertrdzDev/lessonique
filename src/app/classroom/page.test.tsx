@@ -2,11 +2,19 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { WorkspaceRuntimeProvider } from "@/components/workspace/workspace-runtime-provider";
+
 import ClassroomPage from "./page";
 
 describe("ClassroomPage", () => {
   it("renders the three-column classroom shell", () => {
-    const markup = renderToStaticMarkup(createElement(ClassroomPage));
+    const markup = renderToStaticMarkup(
+      createElement(
+        WorkspaceRuntimeProvider,
+        null,
+        createElement(ClassroomPage),
+      ),
+    );
 
     expect(markup).toContain('data-slot="app-shell"');
     expect(markup).toContain('aria-label="Primary navigation"');

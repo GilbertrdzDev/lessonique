@@ -63,6 +63,7 @@ export class MonacoEditorAdapter
   readonly #getActiveFilePath: () => string | undefined;
   #editor?: MonacoEditorLike;
   #configuration?: SurfaceState;
+  #focusRequested = false;
 
   constructor(options: MonacoEditorAdapterOptions) {
     this.surfaceId = options.surfaceId;
@@ -75,6 +76,10 @@ export class MonacoEditorAdapter
   attach(editorInstance: MonacoEditorLike): () => void {
     this.#editor = editorInstance;
     this.#applyEditorOptions();
+    if (this.#focusRequested) {
+      this.#focusRequested = false;
+      editorInstance.focus();
+    }
     return () => {
       if (this.#editor === editorInstance) {
         this.#editor = undefined;
@@ -90,6 +95,15 @@ export class MonacoEditorAdapter
     this.#applyEditorOptions();
   }
 
+  activate(): void {
+    if (this.#editor) {
+      this.#editor.focus();
+      this.#focusRequested = false;
+      return;
+    }
+    this.#focusRequested = true;
+  }
+
   async executeAction(
     actionId: EnvironmentActionId,
   ): Promise<EnvironmentActionResult> {
@@ -100,13 +114,13 @@ export class MonacoEditorAdapter
         message: `Editor action "${actionId}" is not supported.`,
       };
     }
-    this.#editor?.focus();
+    this.activate();
     return {
       actionId,
-      accepted: Boolean(this.#editor),
+      accepted: true,
       message: this.#editor
         ? "The editor is focused."
-        : "The editor is not mounted.",
+        : "The editor will be focused when it mounts.",
     };
   }
 

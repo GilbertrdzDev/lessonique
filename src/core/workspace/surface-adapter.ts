@@ -12,6 +12,7 @@ import type {
 export interface SurfaceAdapter {
   readonly surfaceId: SurfaceId;
   configure(configuration: SurfaceState): Promise<void>;
+  activate?(): void;
   executeAction(
     actionId: EnvironmentActionId,
     input?: unknown,

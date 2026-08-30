@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { WebMCPRegistrationProvider } from "@/components/webmcp/webmcp-registration-provider";
+import { WorkspaceRuntimeProvider } from "@/components/workspace/workspace-runtime-provider";
 
 import "./globals.css";
 
@@ -33,7 +34,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="en" className={geist.variable} suppressHydrationWarning>
       <body>
         <ThemeProvider>
-          <WebMCPRegistrationProvider>{children}</WebMCPRegistrationProvider>
+          <WorkspaceRuntimeProvider>
+            <WebMCPRegistrationProvider>{children}</WebMCPRegistrationProvider>
+          </WorkspaceRuntimeProvider>
         </ThemeProvider>
       </body>
     </html>

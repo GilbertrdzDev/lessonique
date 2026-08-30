@@ -2,19 +2,22 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
+import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import { createEarlyWebMCPToolRegistry } from "@/core/webmcp/mock-handlers";
 import { WebMCPProvider } from "@/core/webmcp/webmcp-provider";
-import { createP0ProviderPlatform } from "@/providers/p0";
 
 type WebMCPRegistrationProviderProps = Readonly<{
   children: ReactNode;
 }>;
 
 export function WebMCPRegistrationProvider({ children }: WebMCPRegistrationProviderProps) {
+  const workspace = useWorkspaceRuntime();
   const [provider] = useState(
     () =>
       new WebMCPProvider(
-        createEarlyWebMCPToolRegistry(createP0ProviderPlatform()),
+        createEarlyWebMCPToolRegistry(workspace.registries, {
+          workspaceController: workspace.controller,
+        }),
       ),
   );
 

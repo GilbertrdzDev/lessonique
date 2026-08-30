@@ -45,7 +45,17 @@ describe("ToolRegistry", () => {
         actionId: "runtime.run",
         shellCommand: "unsafe",
       }),
-    ).rejects.toThrow();
+    ).resolves.toEqual(
+      expect.objectContaining({
+        ok: false,
+        status: "failed",
+        error: {
+          code: "invalid_input",
+          message: "The tool input did not match the closed schema.",
+          recoverable: true,
+        },
+      }),
+    );
   });
 
   it("rejects duplicate public tool names", () => {
@@ -57,7 +67,6 @@ describe("ToolRegistry", () => {
       inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.get_system_capabilities,
       handler: () => ({
         ok: true,
-        operationId: "fixture",
         status: "completed" as const,
       }),
     };

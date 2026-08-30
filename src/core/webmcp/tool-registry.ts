@@ -1,10 +1,16 @@
 import type { z } from "zod";
 
 import type {
+  ToolCapabilityCheck,
   ToolHandler,
   ToolResult,
   WebMCPToolInputMap,
 } from "./contracts";
+import type { ToolActivityLogger, ToolActivityListener } from "./tool-activity-logger";
+import {
+  ToolInvocationService,
+  type ToolInvocationOptions,
+} from "./tool-invocation-service";
 import type { WebMCPToolName } from "./tool-names";
 
 export type ToolDefinition<TName extends WebMCPToolName> = {
@@ -12,6 +18,7 @@ export type ToolDefinition<TName extends WebMCPToolName> = {
   title: string;
   description: string;
   inputSchema: z.ZodType<WebMCPToolInputMap[TName]>;
+  capabilityCheck?: ToolCapabilityCheck<TName>;
   handler: ToolHandler<TName>;
 };
 
@@ -20,7 +27,10 @@ type StoredToolDefinition = {
   title: string;
   description: string;
   inputSchema: z.ZodType;
-  invoke: (input: unknown) => Promise<ToolResult<unknown>>;
+  invoke: (
+    input: unknown,
+    options?: ToolInvocationOptions,
+  ) => Promise<ToolResult<unknown>>;
 };
 
 export class DuplicateToolDefinitionError extends Error {
@@ -39,6 +49,19 @@ export class MissingToolDefinitionError extends Error {
 
 export class ToolRegistry {
   readonly #definitions = new Map<WebMCPToolName, StoredToolDefinition>();
+  readonly #invocations: ToolInvocationService;
+
+  constructor(invocations = new ToolInvocationService()) {
+    this.#invocations = invocations;
+  }
+
+  get activityLogger(): ToolActivityLogger {
+    return this.#invocations.activityLogger;
+  }
+
+  subscribe(listener: ToolActivityListener): () => void {
+    return this.#invocations.subscribe(listener);
+  }
 
   register<TName extends WebMCPToolName>(definition: ToolDefinition<TName>): void {
     if (this.#definitions.has(definition.name)) {
@@ -49,7 +72,7 @@ export class ToolRegistry {
       title: definition.title,
       description: definition.description,
       inputSchema: definition.inputSchema,
-      invoke: async (input) => definition.handler(definition.inputSchema.parse(input)),
+      invoke: (input, options) => this.#invocations.invoke(definition, input, options),
     });
   }
 
@@ -65,7 +88,11 @@ export class ToolRegistry {
     return [...this.#definitions.values()];
   }
 
-  invoke(name: WebMCPToolName, input: unknown): Promise<ToolResult<unknown>> {
-    return this.require(name).invoke(input);
+  invoke(
+    name: WebMCPToolName,
+    input: unknown,
+    options?: ToolInvocationOptions,
+  ): Promise<ToolResult<unknown>> {
+    return this.require(name).invoke(input, options);
   }
 }

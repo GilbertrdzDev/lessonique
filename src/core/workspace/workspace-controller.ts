@@ -19,6 +19,7 @@ import type {
   EnvironmentActionResult,
   SurfaceState,
   WorkspaceFile,
+  WorkspaceEnvironmentConfiguration,
   WorkspaceFileOperation,
   WorkspaceState,
 } from "./contracts";
@@ -70,42 +71,96 @@ export class WorkspaceController {
 
   async activateProfile(profileId: EnvironmentProfileId): Promise<void> {
     const profile = this.#registries.environmentProfiles.require(profileId);
-    const files = profile.defaultFiles.map((file) => ({
-      ...file,
-      visible: file.visible ?? true,
-    }));
-    const surfaces = this.#resolveSurfaces(profile, profile.defaultSurfaces);
-    this.#validateFiles(profile, files);
+    await this.configureEnvironment({
+      profileId: profile.id,
+      runtimeProviderId: profile.runtimeProviderId,
+      languageIds: [...profile.defaultLanguageIds],
+      files: profile.defaultFiles.map((file) => ({
+        ...file,
+        visible: file.visible ?? true,
+      })),
+      surfaces: profile.defaultSurfaces,
+      activeSurfaceId: profile.defaultSurfaces.find(
+        ({ visible }) => visible !== false,
+      )?.id,
+      activeFilePath: profile.defaultFiles.find(
+        ({ visible }) => visible !== false,
+      )?.path,
+      clearConsole: true,
+    });
+  }
 
-    const nextRuntime = this.#runtimeAdapters.get(profile.runtimeProviderId);
-    const previousRuntime = this.#runtime;
+  async configureEnvironment(
+    configuration: WorkspaceEnvironmentConfiguration,
+  ): Promise<void> {
     const previousState = this.#store.getSnapshot();
-    await nextRuntime.replaceFiles(files);
+    const previousRuntime = this.#runtime;
+    const profile = this.#registries.environmentProfiles.require(
+      configuration.profileId,
+    );
+    if (profile.runtimeProviderId !== configuration.runtimeProviderId) {
+      throw new WorkspaceValidationError(
+        `Runtime "${configuration.runtimeProviderId}" is not supported by profile "${profile.id}".`,
+      );
+    }
+    this.#validateLanguageSelection(profile, configuration.languageIds);
+    this.#validateFiles(profile, configuration.files);
+    configuration.files.forEach((file) => {
+      if (!configuration.languageIds.includes(file.languageId)) {
+        throw new WorkspaceValidationError(
+          `Workspace file "${file.path}" requires selected language "${file.languageId}".`,
+        );
+      }
+    });
+    const surfaces = this.#resolveSurfaces(profile, configuration.surfaces);
+    const activeFilePath = this.#resolveActiveFile(
+      configuration.files,
+      configuration.activeFilePath,
+    );
+    const activeSurfaceId = this.#resolveActiveSurface(
+      surfaces,
+      configuration.activeSurfaceId,
+    );
+    const nextRuntime = this.#runtimeAdapters.get(configuration.runtimeProviderId);
+    const filesChanged =
+      nextRuntime !== previousRuntime ||
+      !workspaceFilesEqual(previousState.files, configuration.files);
 
+    if (filesChanged) {
+      await nextRuntime.replaceFiles(configuration.files);
+    }
     try {
       await this.#applySurfaceTransaction(surfaces, previousState.surfaces);
     } catch (error) {
-      if (nextRuntime !== previousRuntime) {
+      if (filesChanged && nextRuntime === previousRuntime) {
+        await nextRuntime.replaceFiles(previousState.files);
+      } else if (nextRuntime !== previousRuntime) {
         await nextRuntime.dispose();
       }
       throw error;
     }
 
+    const profileChanged = previousState.profileId !== profile.id;
     const runtimeSnapshot = nextRuntime.getSnapshot();
     this.#runtime = nextRuntime;
     this.#store.commit({
       status: "ready",
       profileId: profile.id,
-      runtimeProviderId: profile.runtimeProviderId,
-      languageIds: [...profile.defaultLanguageIds],
-      files,
+      runtimeProviderId: nextRuntime.providerId,
+      languageIds: [...configuration.languageIds],
+      files: configuration.files.map((file) => ({ ...file })),
       surfaces,
-      activeSurfaceId: surfaces.find(({ visible }) => visible)?.id,
-      activeFilePath: files.find(({ visible }) => visible)?.path,
-      consoleEntries: [],
-      interactionEvents: [],
+      ...(activeSurfaceId ? { activeSurfaceId } : {}),
+      ...(activeFilePath ? { activeFilePath } : {}),
+      consoleEntries:
+        configuration.clearConsole || profileChanged
+          ? []
+          : previousState.consoleEntries.map((entry) => ({ ...entry })),
+      interactionEvents: profileChanged
+        ? []
+        : previousState.interactionEvents.map((event) => ({ ...event })),
       runtime: {
-        providerId: nextRuntime.providerId,
+        providerId: runtimeSnapshot.providerId,
         status: runtimeSnapshot.status,
         revision: runtimeSnapshot.revision,
         ...(runtimeSnapshot.errorMessage
@@ -114,6 +169,10 @@ export class WorkspaceController {
       },
       environmentRevision: previousState.environmentRevision + 1,
     });
+
+    if (activeSurfaceId && configuration.focusActiveSurface) {
+      this.#surfaceAdapters.require(activeSurfaceId).activate?.();
+    }
 
     if (previousRuntime && previousRuntime !== nextRuntime) {
       await previousRuntime.dispose();
@@ -443,6 +502,64 @@ export class WorkspaceController {
     });
   }
 
+  #validateLanguageSelection(
+    profile: EnvironmentProfile,
+    languageIds: readonly string[],
+  ): void {
+    if (languageIds.length === 0) {
+      throw new WorkspaceValidationError(
+        `Profile "${profile.id}" requires at least one selected language.`,
+      );
+    }
+    const seen = new Set<string>();
+    languageIds.forEach((languageId) => {
+      if (seen.has(languageId)) {
+        throw new WorkspaceValidationError(
+          `Language "${languageId}" is selected more than once.`,
+        );
+      }
+      seen.add(languageId);
+      if (!profile.allowedLanguageIds.includes(languageId)) {
+        throw new WorkspaceValidationError(
+          `Language "${languageId}" is not allowed by profile "${profile.id}".`,
+        );
+      }
+      this.#registries.languages.require(languageId);
+    });
+  }
+
+  #resolveActiveFile(
+    files: readonly WorkspaceFile[],
+    requestedPath: string | undefined,
+  ): string | undefined {
+    if (requestedPath !== undefined) {
+      const requested = files.find(({ path }) => path === requestedPath);
+      if (!requested || !requested.visible) {
+        throw new WorkspaceValidationError(
+          `Active file "${requestedPath}" must be a visible workspace file.`,
+        );
+      }
+      return requested.path;
+    }
+    return files.find(({ visible }) => visible)?.path;
+  }
+
+  #resolveActiveSurface(
+    surfaces: readonly SurfaceState[],
+    requestedId: SurfaceId | undefined,
+  ): SurfaceId | undefined {
+    if (requestedId !== undefined) {
+      const requested = surfaces.find(({ id }) => id === requestedId);
+      if (!requested || !requested.visible) {
+        throw new WorkspaceValidationError(
+          `Active surface "${requestedId}" must be configured and visible.`,
+        );
+      }
+      return requested.id;
+    }
+    return surfaces.find(({ visible }) => visible)?.id;
+  }
+
   async #applySurfaceTransaction(
     nextSurfaces: readonly SurfaceState[],
     previousSurfaces: readonly SurfaceState[],
@@ -621,5 +738,24 @@ function consoleEntriesEqual(
         entry.message === right[index]?.message &&
         entry.occurredAt === right[index]?.occurredAt,
     )
+  );
+}
+
+function workspaceFilesEqual(
+  left: readonly WorkspaceFile[],
+  right: readonly WorkspaceFile[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((file, index) => {
+      const candidate = right[index];
+      return (
+        file.path === candidate?.path &&
+        file.languageId === candidate.languageId &&
+        file.content === candidate.content &&
+        file.visible === candidate.visible &&
+        file.readOnly === candidate.readOnly
+      );
+    })
   );
 }

@@ -10,6 +10,7 @@ import {
   WorkspaceController,
   WorkspaceStore,
 } from "@/core/workspace";
+import type { ProviderPlatformRegistries } from "@/core/platform/registries";
 
 import {
   createP0ProviderPlatform,
@@ -21,6 +22,7 @@ import {
 } from "./provider-platform";
 
 export interface P0WorkspaceRuntime {
+  registries: ProviderPlatformRegistries;
   store: WorkspaceStore;
   controller: WorkspaceController;
   monacoEditorAdapter: MonacoEditorAdapter;
@@ -104,6 +106,7 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
   );
 
   return {
+    registries,
     store,
     controller,
     monacoEditorAdapter,

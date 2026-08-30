@@ -86,6 +86,106 @@ test.describe("classroom shell", () => {
     );
   });
 
+  test("reconfigures the rendered workspace transactionally through WebMCP", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+
+    const profile = page.getByRole("combobox", { name: "Environment profile" });
+    await expect(profile).toBeEnabled();
+    const preview = page.locator("[data-preview-viewport]:visible");
+    await expect(preview).toHaveAttribute("data-preview-viewport", "desktop");
+
+    const validResult = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      return tools
+        .find(({ name }) => name === "configure_learning_environment")
+        ?.execute({
+          activeFile: "script.js",
+          activeSurfaceId: "editor",
+          viewport: "mobile",
+          transition: "animated",
+          surfaces: [
+            {
+              id: "editor",
+              options: [{ optionId: "editor.font-size", value: 18 }],
+            },
+          ],
+        });
+    });
+
+    expect(validResult).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: "completed",
+        revision: expect.any(Number),
+        data: expect.objectContaining({
+          profileId: "profile.vanilla-web",
+          activeFile: "script.js",
+          activeSurfaceId: "editor",
+          transition: "animated",
+          evidence: expect.objectContaining({
+            environmentRevision: expect.any(Number),
+          }),
+        }),
+      }),
+    );
+    await expect(preview).toHaveAttribute("data-preview-viewport", "mobile");
+    await expect(page.getByRole("tab", { name: "script.js" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.locator(".monaco-editor .view-lines")).toHaveCSS(
+      "font-size",
+      "18px",
+    );
+
+    const invalidResult = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      return tools
+        .find(({ name }) => name === "configure_learning_environment")
+        ?.execute({
+          viewport: "desktop",
+          surfaces: [
+            {
+              id: "editor",
+              options: [{ optionId: "editor.font-size", value: 200 }],
+            },
+          ],
+        });
+    });
+
+    expect(invalidResult).toEqual(
+      expect.objectContaining({
+        ok: false,
+        status: "failed",
+        error: expect.objectContaining({
+          code: "invalid_capability_input",
+          recoverable: true,
+        }),
+      }),
+    );
+    await expect(preview).toHaveAttribute("data-preview-viewport", "mobile");
+    await expect(page.locator(".monaco-editor .view-lines")).toHaveCSS(
+      "font-size",
+      "18px",
+    );
+  });
+
   test("loads semantic landmarks without horizontal overflow", async ({ page }) => {
     await expect(page).toHaveTitle(/Lessonique/);
     await expect(

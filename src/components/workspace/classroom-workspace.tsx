@@ -14,7 +14,6 @@ import {
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -24,12 +23,11 @@ import { MonacoEditorSurface } from "@/components/workspace/monaco-editor-surfac
 import { SandpackRuntimeView, type PreviewViewport } from "@/components/workspace/sandpack-runtime-view";
 import { WorkspaceConsole } from "@/components/workspace/workspace-console";
 import { WorkspaceTabs } from "@/components/workspace/workspace-tabs";
+import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import type { SurfaceConfiguration } from "@/core/platform/contracts";
 import type { SurfaceState } from "@/core/workspace/contracts";
 import { WorkspacePersistence } from "@/core/workspace/persistence";
 import {
-  createP0ProviderPlatform,
-  createP0WorkspaceRuntime,
   P0_ENVIRONMENT_ACTION_IDS,
   P0_ENVIRONMENT_PROFILE_IDS,
   P0_INTERACTION_ANCHOR_IDS,
@@ -37,8 +35,8 @@ import {
 } from "@/providers/p0";
 
 export function ClassroomWorkspace() {
-  const workspace = useMemo(() => createP0WorkspaceRuntime(), []);
-  const registries = useMemo(() => createP0ProviderPlatform(), []);
+  const workspace = useWorkspaceRuntime();
+  const registries = workspace.registries;
   const state = useSyncExternalStore(
     workspace.store.subscribe,
     workspace.store.getSnapshot,
@@ -82,7 +80,6 @@ export function ClassroomWorkspace() {
     return () => {
       active = false;
       unsubscribe?.();
-      void workspace.dispose();
     };
   }, [workspace]);
 
@@ -372,7 +369,7 @@ function WorkspaceSemanticAnchor({
   anchorId: string;
   children: React.ReactNode;
   className?: string;
-  interactionAdapter: ReturnType<typeof createP0WorkspaceRuntime>["interactionAnchorAdapter"];
+  interactionAdapter: ReturnType<typeof useWorkspaceRuntime>["interactionAnchorAdapter"];
 }>) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
