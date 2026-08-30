@@ -5,10 +5,16 @@ import { describe, expect, it } from "vitest";
 import ClassroomPage from "./page";
 
 describe("ClassroomPage", () => {
-  it("renders the classroom foundation", () => {
+  it("renders the three-column classroom shell", () => {
     const markup = renderToStaticMarkup(createElement(ClassroomPage));
 
-    expect(markup).toContain("<h1>Lessonique classroom</h1>");
-    expect(markup).toContain("The classroom foundation is ready.");
+    expect(markup).toContain('data-slot="app-shell"');
+    expect(markup).toContain('aria-label="Primary navigation"');
+    expect(markup).toContain('aria-labelledby="classroom-title"');
+    expect(markup).toContain('aria-label="Learning agent"');
+    expect(markup).toContain("Request received from ChatGPT");
+    expect(markup).toContain("Connected through WebMCP");
+    expect(markup).toContain("Learning Plan");
+    expect(markup).toContain("Lessonique Classroom");
   });
 });
