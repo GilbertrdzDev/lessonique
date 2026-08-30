@@ -2,9 +2,13 @@
 node_modules/
 
 # Build and test output
+.next/
+out/
 dist/
 build/
 coverage/
+*.tsbuildinfo
+next-env.d.ts
 
 # Local environment files
 .env
