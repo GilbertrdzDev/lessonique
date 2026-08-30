@@ -1,4 +1,5 @@
 import type { InteractionEvent, TargetRef } from "@/core/platform/contracts";
+import type { PreviewTargetQuery } from "@/core/code-intelligence";
 import type {
   EnvironmentActionId,
   InteractionEventTypeId,
@@ -30,6 +31,7 @@ export interface PreviewSurfaceAdapterOptions {
     submit: InteractionEventTypeId;
   }>;
   getEnvironmentRevision(): number;
+  getPreviewTargetQuery?(anchorId: string): PreviewTargetQuery | undefined;
   now?: () => string;
 }
 
@@ -41,6 +43,9 @@ export class PreviewSurfaceAdapter
   readonly #reloadActionId: EnvironmentActionId;
   readonly #eventTypeIds: PreviewSurfaceAdapterOptions["interactionEventTypeIds"];
   readonly #getEnvironmentRevision: () => number;
+  readonly #getPreviewTargetQuery?: (
+    anchorId: string,
+  ) => PreviewTargetQuery | undefined;
   readonly #now: () => string;
   readonly #interactionListeners = new Set<InteractionEventListener>();
   #configuration?: SurfaceState;
@@ -55,6 +60,7 @@ export class PreviewSurfaceAdapter
     this.#reloadActionId = options.reloadActionId;
     this.#eventTypeIds = options.interactionEventTypeIds;
     this.#getEnvironmentRevision = options.getEnvironmentRevision;
+    this.#getPreviewTargetQuery = options.getPreviewTargetQuery;
     this.#now = options.now ?? (() => new Date().toISOString());
   }
 
@@ -140,7 +146,7 @@ export class PreviewSurfaceAdapter
     if (signal.aborted) {
       throw new DOMException("The target request was aborted.", "AbortError");
     }
-    this.#requireBridge().scrollToAnchor(anchorId);
+    this.#scrollToTarget(anchorId);
   }
 
   async resolveTarget(
@@ -149,9 +155,48 @@ export class PreviewSurfaceAdapter
   ): Promise<ResolvedTargetHandle> {
     const anchorId = readAnchorId(target, this.#targetResolverId);
     const bridge = this.#requireBridge();
-    const handle = bridge.resolveAnchor(anchorId, signal);
-    bridge.scrollToAnchor(anchorId);
+    const query = this.#getPreviewTargetQuery?.(anchorId);
+    const handle = query
+      ? bridge.resolveQuery(anchorId, query, signal)
+      : bridge.resolveAnchor(anchorId, signal);
+    this.#scrollToTarget(anchorId);
     return handle;
+  }
+
+  async targetExists(target: TargetRef, signal: AbortSignal): Promise<boolean> {
+    if (signal.aborted) {
+      throw new DOMException("The preview validation was cancelled.", "AbortError");
+    }
+    const handle = await this.resolveTarget(target, signal);
+    if (handle.getSnapshot().status === "resolved") {
+      handle.dispose();
+      return true;
+    }
+    return new Promise<boolean>((resolve, reject) => {
+      let settled = false;
+      const finish = (exists: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        unsubscribe();
+        signal.removeEventListener("abort", abort);
+        handle.dispose();
+        resolve(exists);
+      };
+      const abort = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        unsubscribe();
+        handle.dispose();
+        reject(new DOMException("The preview validation was cancelled.", "AbortError"));
+      };
+      const unsubscribe = handle.subscribe((snapshot) => {
+        if (snapshot.status === "resolved") finish(true);
+      });
+      const timer = setTimeout(() => finish(false), 250);
+      signal.addEventListener("abort", abort, { once: true });
+    });
   }
 
   subscribeToInteractions(
@@ -188,6 +233,13 @@ export class PreviewSurfaceAdapter
       throw new Error("The typed Preview Bridge is not attached.");
     }
     return this.#bridge;
+  }
+
+  #scrollToTarget(anchorId: string): void {
+    const bridge = this.#requireBridge();
+    const query = this.#getPreviewTargetQuery?.(anchorId);
+    if (query) bridge.scrollToQuery(anchorId, query);
+    else bridge.scrollToAnchor(anchorId);
   }
 }
 

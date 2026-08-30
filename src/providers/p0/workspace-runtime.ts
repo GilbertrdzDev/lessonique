@@ -17,6 +17,14 @@ import {
   WorkspaceStore,
 } from "@/core/workspace";
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
+import type {
+  P0CodeIntelligenceRuntime,
+  P0ValidationRuntime,
+} from "./code-intelligence";
+import {
+  createP0CodeIntelligenceRuntime,
+  createP0ValidationRuntime,
+} from "./code-intelligence";
 
 import {
   createP0ProviderPlatform,
@@ -35,6 +43,8 @@ export interface P0WorkspaceRuntime {
   classroomLifecycle: ClassroomLifecycleService;
   createGuidedLesson: CreateGuidedLessonUseCase;
   resetClassroom: ResetClassroomUseCase;
+  codeIntelligence: P0CodeIntelligenceRuntime;
+  validation: P0ValidationRuntime;
   monacoEditorAdapter: MonacoEditorAdapter;
   previewSurfaceAdapter: PreviewSurfaceAdapter;
   consoleSurfaceAdapter: ConsoleSurfaceAdapter;
@@ -46,6 +56,7 @@ export interface P0WorkspaceRuntime {
 export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
   const registries = createP0ProviderPlatform();
   const store = new WorkspaceStore();
+  const codeIntelligence = createP0CodeIntelligenceRuntime(registries);
   const surfaceAdapters = new SurfaceAdapterRegistry();
   const runtimeAdapters = new RuntimeAdapterFactory();
 
@@ -66,10 +77,18 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
       submit: P0_INTERACTION_EVENT_TYPE_IDS.previewSubmit,
     },
     getEnvironmentRevision: () => store.getSnapshot().environmentRevision,
+    getPreviewTargetQuery: (anchorId) =>
+      codeIntelligence.previewQueries.get(anchorId),
   });
   const consoleSurfaceAdapter = new ConsoleSurfaceAdapter(
     P0_SURFACE_IDS.console,
     P0_TARGET_RESOLVER_IDS.consoleEntry,
+  );
+  const validation = createP0ValidationRuntime(
+    registries,
+    codeIntelligence,
+    store,
+    previewSurfaceAdapter,
   );
   const interactionAnchorAdapter = new InteractionAnchorAdapter({
     resolverId: P0_TARGET_RESOLVER_IDS.surfaceAnchor,
@@ -114,6 +133,28 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
   const createGuidedLesson = new CreateGuidedLessonUseCase(classroomDependencies);
   const resetClassroom = new ResetClassroomUseCase(classroomDependencies);
 
+  let analyzedFiles = store.getSnapshot().files;
+  const unsubscribeCodeAnalysis = store.subscribe(() => {
+    const state = store.getSnapshot();
+    if (state.files === analyzedFiles) return;
+    analyzedFiles = state.files;
+    codeIntelligence.diagnostics.retain(state.files.map(({ path }) => path));
+    state.files.forEach((file) => {
+      void codeIntelligence.service
+        .analyze({
+          path: file.path,
+          languageId: file.languageId,
+          content: file.content,
+          revision: state.environmentRevision,
+        })
+        .catch((error: unknown) => {
+          if (!(error instanceof DOMException && error.name === "AbortError")) {
+            console.error(`Code analysis failed for "${file.path}".`, error);
+          }
+        });
+    });
+  });
+
   const interactionSubscription = new AbortController();
   previewSurfaceAdapter.subscribeToInteractions(
     (event) => controller.recordInteraction(event),
@@ -132,6 +173,8 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     classroomLifecycle,
     createGuidedLesson,
     resetClassroom,
+    codeIntelligence,
+    validation,
     monacoEditorAdapter,
     previewSurfaceAdapter,
     consoleSurfaceAdapter,
@@ -139,6 +182,8 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     sandpackRuntimeAdapter,
     async dispose() {
       interactionSubscription.abort();
+      unsubscribeCodeAnalysis();
+      codeIntelligence.dispose();
       await classroomLifecycle.cleanup("all", "cancellation");
       await controller.dispose();
       await runtimeAdapters.dispose();

@@ -19,6 +19,12 @@ export function WebMCPRegistrationProvider({ children }: WebMCPRegistrationProvi
           workspaceController: workspace.controller,
           createGuidedLesson: workspace.createGuidedLesson,
           resetClassroom: workspace.resetClassroom,
+          lessonState: workspace.lessonStore,
+          workspaceState: workspace.store,
+          classroomLifecycle: workspace.classroomLifecycle,
+          codeIntelligence: workspace.codeIntelligence.service,
+          diagnostics: workspace.codeIntelligence.diagnostics,
+          validationResults: workspace.validation.results,
         }),
       ),
   );

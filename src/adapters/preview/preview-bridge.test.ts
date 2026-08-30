@@ -117,6 +117,53 @@ describe("PreviewBridge", () => {
       /invalid/u,
     );
   });
+
+  it("sends source-derived HTML queries as closed typed bridge messages", () => {
+    const host = createHostWindow();
+    const frameWindow = { postMessage: vi.fn() };
+    const frame = {
+      contentWindow: frameWindow,
+      getBoundingClientRect: () => ({ left: 0, top: 0 }),
+    } as unknown as HTMLIFrameElement;
+    const bridge = new PreviewBridge(host.window);
+    bridge.attach(frame);
+
+    bridge.resolveQuery(
+      "source.1234abcd",
+      {
+        kind: "html-element",
+        tagName: "button",
+        className: "action",
+        occurrence: 1,
+      },
+      new AbortController().signal,
+    );
+
+    expect(frameWindow.postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: "resolve",
+        anchorId: "source.1234abcd",
+        query: {
+          kind: "html-element",
+          tagName: "button",
+          className: "action",
+          occurrence: 1,
+        },
+      }),
+      "*",
+    );
+    expect(() =>
+      bridge.resolveQuery(
+        "source.invalid",
+        {
+          kind: "html-element",
+          occurrence: 0,
+          selector: "button.action",
+        } as never,
+        new AbortController().signal,
+      ),
+    ).toThrow();
+  });
 });
 
 describe("createSandpackPreviewFiles", () => {

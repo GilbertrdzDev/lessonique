@@ -1,9 +1,17 @@
 import { CapabilityCatalog } from "@/core/platform/capability-catalog";
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
 import type {
+  DiagnosticSnapshotStore,
+  ValidationResultSnapshotStore,
+  CodeIntelligenceService,
+} from "@/core/code-intelligence";
+import type {
+  ClassroomLifecycleService,
   CreateGuidedLessonUseCase,
+  LessonStateReader,
   ResetClassroomUseCase,
 } from "@/core/lesson";
+import type { WorkspaceStateReader } from "@/core/workspace";
 import type { WorkspaceController } from "@/core/workspace/workspace-controller";
 import type { z } from "zod";
 
@@ -13,6 +21,7 @@ import {
 } from "./capabilities";
 import { ConfigureLearningEnvironmentService } from "./configure-learning-environment";
 import { ClassroomToolService } from "./classroom-tools";
+import { InspectClassroomService } from "./inspect-classroom";
 import type { ToolHandler, ToolExecutionResult, WebMCPToolInputMap } from "./contracts";
 import { WEBMCP_TOOL_INPUT_SCHEMAS } from "./schemas";
 import { ToolRegistry, type ToolDefinition } from "./tool-registry";
@@ -73,6 +82,12 @@ export type EarlyWebMCPIntegrations = {
   workspaceController?: WorkspaceController;
   createGuidedLesson?: CreateGuidedLessonUseCase;
   resetClassroom?: ResetClassroomUseCase;
+  lessonState?: LessonStateReader;
+  workspaceState?: WorkspaceStateReader;
+  classroomLifecycle?: ClassroomLifecycleService;
+  codeIntelligence?: CodeIntelligenceService;
+  diagnostics?: DiagnosticSnapshotStore;
+  validationResults?: ValidationResultSnapshotStore;
 };
 
 export function createEarlyWebMCPToolRegistry(
@@ -112,6 +127,24 @@ export function createEarlyWebMCPToolRegistry(
           resetClassroom: integrations.resetClassroom,
         })
       : undefined;
+  const inspection =
+    integrations.lessonState &&
+    integrations.workspaceState &&
+    integrations.classroomLifecycle &&
+    integrations.codeIntelligence &&
+    integrations.diagnostics &&
+    integrations.validationResults
+      ? new InspectClassroomService({
+          registries,
+          lesson: integrations.lessonState,
+          workspace: integrations.workspaceState,
+          lifecycle: integrations.classroomLifecycle,
+          intelligence: integrations.codeIntelligence,
+          diagnostics: integrations.diagnostics,
+          validationResults: integrations.validationResults,
+          activity: registry.activityLogger,
+        })
+      : undefined;
 
   for (const name of WEBMCP_TOOL_NAMES) {
     if (name === "get_system_capabilities") continue;
@@ -131,6 +164,15 @@ export function createEarlyWebMCPToolRegistry(
         ...TOOL_METADATA.reset_classroom,
         inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.reset_classroom,
         handler: (input) => classroom.reset(input),
+      });
+      continue;
+    }
+    if (name === "inspect_classroom" && inspection) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.inspect_classroom,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.inspect_classroom,
+        handler: (input, context) => inspection.execute(input, context.signal),
       });
       continue;
     }

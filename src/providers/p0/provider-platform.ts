@@ -7,12 +7,19 @@ import type {
   InteractionAnchorDefinition,
   InteractionEventTypeDefinition,
   LanguageProvider,
+  LocatorDefinition,
   RuntimeProvider,
   SurfaceDefinition,
   TargetResolverDefinition,
+  ValidatorDefinition,
 } from "@/core/platform/contracts";
 import type { ClosedJsonObjectSchema } from "@/core/platform/json-schema";
 import { ProviderPlatformRegistries } from "@/core/platform/registries";
+
+import {
+  P0_SOURCE_LOCATOR_IDS,
+  P0_VALIDATOR_IDS,
+} from "./code-intelligence/ids";
 
 export const P0_LANGUAGE_IDS = {
   html: "language.html",
@@ -115,6 +122,13 @@ const SHARED_PROFILE_ACTION_IDS = [
   P0_ENVIRONMENT_ACTION_IDS.focusEditor,
 ] as const;
 
+const SHARED_VALIDATOR_IDS = [
+  P0_VALIDATOR_IDS.fileExists,
+  P0_VALIDATOR_IDS.textExists,
+  P0_VALIDATOR_IDS.consoleOutputMatches,
+  P0_VALIDATOR_IDS.noConsoleErrors,
+] as const;
+
 const LANGUAGE_PROVIDERS = [
   {
     id: P0_LANGUAGE_IDS.html,
@@ -122,8 +136,18 @@ const LANGUAGE_PROVIDERS = [
     extensions: [".html"],
     monacoLanguageId: "html",
     defaultFileNames: ["index.html"],
-    locatorIds: [],
-    validatorIds: [],
+    locatorIds: [
+      P0_SOURCE_LOCATOR_IDS.htmlElement,
+      P0_SOURCE_LOCATOR_IDS.htmlAttribute,
+      P0_SOURCE_LOCATOR_IDS.htmlClass,
+    ],
+    validatorIds: [
+      ...SHARED_VALIDATOR_IDS,
+      P0_VALIDATOR_IDS.htmlElementExists,
+      P0_VALIDATOR_IDS.htmlAttributeExists,
+      P0_VALIDATOR_IDS.htmlClassExists,
+      P0_VALIDATOR_IDS.previewElementExists,
+    ],
   },
   {
     id: P0_LANGUAGE_IDS.css,
@@ -131,8 +155,17 @@ const LANGUAGE_PROVIDERS = [
     extensions: [".css"],
     monacoLanguageId: "css",
     defaultFileNames: ["styles.css"],
-    locatorIds: [],
-    validatorIds: [],
+    locatorIds: [
+      P0_SOURCE_LOCATOR_IDS.cssRule,
+      P0_SOURCE_LOCATOR_IDS.cssProperty,
+      P0_SOURCE_LOCATOR_IDS.cssMediaQuery,
+    ],
+    validatorIds: [
+      ...SHARED_VALIDATOR_IDS,
+      P0_VALIDATOR_IDS.cssRuleExists,
+      P0_VALIDATOR_IDS.cssPropertyExists,
+      P0_VALIDATOR_IDS.cssMediaQueryExists,
+    ],
   },
   {
     id: P0_LANGUAGE_IDS.javascript,
@@ -140,10 +173,380 @@ const LANGUAGE_PROVIDERS = [
     extensions: [".js"],
     monacoLanguageId: "javascript",
     defaultFileNames: ["script.js"],
-    locatorIds: [],
-    validatorIds: [],
+    locatorIds: [
+      P0_SOURCE_LOCATOR_IDS.javascriptIdentifier,
+      P0_SOURCE_LOCATOR_IDS.javascriptFunction,
+      P0_SOURCE_LOCATOR_IDS.javascriptCall,
+      P0_SOURCE_LOCATOR_IDS.javascriptEventListener,
+    ],
+    validatorIds: [
+      ...SHARED_VALIDATOR_IDS,
+      P0_VALIDATOR_IDS.javascriptIdentifierExists,
+      P0_VALIDATOR_IDS.javascriptFunctionExists,
+      P0_VALIDATOR_IDS.javascriptCallExists,
+      P0_VALIDATOR_IDS.javascriptEventListenerExists,
+    ],
   },
 ] as const satisfies readonly LanguageProvider[];
+
+const HTML_BASE_LOCATOR_PROPERTIES = {
+  tagName: {
+    type: "string",
+    minLength: 1,
+    maxLength: 64,
+    pattern: "^[A-Za-z][A-Za-z0-9-]*$",
+  },
+  id: { type: "string", minLength: 1, maxLength: 128 },
+  occurrence: { type: "integer", minimum: 0, maximum: 1000 },
+} as const;
+
+const CSS_SELECTOR_PROPERTIES = {
+  selectorKind: {
+    type: "string",
+    enum: ["class", "id", "element"],
+  },
+  selectorName: {
+    type: "string",
+    minLength: 1,
+    maxLength: 128,
+    pattern: "^[A-Za-z_][A-Za-z0-9_-]*$",
+  },
+  occurrence: { type: "integer", minimum: 0, maximum: 1000 },
+} as const;
+
+const JAVASCRIPT_IDENTIFIER_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 128,
+  pattern: "^[A-Za-z_$][A-Za-z0-9_$]*$",
+} as const;
+
+const LOCATORS: readonly LocatorDefinition[] = [
+  {
+    id: P0_SOURCE_LOCATOR_IDS.htmlElement,
+    displayName: "HTML element",
+    languageId: P0_LANGUAGE_IDS.html,
+    inputSchema: {
+      type: "object",
+      properties: HTML_BASE_LOCATOR_PROPERTIES,
+      additionalProperties: false,
+    },
+  },
+  {
+    id: P0_SOURCE_LOCATOR_IDS.htmlAttribute,
+    displayName: "HTML attribute",
+    languageId: P0_LANGUAGE_IDS.html,
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...HTML_BASE_LOCATOR_PROPERTIES,
+        attributeName: {
+          type: "string",
+          minLength: 1,
+          maxLength: 128,
+          pattern: "^[A-Za-z_:][A-Za-z0-9_.:-]*$",
+        },
+      },
+      required: ["attributeName"],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: P0_SOURCE_LOCATOR_IDS.htmlClass,
+    displayName: "HTML class",
+    languageId: P0_LANGUAGE_IDS.html,
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...HTML_BASE_LOCATOR_PROPERTIES,
+        className: { type: "string", minLength: 1, maxLength: 128 },
+      },
+      required: ["className"],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: P0_SOURCE_LOCATOR_IDS.cssRule,
+    displayName: "CSS rule",
+    languageId: P0_LANGUAGE_IDS.css,
+    inputSchema: {
+      type: "object",
+      properties: CSS_SELECTOR_PROPERTIES,
+      required: ["selectorKind", "selectorName"],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: P0_SOURCE_LOCATOR_IDS.cssProperty,
+    displayName: "CSS property",
+    languageId: P0_LANGUAGE_IDS.css,
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...CSS_SELECTOR_PROPERTIES,
+        propertyName: {
+          type: "string",
+          minLength: 1,
+          maxLength: 128,
+          pattern: "^[A-Za-z_][A-Za-z0-9_-]*$",
+        },
+      },
+      required: ["selectorKind", "selectorName", "propertyName"],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: P0_SOURCE_LOCATOR_IDS.cssMediaQuery,
+    displayName: "CSS media query",
+    languageId: P0_LANGUAGE_IDS.css,
+    inputSchema: {
+      type: "object",
+      properties: {
+        feature: {
+          type: "string",
+          minLength: 1,
+          maxLength: 128,
+          pattern: "^[A-Za-z_][A-Za-z0-9_-]*$",
+        },
+        value: { type: "string", minLength: 1, maxLength: 128 },
+        occurrence: { type: "integer", minimum: 0, maximum: 1000 },
+      },
+      required: ["feature"],
+      additionalProperties: false,
+    },
+  },
+  ...[
+    {
+      id: P0_SOURCE_LOCATOR_IDS.javascriptIdentifier,
+      displayName: "JavaScript identifier",
+    },
+    {
+      id: P0_SOURCE_LOCATOR_IDS.javascriptFunction,
+      displayName: "JavaScript function",
+    },
+  ].map(({ id, displayName }): LocatorDefinition => ({
+    id,
+    displayName,
+    languageId: P0_LANGUAGE_IDS.javascript,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: JAVASCRIPT_IDENTIFIER_SCHEMA,
+        occurrence: { type: "integer" as const, minimum: 0, maximum: 1000 },
+      },
+      required: ["name"],
+      additionalProperties: false as const,
+    },
+  })),
+  {
+    id: P0_SOURCE_LOCATOR_IDS.javascriptCall,
+    displayName: "JavaScript call",
+    languageId: P0_LANGUAGE_IDS.javascript,
+    inputSchema: {
+      type: "object",
+      properties: {
+        calleeName: JAVASCRIPT_IDENTIFIER_SCHEMA,
+        receiverName: JAVASCRIPT_IDENTIFIER_SCHEMA,
+        occurrence: { type: "integer", minimum: 0, maximum: 1000 },
+      },
+      required: ["calleeName"],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: P0_SOURCE_LOCATOR_IDS.javascriptEventListener,
+    displayName: "JavaScript event listener",
+    languageId: P0_LANGUAGE_IDS.javascript,
+    inputSchema: {
+      type: "object",
+      properties: {
+        eventType: { type: "string", minLength: 1, maxLength: 128 },
+        targetKind: {
+          type: "string",
+          enum: ["document", "window", "identifier"],
+        },
+        targetName: JAVASCRIPT_IDENTIFIER_SCHEMA,
+        occurrence: { type: "integer", minimum: 0, maximum: 1000 },
+      },
+      required: ["eventType", "targetKind"],
+      additionalProperties: false,
+    },
+  },
+];
+
+const FILE_PATH_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 256,
+  pattern: "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$",
+} as const;
+
+const ALL_P0_LANGUAGE_IDS = [
+  P0_LANGUAGE_IDS.html,
+  P0_LANGUAGE_IDS.css,
+  P0_LANGUAGE_IDS.javascript,
+] as const;
+
+const VALIDATORS: readonly ValidatorDefinition[] = [
+  {
+    id: P0_VALIDATOR_IDS.fileExists,
+    displayName: "File exists",
+    supportedLanguageIds: ALL_P0_LANGUAGE_IDS,
+    inputSchema: {
+      type: "object",
+      properties: { filePath: FILE_PATH_SCHEMA },
+      required: ["filePath"],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: P0_VALIDATOR_IDS.textExists,
+    displayName: "Text exists",
+    supportedLanguageIds: ALL_P0_LANGUAGE_IDS,
+    inputSchema: {
+      type: "object",
+      properties: {
+        filePath: FILE_PATH_SCHEMA,
+        text: { type: "string", minLength: 1, maxLength: 1000 },
+        caseSensitive: { type: "boolean" },
+      },
+      required: ["filePath", "text"],
+      additionalProperties: false,
+    },
+  },
+  createSourceValidatorDefinition(
+    P0_VALIDATOR_IDS.htmlElementExists,
+    "HTML element exists",
+    P0_LANGUAGE_IDS.html,
+    P0_SOURCE_LOCATOR_IDS.htmlElement,
+  ),
+  createSourceValidatorDefinition(
+    P0_VALIDATOR_IDS.htmlAttributeExists,
+    "HTML attribute exists",
+    P0_LANGUAGE_IDS.html,
+    P0_SOURCE_LOCATOR_IDS.htmlAttribute,
+  ),
+  createSourceValidatorDefinition(
+    P0_VALIDATOR_IDS.htmlClassExists,
+    "HTML class exists",
+    P0_LANGUAGE_IDS.html,
+    P0_SOURCE_LOCATOR_IDS.htmlClass,
+  ),
+  createSourceValidatorDefinition(
+    P0_VALIDATOR_IDS.cssRuleExists,
+    "CSS rule exists",
+    P0_LANGUAGE_IDS.css,
+    P0_SOURCE_LOCATOR_IDS.cssRule,
+  ),
+  createSourceValidatorDefinition(
+    P0_VALIDATOR_IDS.cssPropertyExists,
+    "CSS property exists",
+    P0_LANGUAGE_IDS.css,
+    P0_SOURCE_LOCATOR_IDS.cssProperty,
+  ),
+  createSourceValidatorDefinition(
+    P0_VALIDATOR_IDS.cssMediaQueryExists,
+    "CSS media query exists",
+    P0_LANGUAGE_IDS.css,
+    P0_SOURCE_LOCATOR_IDS.cssMediaQuery,
+  ),
+  createSourceValidatorDefinition(
+    P0_VALIDATOR_IDS.javascriptIdentifierExists,
+    "JavaScript identifier exists",
+    P0_LANGUAGE_IDS.javascript,
+    P0_SOURCE_LOCATOR_IDS.javascriptIdentifier,
+  ),
+  createSourceValidatorDefinition(
+    P0_VALIDATOR_IDS.javascriptFunctionExists,
+    "JavaScript function exists",
+    P0_LANGUAGE_IDS.javascript,
+    P0_SOURCE_LOCATOR_IDS.javascriptFunction,
+  ),
+  createSourceValidatorDefinition(
+    P0_VALIDATOR_IDS.javascriptCallExists,
+    "JavaScript call exists",
+    P0_LANGUAGE_IDS.javascript,
+    P0_SOURCE_LOCATOR_IDS.javascriptCall,
+  ),
+  createSourceValidatorDefinition(
+    P0_VALIDATOR_IDS.javascriptEventListenerExists,
+    "JavaScript event listener exists",
+    P0_LANGUAGE_IDS.javascript,
+    P0_SOURCE_LOCATOR_IDS.javascriptEventListener,
+  ),
+  {
+    id: P0_VALIDATOR_IDS.previewElementExists,
+    displayName: "Preview element exists",
+    supportedLanguageIds: [P0_LANGUAGE_IDS.html],
+    inputSchema: {
+      type: "object",
+      properties: {
+        filePath: FILE_PATH_SCHEMA,
+        ...HTML_BASE_LOCATOR_PROPERTIES,
+        attributeName: {
+          type: "string",
+          minLength: 1,
+          maxLength: 128,
+          pattern: "^[A-Za-z_:][A-Za-z0-9_.:-]*$",
+        },
+        className: { type: "string", minLength: 1, maxLength: 128 },
+      },
+      required: ["filePath"],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: P0_VALIDATOR_IDS.consoleOutputMatches,
+    displayName: "Console output matches",
+    supportedLanguageIds: ALL_P0_LANGUAGE_IDS,
+    inputSchema: {
+      type: "object",
+      properties: {
+        text: { type: "string", minLength: 1, maxLength: 500 },
+        mode: {
+          type: "string",
+          enum: ["contains", "equals", "starts-with", "ends-with"],
+        },
+        kind: {
+          type: "string",
+          enum: ["log", "info", "warn", "error", "runtime", "build"],
+        },
+      },
+      required: ["text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: P0_VALIDATOR_IDS.noConsoleErrors,
+    displayName: "No console errors",
+    supportedLanguageIds: ALL_P0_LANGUAGE_IDS,
+    inputSchema: EMPTY_INPUT_SCHEMA,
+  },
+];
+
+function createSourceValidatorDefinition(
+  id: string,
+  displayName: string,
+  languageId: string,
+  locatorId: string,
+): ValidatorDefinition {
+  const locator = LOCATORS.find((candidate) => candidate.id === locatorId);
+  if (!locator) throw new Error(`Locator "${locatorId}" is not defined.`);
+  return {
+    id,
+    displayName,
+    supportedLanguageIds: [languageId],
+    inputSchema: {
+      type: "object",
+      properties: {
+        filePath: FILE_PATH_SCHEMA,
+        ...locator.inputSchema.properties,
+      },
+      required: ["filePath", ...(locator.inputSchema.required ?? [])],
+      additionalProperties: false,
+    },
+  };
+}
 
 const RUNTIME_PROVIDERS = [
   {
@@ -577,6 +980,8 @@ export function registerP0ProviderPlatform(
   LANGUAGE_PROVIDERS.forEach((provider) =>
     registries.languages.register(provider),
   );
+  LOCATORS.forEach((locator) => registries.locators.register(locator));
+  VALIDATORS.forEach((validator) => registries.validators.register(validator));
   RUNTIME_PROVIDERS.forEach((provider) =>
     registries.runtimes.register(provider),
   );

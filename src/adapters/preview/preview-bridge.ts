@@ -3,6 +3,10 @@ import {
   type ResolvedTargetHandle,
   type TargetGeometry,
 } from "@/core/workspace/targeting";
+import {
+  assertSafePreviewTargetQuery,
+  type PreviewTargetQuery,
+} from "@/core/code-intelligence";
 
 const PREVIEW_BRIDGE_CHANNEL = "lessonique.preview.v1";
 
@@ -13,12 +17,14 @@ type PreviewBridgeRequest =
       type: "resolve";
       requestId: string;
       anchorId: string;
+      query: PreviewTargetQuery;
     }
   | {
       channel: typeof PREVIEW_BRIDGE_CHANNEL;
       direction: "host-to-preview";
       type: "scroll";
       anchorId: string;
+      query: PreviewTargetQuery;
     };
 
 type PreviewTargetMessage = {
@@ -46,6 +52,7 @@ export type PreviewInteraction = Readonly<{
 
 type TrackedTarget = {
   anchorId: string;
+  query: PreviewTargetQuery;
   handle: ObservableTargetHandle;
   localGeometry?: TargetGeometry;
 };
@@ -81,6 +88,7 @@ export class PreviewBridge {
         type: "resolve",
         requestId,
         anchorId: target.anchorId,
+        query: target.query,
       });
     });
     return () => {
@@ -96,10 +104,27 @@ export class PreviewBridge {
   }
 
   resolveAnchor(anchorId: string, signal: AbortSignal): ResolvedTargetHandle {
+    return this.resolveQuery(
+      anchorId,
+      { kind: "registered-anchor", anchorId },
+      signal,
+    );
+  }
+
+  resolveQuery(
+    anchorId: string,
+    query: PreviewTargetQuery,
+    signal: AbortSignal,
+  ): ResolvedTargetHandle {
     validateSemanticAnchorId(anchorId);
+    assertSafePreviewTargetQuery(query);
     const requestId = `preview-target-${++this.#requestSequence}`;
     const handle = new ObservableTargetHandle({ status: "lost" });
-    this.#targets.set(requestId, { anchorId, handle });
+    this.#targets.set(requestId, {
+      anchorId,
+      query: structuredClone(query),
+      handle,
+    });
     const abort = () => {
       this.#targets.delete(requestId);
       handle.dispose();
@@ -111,6 +136,7 @@ export class PreviewBridge {
       type: "resolve",
       requestId,
       anchorId,
+      query,
     });
 
     return {
@@ -124,12 +150,18 @@ export class PreviewBridge {
   }
 
   scrollToAnchor(anchorId: string): void {
+    this.scrollToQuery(anchorId, { kind: "registered-anchor", anchorId });
+  }
+
+  scrollToQuery(anchorId: string, query: PreviewTargetQuery): void {
     validateSemanticAnchorId(anchorId);
+    assertSafePreviewTargetQuery(query);
     this.#post({
       channel: PREVIEW_BRIDGE_CHANNEL,
       direction: "host-to-preview",
       type: "scroll",
       anchorId,
+      query,
     });
   }
 

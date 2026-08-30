@@ -274,12 +274,7 @@ export const inspectClassroomInputSchema = withP0Safety(
       .max(14)
       .optional(),
     files: z.array(workspacePathSchema).max(DEFAULT_SYSTEM_LIMITS.maxFiles).optional(),
-    anchorQuery: z
-      .strictObject({
-        resolverId: identifierSchema,
-        input: providerInputSchema,
-      })
-      .optional(),
+    anchorQuery: targetRefSchema.optional(),
     maxActivity: z
       .number()
       .int()

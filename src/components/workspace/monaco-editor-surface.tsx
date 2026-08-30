@@ -11,6 +11,7 @@ import { useEffect, useRef } from "react";
 
 import { FileModelRegistry } from "@/adapters/editor/file-model-registry";
 import type { MonacoEditorAdapter } from "@/adapters/editor/monaco-editor-adapter";
+import type { DiagnosticSnapshotStore } from "@/core/code-intelligence";
 import type { LanguageProviderRegistry } from "@/core/platform/registries";
 import type { WorkspaceFile } from "@/core/workspace/contracts";
 import {
@@ -23,6 +24,7 @@ loader.config({ paths: { vs: "/vendor/monaco/vs" } });
 export type MonacoEditorSurfaceProps = Readonly<{
   activeFilePath?: string;
   adapter: MonacoEditorAdapter;
+  diagnostics: DiagnosticSnapshotStore;
   files: readonly WorkspaceFile[];
   languages: LanguageProviderRegistry;
   onContentChange(path: string, content: string): Promise<void>;
@@ -31,6 +33,7 @@ export type MonacoEditorSurfaceProps = Readonly<{
 export function MonacoEditorSurface({
   activeFilePath,
   adapter,
+  diagnostics,
   files,
   languages,
   onContentChange,
@@ -38,6 +41,7 @@ export function MonacoEditorSurface({
   const { resolvedTheme } = useTheme();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const registryRef = useRef<FileModelRegistry | null>(null);
+  const monacoRef = useRef<Monaco | null>(null);
   const activeFilePathRef = useRef(activeFilePath);
   const filesRef = useRef(files);
   const synchronizingRef = useRef(false);
@@ -57,6 +61,7 @@ export function MonacoEditorSurface({
   };
 
   const handleBeforeMount = (monaco: Monaco) => {
+    monacoRef.current = monaco;
     monaco.editor.defineTheme(
       LESSONIQUE_DEEP_OCEAN_THEME_ID,
       lessoniqueDeepOceanTheme,
@@ -74,6 +79,7 @@ export function MonacoEditorSurface({
       editorInstance.setModel(registry.require(activePath));
     }
     synchronizingRef.current = false;
+    syncDiagnosticMarkers(monaco, registry, filesRef.current, diagnostics);
     const detachAdapter = adapter.attach(editorInstance);
     const contentSubscription = editorInstance.onDidChangeModelContent(() => {
       if (synchronizingRef.current) {
@@ -89,6 +95,7 @@ export function MonacoEditorSurface({
       contentSubscription.dispose();
       detachAdapter();
       editorRef.current = null;
+      monacoRef.current = null;
     });
   };
 
@@ -104,7 +111,21 @@ export function MonacoEditorSurface({
       editorInstance.setModel(registry.require(activeFilePath));
     }
     synchronizingRef.current = false;
-  }, [activeFilePath, files]);
+    const monaco = monacoRef.current;
+    if (monaco) syncDiagnosticMarkers(monaco, registry, files, diagnostics);
+  }, [activeFilePath, diagnostics, files]);
+
+  useEffect(
+    () =>
+      diagnostics.subscribe(() => {
+        const monaco = monacoRef.current;
+        const registry = registryRef.current;
+        if (monaco && registry) {
+          syncDiagnosticMarkers(monaco, registry, filesRef.current, diagnostics);
+        }
+      }),
+    [diagnostics],
+  );
 
   useEffect(
     () => () => {
@@ -146,4 +167,33 @@ export function MonacoEditorSurface({
       />
     </div>
   );
+}
+
+function syncDiagnosticMarkers(
+  monaco: Monaco,
+  registry: FileModelRegistry,
+  files: readonly WorkspaceFile[],
+  diagnostics: DiagnosticSnapshotStore,
+): void {
+  files.forEach(({ path }) => {
+    const markers = diagnostics.get(path)?.markers ?? [];
+    monaco.editor.setModelMarkers(
+      registry.require(path),
+      "lessonique",
+      markers.map((marker) => ({
+        severity:
+          marker.severity === "error"
+            ? monaco.MarkerSeverity.Error
+            : marker.severity === "warning"
+              ? monaco.MarkerSeverity.Warning
+              : monaco.MarkerSeverity.Info,
+        message: marker.message,
+        code: marker.code,
+        startLineNumber: marker.startLine,
+        startColumn: marker.startColumn,
+        endLineNumber: marker.endLine,
+        endColumn: marker.endColumn,
+      })),
+    );
+  });
 }

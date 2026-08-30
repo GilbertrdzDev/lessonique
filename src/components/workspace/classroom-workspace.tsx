@@ -240,6 +240,7 @@ export function ClassroomWorkspace() {
                 <MonacoEditorSurface
                   activeFilePath={state.activeFilePath}
                   adapter={workspace.monacoEditorAdapter}
+                  diagnostics={workspace.codeIntelligence.diagnostics}
                   files={state.files}
                   languages={registries.languages}
                   onContentChange={(path, content) =>

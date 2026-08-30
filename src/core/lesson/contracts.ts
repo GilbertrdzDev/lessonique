@@ -135,11 +135,13 @@ export type LocalWaitCondition =
       eventTypeId: InteractionEventTypeId;
       target?: TargetRef;
       lessonStepId?: LessonStepId;
+      timeoutMs?: number;
     }
   | {
       kind: "validation";
       criterionId: LessonCriterionId;
       lessonStepId?: LessonStepId;
+      timeoutMs?: number;
     };
 
 export interface LocalWaitState {

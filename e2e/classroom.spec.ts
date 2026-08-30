@@ -278,6 +278,48 @@ test.describe("classroom shell", () => {
     await expect(page.getByRole("tab", { name: "lesson.css" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "lesson.js" })).toBeVisible();
 
+    const inspected = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      return tools.find(({ name }) => name === "inspect_classroom")?.execute({
+        include: ["lesson", "workspace", "anchors", "scene", "assistant"],
+        anchorQuery: {
+          resolverId: "locator.html.element",
+          input: { filePath: "lesson.html", id: "lesson" },
+        },
+      });
+    });
+
+    expect(inspected).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: "completed",
+        data: expect.objectContaining({
+          lesson: expect.objectContaining({ id: "lesson.browser-fixture" }),
+          workspace: expect.objectContaining({
+            files: expect.arrayContaining([
+              expect.objectContaining({ path: "lesson.html" }),
+            ]),
+          }),
+          anchors: [
+            expect.objectContaining({
+              locatorId: "locator.html.element",
+              queryIntent: "html.element",
+            }),
+          ],
+          scene: expect.objectContaining({ activeTarget: null }),
+          assistant: expect.objectContaining({ status: "working" }),
+        }),
+      }),
+    );
+    expect(JSON.stringify(inspected)).not.toMatch(/geometry|selector|domnode/iu);
+
     const reset = await page.evaluate(async () => {
       const tools = (
         window as unknown as {
@@ -658,9 +700,14 @@ test.describe("classroom shell", () => {
       "#lessonique-demo { color: rgb(255, 0, 0); font-weight: 700; }",
     );
     await page.getByRole("tab", { name: "script.js" }).click();
+    await replaceActiveFile("const result = ;");
+    await expect(page.locator(".monaco-editor .squiggly-error")).toBeVisible({
+      timeout: 5_000,
+    });
     await replaceActiveFile(
       'document.querySelector("#lessonique-demo").textContent = "Preview updated"; console.log("workspace-ready");',
     );
+    await expect(page.locator(".monaco-editor .squiggly-error")).toHaveCount(0);
     await page.getByRole("button", { name: "Run workspace" }).click();
 
     const preview = page.frameLocator("[data-preview-viewport]:visible iframe");
