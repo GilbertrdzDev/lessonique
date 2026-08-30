@@ -19,6 +19,7 @@ export interface RuntimeAdapter {
     input?: unknown,
   ): Promise<EnvironmentActionResult>;
   getSnapshot(): RuntimeSnapshot;
+  reset?(): Promise<void>;
   dispose(): Promise<void>;
 }
 

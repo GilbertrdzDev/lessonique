@@ -1,4 +1,5 @@
 export * from "./capabilities";
+export * from "./classroom-tools";
 export * from "./contracts";
 export * from "./configure-learning-environment";
 export * from "./mock-handlers";

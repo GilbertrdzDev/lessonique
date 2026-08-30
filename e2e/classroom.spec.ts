@@ -186,6 +186,127 @@ test.describe("classroom shell", () => {
     );
   });
 
+  test("creates and resets the rendered classroom through the real WebMCP lifecycle", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+
+    await expect(page.getByRole("combobox", { name: "Environment profile" })).toBeEnabled();
+    const created = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      return tools.find(({ name }) => name === "create_guided_lesson")?.execute({
+        lessonId: "lesson.browser-fixture",
+        title: "Browser fixture lesson",
+        objective: "Prove transactional bootstrap in the rendered classroom.",
+        environment: {
+          profileId: "profile.vanilla-web",
+          languageIds: [
+            "language.html",
+            "language.css",
+            "language.javascript",
+          ],
+          activeFile: "lesson.html",
+          activeSurfaceId: "editor",
+        },
+        files: [
+          {
+            path: "lesson.html",
+            languageId: "language.html",
+            content: '<main id="lesson">Browser lesson</main>',
+          },
+          {
+            path: "lesson.css",
+            languageId: "language.css",
+            content: "#lesson { color: rebeccapurple; }",
+          },
+          {
+            path: "lesson.js",
+            languageId: "language.javascript",
+            content: "console.log('browser lesson ready');",
+          },
+        ],
+        steps: [
+          {
+            id: "step.browser-1",
+            title: "Create the structure",
+            objective: "Add the semantic lesson structure.",
+          },
+          {
+            id: "step.browser-2",
+            title: "Style the result",
+            objective: "Apply the requested presentation.",
+          },
+          {
+            id: "step.browser-3",
+            title: "Run the behavior",
+            objective: "Verify the browser behavior.",
+          },
+        ],
+      });
+    });
+
+    expect(created).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: "completed",
+        data: expect.objectContaining({
+          lesson: expect.objectContaining({
+            id: "lesson.browser-fixture",
+            status: "active",
+            activeStepId: "step.browser-1",
+            stepCount: 3,
+          }),
+          environment: expect.objectContaining({
+            profileId: "profile.vanilla-web",
+            activeFile: "lesson.html",
+            activeSurfaceId: "editor",
+          }),
+        }),
+      }),
+    );
+    await expect(page.getByRole("tab", { name: "lesson.html" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("tab", { name: "lesson.css" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "lesson.js" })).toBeVisible();
+
+    const reset = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      return tools.find(({ name }) => name === "reset_classroom")?.execute({
+        scope: "all",
+      });
+    });
+
+    expect(reset).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: "completed",
+        data: expect.objectContaining({
+          scope: "all",
+          lessonStatus: "idle",
+          workspaceStatus: "idle",
+          resourcesRemaining: 0,
+        }),
+      }),
+    );
+    await expect(page.getByRole("tab", { name: "lesson.html" })).toHaveCount(0);
+  });
+
   test("loads semantic landmarks without horizontal overflow", async ({ page }) => {
     await expect(page).toHaveTitle(/Lessonique/);
     await expect(

@@ -1,5 +1,9 @@
 import { CapabilityCatalog } from "@/core/platform/capability-catalog";
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
+import type {
+  CreateGuidedLessonUseCase,
+  ResetClassroomUseCase,
+} from "@/core/lesson";
 import type { WorkspaceController } from "@/core/workspace/workspace-controller";
 import type { z } from "zod";
 
@@ -8,6 +12,7 @@ import {
   GetSystemCapabilitiesService,
 } from "./capabilities";
 import { ConfigureLearningEnvironmentService } from "./configure-learning-environment";
+import { ClassroomToolService } from "./classroom-tools";
 import type { ToolHandler, ToolExecutionResult, WebMCPToolInputMap } from "./contracts";
 import { WEBMCP_TOOL_INPUT_SCHEMAS } from "./schemas";
 import { ToolRegistry, type ToolDefinition } from "./tool-registry";
@@ -66,6 +71,8 @@ const TOOL_METADATA = {
 
 export type EarlyWebMCPIntegrations = {
   workspaceController?: WorkspaceController;
+  createGuidedLesson?: CreateGuidedLessonUseCase;
+  resetClassroom?: ResetClassroomUseCase;
 };
 
 export function createEarlyWebMCPToolRegistry(
@@ -94,9 +101,39 @@ export function createEarlyWebMCPToolRegistry(
         registries,
       )
     : undefined;
+  const classroom =
+    integrations.workspaceController &&
+    integrations.createGuidedLesson &&
+    integrations.resetClassroom
+      ? new ClassroomToolService({
+          workspace: integrations.workspaceController,
+          registries,
+          createLesson: integrations.createGuidedLesson,
+          resetClassroom: integrations.resetClassroom,
+        })
+      : undefined;
 
   for (const name of WEBMCP_TOOL_NAMES) {
     if (name === "get_system_capabilities") continue;
+    if (name === "create_guided_lesson" && classroom) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.create_guided_lesson,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.create_guided_lesson,
+        capabilityCheck: (input) => classroom.validateCreate(input),
+        handler: (input) => classroom.create(input),
+      });
+      continue;
+    }
+    if (name === "reset_classroom" && classroom) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.reset_classroom,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.reset_classroom,
+        handler: (input) => classroom.reset(input),
+      });
+      continue;
+    }
     if (name === "configure_learning_environment" && configuration) {
       registerDefinition(registry, {
         name,

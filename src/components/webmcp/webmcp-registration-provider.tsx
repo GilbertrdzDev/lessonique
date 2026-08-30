@@ -17,6 +17,8 @@ export function WebMCPRegistrationProvider({ children }: WebMCPRegistrationProvi
       new WebMCPProvider(
         createEarlyWebMCPToolRegistry(workspace.registries, {
           workspaceController: workspace.controller,
+          createGuidedLesson: workspace.createGuidedLesson,
+          resetClassroom: workspace.resetClassroom,
         }),
       ),
   );

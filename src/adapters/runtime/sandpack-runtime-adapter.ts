@@ -147,6 +147,16 @@ export class SandpackRuntimeAdapter implements RuntimeAdapter {
     };
   }
 
+  async reset(): Promise<void> {
+    if (this.#host) {
+      await this.#host.stop();
+      await this.#host.clearConsole();
+    }
+    this.#status = "stopped";
+    this.#revision += 1;
+    this.#errorMessage = undefined;
+  }
+
   async dispose(): Promise<void> {
     this.#host = undefined;
     this.#status = "stopped";

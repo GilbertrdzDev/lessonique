@@ -4,6 +4,12 @@ import { PreviewSurfaceAdapter } from "@/adapters/preview/preview-surface-adapte
 import { SandpackRuntimeAdapter } from "@/adapters/runtime/sandpack-runtime-adapter";
 import { InteractionAnchorAdapter } from "@/adapters/surface/interaction-anchor-adapter";
 import {
+  ClassroomLifecycleService,
+  CreateGuidedLessonUseCase,
+  LessonStore,
+  ResetClassroomUseCase,
+} from "@/core/lesson";
+import {
   InMemorySurfaceAdapter,
   RuntimeAdapterFactory,
   SurfaceAdapterRegistry,
@@ -25,6 +31,10 @@ export interface P0WorkspaceRuntime {
   registries: ProviderPlatformRegistries;
   store: WorkspaceStore;
   controller: WorkspaceController;
+  lessonStore: LessonStore;
+  classroomLifecycle: ClassroomLifecycleService;
+  createGuidedLesson: CreateGuidedLessonUseCase;
+  resetClassroom: ResetClassroomUseCase;
   monacoEditorAdapter: MonacoEditorAdapter;
   previewSurfaceAdapter: PreviewSurfaceAdapter;
   consoleSurfaceAdapter: ConsoleSurfaceAdapter;
@@ -94,6 +104,15 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     surfaceAdapters,
     runtimeAdapters,
   });
+  const lessonStore = new LessonStore();
+  const classroomLifecycle = new ClassroomLifecycleService();
+  const classroomDependencies = {
+    lessonStore,
+    workspace: controller,
+    lifecycle: classroomLifecycle,
+  };
+  const createGuidedLesson = new CreateGuidedLessonUseCase(classroomDependencies);
+  const resetClassroom = new ResetClassroomUseCase(classroomDependencies);
 
   const interactionSubscription = new AbortController();
   previewSurfaceAdapter.subscribeToInteractions(
@@ -109,6 +128,10 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     registries,
     store,
     controller,
+    lessonStore,
+    classroomLifecycle,
+    createGuidedLesson,
+    resetClassroom,
     monacoEditorAdapter,
     previewSurfaceAdapter,
     consoleSurfaceAdapter,
@@ -116,6 +139,7 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     sandpackRuntimeAdapter,
     async dispose() {
       interactionSubscription.abort();
+      await classroomLifecycle.cleanup("all", "cancellation");
       await controller.dispose();
       await runtimeAdapters.dispose();
     },

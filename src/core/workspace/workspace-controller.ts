@@ -14,14 +14,15 @@ import type {
 import { validateClosedJsonObjectInput } from "@/core/platform/json-schema";
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
 
-import type {
-  ConsoleEntry,
-  EnvironmentActionResult,
-  SurfaceState,
-  WorkspaceFile,
-  WorkspaceEnvironmentConfiguration,
-  WorkspaceFileOperation,
-  WorkspaceState,
+import {
+  createIdleWorkspaceState,
+  type ConsoleEntry,
+  type EnvironmentActionResult,
+  type SurfaceState,
+  type WorkspaceFile,
+  type WorkspaceEnvironmentConfiguration,
+  type WorkspaceFileOperation,
+  type WorkspaceState,
 } from "./contracts";
 import type {
   RuntimeAdapter,
@@ -67,6 +68,32 @@ export class WorkspaceController {
 
   get runtime(): RuntimeAdapter | undefined {
     return this.#runtime;
+  }
+
+  validateEnvironmentConfiguration(
+    configuration: WorkspaceEnvironmentConfiguration,
+  ): void {
+    const profile = this.#registries.environmentProfiles.require(
+      configuration.profileId,
+    );
+    if (profile.runtimeProviderId !== configuration.runtimeProviderId) {
+      throw new WorkspaceValidationError(
+        `Runtime "${configuration.runtimeProviderId}" is not supported by profile "${profile.id}".`,
+      );
+    }
+    this.#validateLanguageSelection(profile, configuration.languageIds);
+    this.#validateFiles(profile, configuration.files);
+    configuration.files.forEach((file) => {
+      if (!configuration.languageIds.includes(file.languageId)) {
+        throw new WorkspaceValidationError(
+          `Workspace file "${file.path}" requires selected language "${file.languageId}".`,
+        );
+      }
+    });
+    const surfaces = this.#resolveSurfaces(profile, configuration.surfaces);
+    this.#resolveActiveFile(configuration.files, configuration.activeFilePath);
+    this.#resolveActiveSurface(surfaces, configuration.activeSurfaceId);
+    this.#runtimeAdapters.get(configuration.runtimeProviderId);
   }
 
   async activateProfile(profileId: EnvironmentProfileId): Promise<void> {
@@ -340,6 +367,51 @@ export class WorkspaceController {
         revision: nextRuntime.getSnapshot().revision,
       },
       environmentRevision: Math.max(1, state.environmentRevision),
+    });
+  }
+
+  async resetRuntime(): Promise<void> {
+    const state = this.#store.getSnapshot();
+    if (!state.runtimeProviderId && state.runtime.status === "idle") {
+      return;
+    }
+    await this.#runtime?.reset?.();
+    const runtimeSnapshot = this.#runtime?.getSnapshot();
+    this.#store.commit({
+      ...state,
+      status: state.profileId ? "stopped" : "idle",
+      consoleEntries: [],
+      runtime: runtimeSnapshot
+        ? {
+            providerId: runtimeSnapshot.providerId,
+            status: "stopped",
+            revision: runtimeSnapshot.revision,
+          }
+        : {
+            status: "idle",
+            revision: state.runtime.revision + 1,
+          },
+      environmentRevision: state.environmentRevision + 1,
+    });
+  }
+
+  async clearEnvironment(): Promise<void> {
+    const state = this.#store.getSnapshot();
+    if (
+      state.status === "idle" &&
+      !state.profileId &&
+      state.files.length === 0 &&
+      state.surfaces.length === 0
+    ) {
+      return;
+    }
+    if (this.#runtime) {
+      await this.#runtime.replaceFiles([]);
+      await this.#runtime.reset?.();
+    }
+    this.#store.commit({
+      ...createIdleWorkspaceState(),
+      environmentRevision: state.environmentRevision + 1,
     });
   }
 

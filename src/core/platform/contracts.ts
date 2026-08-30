@@ -220,4 +220,5 @@ export type InteractionEvent = {
   environmentRevision: number;
   occurredAt: string;
   summary?: string;
+  outcome?: "observed" | "success" | "failure";
 };
