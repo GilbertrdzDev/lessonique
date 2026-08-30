@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { WebMCPRegistrationProvider } from "@/components/webmcp/webmcp-registration-provider";
 
 import "./globals.css";
 
@@ -31,7 +32,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en" className={geist.variable} suppressHydrationWarning>
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <WebMCPRegistrationProvider>{children}</WebMCPRegistrationProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

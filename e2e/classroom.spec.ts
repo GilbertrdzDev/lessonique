@@ -3,7 +3,87 @@ import { expect, test } from "@playwright/test";
 
 test.describe("classroom shell", () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      const registeredTools: Array<{
+        name: string;
+        inputSchema: { additionalProperties?: boolean };
+        execute: (input: unknown) => Promise<unknown>;
+      }> = [];
+      Object.defineProperty(window, "__lessoniqueRegisteredTools", {
+        configurable: true,
+        value: registeredTools,
+      });
+      Object.defineProperty(document, "modelContext", {
+        configurable: true,
+        value: {
+          registerTool: async (tool: (typeof registeredTools)[number]) => {
+            registeredTools.push(tool);
+          },
+        },
+      });
+    });
     await page.goto("/classroom");
+  });
+
+  test("registers the closed P0 WebMCP catalog from the top-level document", async ({
+    page,
+  }) => {
+    const expectedNames = [
+      "get_system_capabilities",
+      "create_guided_lesson",
+      "reset_classroom",
+      "inspect_classroom",
+      "configure_learning_environment",
+      "apply_workspace_changes",
+      "execute_environment_action",
+      "play_teaching_scene",
+      "control_teaching_scene",
+      "evaluate_current_step",
+      "update_lesson_plan",
+      "show_reference_panel",
+    ];
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __lessoniqueRegisteredTools: Array<{
+                name: string;
+                inputSchema: { additionalProperties?: boolean };
+              }>;
+            }
+          ).__lessoniqueRegisteredTools.map(({ name }) => name),
+        ),
+      )
+      .toEqual(expectedNames);
+
+    const discovery = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            inputSchema: { additionalProperties?: boolean };
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      const capabilityTool = tools.find(({ name }) => name === "get_system_capabilities");
+      return {
+        allClosed: tools.every(
+          ({ inputSchema }) => inputSchema.additionalProperties === false,
+        ),
+        result: await capabilityTool?.execute({ include: ["limits"] }),
+      };
+    });
+
+    expect(discovery.allClosed).toBe(true);
+    expect(discovery.result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({ limits: expect.any(Object) }),
+      }),
+    );
   });
 
   test("loads semantic landmarks without horizontal overflow", async ({ page }) => {
