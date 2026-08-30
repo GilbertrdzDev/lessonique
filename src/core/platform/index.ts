@@ -1,3 +1,4 @@
+export * from "./capability-catalog";
 export * from "./contracts";
 export * from "./identifiers";
 export * from "./json-schema";
