@@ -6,10 +6,13 @@ import {
   useSandpack,
   useSandpackConsole,
 } from "@codesandbox/sandpack-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PreviewBridge } from "@/adapters/preview/preview-bridge";
-import { createSandpackPreviewFiles } from "@/adapters/preview/preview-bridge-script";
+import {
+  createSandpackPreviewFiles,
+  createSandpackPreviewFilesFromRuntime,
+} from "@/adapters/preview/preview-bridge-script";
 import type { PreviewSurfaceAdapter } from "@/adapters/preview/preview-surface-adapter";
 import type { WorkspaceFile } from "@/core/workspace/contracts";
 import type { ConsoleEntry } from "@/core/workspace/contracts";
@@ -36,11 +39,18 @@ export function SandpackRuntimeView({
   viewport,
 }: SandpackRuntimeViewProps) {
   const previewContainerRef = useRef<HTMLDivElement>(null);
-  const sandpackFiles = useMemo(
-    () => createSandpackPreviewFiles(files),
-    [files],
-  );
-  const activeFile = files.find(({ path }) => path === "index.html")?.path;
+  const [providerConfiguration] = useState(() => ({
+    files: createSandpackPreviewFiles(files),
+    options: {
+      activeFile: files.find(({ path }) => path === "index.html")
+        ? "/index.html"
+        : undefined,
+      autorun: true,
+      recompileMode: "delayed" as const,
+      recompileDelay: 250,
+      visibleFiles: files.map(({ path }) => `/${path}`),
+    },
+  }));
 
   useEffect(() => {
     const bridge = new PreviewBridge(window);
@@ -66,14 +76,8 @@ export function SandpackRuntimeView({
 
   return (
     <SandpackProvider
-      files={sandpackFiles}
-      options={{
-        activeFile: activeFile ? `/${activeFile}` : undefined,
-        autorun: true,
-        recompileMode: "delayed",
-        recompileDelay: 250,
-        visibleFiles: files.map(({ path }) => `/${path}`),
-      }}
+      files={providerConfiguration.files}
+      options={providerConfiguration.options}
       template="static"
     >
       <SandpackRuntimeBinding
@@ -123,73 +127,120 @@ function SandpackRuntimeBinding({
     showSyntaxError: true,
   });
   const sandpackRef = useRef(sandpack);
+  const dispatchRef = useRef(dispatch);
+  const resetConsoleRef = useRef(reset);
+  const consoleEntryTimestampsRef = useRef(new Map<string, string>());
+  const managedRuntimePathsRef = useRef<Set<string> | undefined>(undefined);
+  const scheduledRunRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     sandpackRef.current = sandpack;
-  }, [sandpack]);
+    dispatchRef.current = dispatch;
+    resetConsoleRef.current = reset;
+  }, [dispatch, reset, sandpack]);
 
   useEffect(() => {
+    const cancelScheduledRun = () => {
+      if (scheduledRunRef.current !== undefined) {
+        window.clearTimeout(scheduledRunRef.current);
+        scheduledRunRef.current = undefined;
+      }
+    };
+    const scheduleRun = () => {
+      cancelScheduledRun();
+      scheduledRunRef.current = window.setTimeout(() => {
+        scheduledRunRef.current = undefined;
+        void sandpackRef.current.runSandpack();
+      }, 350);
+    };
+    const replaceRuntimeFiles = (files: Readonly<Record<string, string>>) => {
+      const nextFiles = createSandpackPreviewFilesFromRuntime(files);
+      const nextPaths = new Set(Object.keys(nextFiles));
+      const current = sandpackRef.current;
+      const managedPaths = managedRuntimePathsRef.current ?? nextPaths;
+      const removedPaths = [...managedPaths].filter(
+        (path) => !nextPaths.has(path),
+      );
+      const hasChanges =
+        removedPaths.length > 0 ||
+        Object.entries(nextFiles).some(
+          ([path, file]) => current.files[path]?.code !== file.code,
+        );
+      removedPaths.forEach((path) => current.deleteFile(path, false));
+      if (hasChanges) {
+        current.updateFile(nextFiles, undefined, false);
+        scheduleRun();
+      }
+      managedRuntimePathsRef.current = nextPaths;
+    };
     const detachRuntime = runtime.attachHost({
       replaceFiles: async (files) => {
-        const current = sandpackRef.current;
-        const currentPaths = new Set(Object.keys(current.files));
-        const nextPaths = new Set(Object.keys(files));
-        currentPaths.forEach((path) => {
-          if (!nextPaths.has(path)) {
-            current.deleteFile(path, false);
-          }
-        });
-        current.updateFile(files, undefined, true);
+        replaceRuntimeFiles(files);
       },
       run: async () => {
+        cancelScheduledRun();
         await sandpackRef.current.runSandpack();
       },
-      stop: async () => undefined,
+      stop: async () => cancelScheduledRun(),
       restart: async () => {
-        dispatch({ type: "refresh" });
+        cancelScheduledRun();
+        dispatchRef.current({ type: "refresh" });
       },
       clearConsole: async () => {
-        reset();
+        resetConsoleRef.current();
       },
     });
     const detachPreview = previewAdapter.attachRuntimeHost({
-      reload: async () => dispatch({ type: "refresh" }),
+      reload: async () => dispatchRef.current({ type: "refresh" }),
     });
     return () => {
+      cancelScheduledRun();
       detachPreview();
       detachRuntime();
     };
-  }, [dispatch, previewAdapter, reset, runtime]);
+  }, [previewAdapter, runtime]);
 
   useEffect(() => {
-    const entries: ConsoleEntry[] = logs.map((entry, index) => ({
-      id: createConsoleEntryId(entry.id, index),
-      kind:
-        entry.method === "error"
-          ? "error"
-          : entry.method === "warn"
-            ? "warn"
-            : entry.method === "info" || entry.method === "debug"
-              ? "info"
-              : "log",
-      message: formatConsoleValues(entry.data),
-      occurredAt: new Date().toISOString(),
-    }));
+    const timestamps = consoleEntryTimestampsRef.current;
+    const entries: ConsoleEntry[] = logs.map((entry, index) => {
+      const id = createConsoleEntryId(entry.id, index);
+      return {
+        id,
+        kind:
+          entry.method === "error"
+            ? "error"
+            : entry.method === "warn"
+              ? "warn"
+              : entry.method === "info" || entry.method === "debug"
+                ? "info"
+                : "log",
+        message: formatConsoleValues(entry.data),
+        occurredAt: getConsoleEntryTimestamp(timestamps, id),
+      };
+    });
     if (sandpack.error) {
+      const id = "console.build-error";
       entries.push({
-        id: "console.build-error",
+        id,
         kind: "build",
         message: formatConsoleValues([sandpack.error]),
-        occurredAt: new Date().toISOString(),
+        occurredAt: getConsoleEntryTimestamp(timestamps, id),
       });
     } else if (sandpack.status === "timeout") {
+      const id = "console.runtime-timeout";
       entries.push({
-        id: "console.runtime-timeout",
+        id,
         kind: "runtime",
         message: "The preview runtime timed out.",
-        occurredAt: new Date().toISOString(),
+        occurredAt: getConsoleEntryTimestamp(timestamps, id),
       });
     }
+    const activeIds = new Set(entries.map(({ id }) => id));
+    timestamps.keys().forEach((id) => {
+      if (!activeIds.has(id)) {
+        timestamps.delete(id);
+      }
+    });
     onConsoleEntriesChange(entries);
   }, [logs, onConsoleEntriesChange, sandpack.error, sandpack.status]);
 
@@ -199,6 +250,19 @@ function SandpackRuntimeBinding({
 function createConsoleEntryId(id: string, index: number): string {
   const safeId = id.replaceAll(/[^A-Za-z0-9._:-]/gu, "-").slice(0, 80);
   return `console.${index}.${safeId || "entry"}`;
+}
+
+function getConsoleEntryTimestamp(
+  timestamps: Map<string, string>,
+  id: string,
+): string {
+  const existing = timestamps.get(id);
+  if (existing) {
+    return existing;
+  }
+  const timestamp = new Date().toISOString();
+  timestamps.set(id, timestamp);
+  return timestamp;
 }
 
 function formatConsoleValues(

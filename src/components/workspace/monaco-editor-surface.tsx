@@ -13,6 +13,10 @@ import { FileModelRegistry } from "@/adapters/editor/file-model-registry";
 import type { MonacoEditorAdapter } from "@/adapters/editor/monaco-editor-adapter";
 import type { LanguageProviderRegistry } from "@/core/platform/registries";
 import type { WorkspaceFile } from "@/core/workspace/contracts";
+import {
+  LESSONIQUE_DEEP_OCEAN_THEME_ID,
+  lessoniqueDeepOceanTheme,
+} from "@/components/workspace/monaco-deep-ocean-theme";
 
 loader.config({ paths: { vs: "/vendor/monaco/vs" } });
 
@@ -37,6 +41,8 @@ export function MonacoEditorSurface({
   const activeFilePathRef = useRef(activeFilePath);
   const filesRef = useRef(files);
   const synchronizingRef = useRef(false);
+  const editorTheme =
+    resolvedTheme === "dark" ? LESSONIQUE_DEEP_OCEAN_THEME_ID : "light";
 
   useEffect(() => {
     activeFilePathRef.current = activeFilePath;
@@ -48,6 +54,14 @@ export function MonacoEditorSurface({
       languages.get(languageId)?.monacoLanguageId,
     );
     return registryRef.current;
+  };
+
+  const handleBeforeMount = (monaco: Monaco) => {
+    monaco.editor.defineTheme(
+      LESSONIQUE_DEEP_OCEAN_THEME_ID,
+      lessoniqueDeepOceanTheme,
+    );
+    ensureRegistry(monaco);
   };
 
   const handleMount: OnMount = (editorInstance, monaco) => {
@@ -101,12 +115,17 @@ export function MonacoEditorSurface({
   );
 
   return (
-    <div className="h-full min-h-80" id="workspace-editor-panel" role="tabpanel">
+    <div
+      className="min-h-0 flex-1 overflow-hidden"
+      data-editor-theme={editorTheme}
+      id="workspace-editor-panel"
+      role="tabpanel"
+    >
       <MonacoEditor
-        beforeMount={ensureRegistry}
+        beforeMount={handleBeforeMount}
         height="100%"
         loading={
-          <div className="grid h-full min-h-80 place-items-center text-sm text-muted-foreground">
+          <div className="grid h-full min-h-0 place-items-center text-sm text-muted-foreground">
             Initializing Monaco editor…
           </div>
         }
@@ -122,7 +141,7 @@ export function MonacoEditorSurface({
           scrollBeyondLastLine: false,
           smoothScrolling: true,
         }}
-        theme={resolvedTheme === "dark" ? "vs-dark" : "light"}
+        theme={editorTheme}
       />
     </div>
   );

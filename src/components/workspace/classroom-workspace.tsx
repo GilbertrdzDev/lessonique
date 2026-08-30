@@ -137,7 +137,7 @@ export function ClassroomWorkspace() {
   return (
     <main
       aria-labelledby="classroom-title"
-      className="flex min-h-[38rem] flex-1 flex-col rounded-[1.25rem] border bg-workspace p-3 shadow-panel sm:min-h-[46rem] sm:p-5"
+      className="flex h-[clamp(46rem,calc(100svh-9rem),56rem)] min-h-0 flex-none flex-col rounded-[1.25rem] border bg-workspace p-3 shadow-panel sm:p-5"
       id="classroom-workspace"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -289,7 +289,12 @@ export function ClassroomWorkspace() {
                       ))}
                     </div>
                   </div>
-                  <div className="min-h-0 flex-1 overflow-auto bg-muted/30 p-3">
+                  <div
+                    aria-label="Scrollable live preview"
+                    className="min-h-0 flex-1 overflow-auto bg-muted/30 p-3"
+                    role="region"
+                    tabIndex={0}
+                  >
                     <SandpackRuntimeView
                       files={state.files}
                       onConsoleEntriesChange={updateConsoleEntries}

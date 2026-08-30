@@ -15,7 +15,7 @@ export function WorkspaceConsole({ adapter, entries }: WorkspaceConsoleProps) {
   return (
     <div
       aria-label="Runtime console"
-      className="h-full min-h-40 overflow-auto bg-[#0c0f1a] p-3 font-mono text-xs text-slate-200"
+      className="h-full min-h-0 overflow-auto bg-[#0c0f1a] p-3 font-mono text-xs text-slate-200"
       role="log"
     >
       {entries.length === 0 ? (

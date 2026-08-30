@@ -60,4 +60,41 @@ describe("WorkspaceStore", () => {
 
     expect(store.getSnapshot().languageIds).toEqual(["language.fake"]);
   });
+
+  it("retains the file collection identity for unrelated state commits", () => {
+    const store = new WorkspaceStore();
+    store.commit({
+      ...store.getSnapshot(),
+      files: [
+        {
+          path: "script.js",
+          languageId: "language.javascript",
+          content: "console.log('ready');",
+          visible: true,
+        },
+      ],
+    });
+    const files = store.getSnapshot().files;
+
+    store.commit({
+      ...store.getSnapshot(),
+      consoleEntries: [
+        {
+          id: "console.1",
+          kind: "log",
+          message: "ready",
+          occurredAt: "2026-08-30T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(store.getSnapshot().files).toBe(files);
+
+    store.commit({
+      ...store.getSnapshot(),
+      files: [{ ...files[0]!, content: "console.log('changed');" }],
+    });
+
+    expect(store.getSnapshot().files).not.toBe(files);
+  });
 });

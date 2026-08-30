@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PreviewBridge } from "./preview-bridge";
 import {
   createSandpackPreviewFiles,
+  createSandpackPreviewFilesFromRuntime,
   PREVIEW_BRIDGE_RUNTIME_PATH,
 } from "./preview-bridge-script";
 
@@ -134,6 +135,16 @@ describe("createSandpackPreviewFiles", () => {
     expect(result["/index.html"]?.code).toContain(PREVIEW_BRIDGE_RUNTIME_PATH);
     expect(result[PREVIEW_BRIDGE_RUNTIME_PATH]?.hidden).toBe(true);
     expect(files[0]?.content).not.toContain(PREVIEW_BRIDGE_RUNTIME_PATH);
+  });
+
+  it("prepares runtime adapter files through the same preview bridge", () => {
+    const result = createSandpackPreviewFilesFromRuntime({
+      "/script.js": "console.log('test');",
+    });
+
+    expect(result["/script.js"]?.code).toBe("console.log('test');");
+    expect(result["/index.html"]?.code).toContain("/script.js");
+    expect(result[PREVIEW_BRIDGE_RUNTIME_PATH]?.hidden).toBe(true);
   });
 });
 

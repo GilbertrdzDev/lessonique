@@ -1,5 +1,6 @@
 import {
   createIdleWorkspaceState,
+  type WorkspaceFile,
   type WorkspaceState,
 } from "./contracts";
 
@@ -26,9 +27,32 @@ export class WorkspaceStore implements WorkspaceStateReader {
   };
 
   commit(nextState: WorkspaceState): void {
-    this.#state = cloneWorkspaceState(nextState);
+    const clonedState = cloneWorkspaceState(nextState);
+    if (workspaceFilesEqual(this.#state.files, clonedState.files)) {
+      clonedState.files = this.#state.files;
+    }
+    this.#state = clonedState;
     this.#listeners.forEach((listener) => listener());
   }
+}
+
+function workspaceFilesEqual(
+  left: readonly WorkspaceFile[],
+  right: readonly WorkspaceFile[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((file, index) => {
+      const candidate = right[index];
+      return (
+        file.path === candidate?.path &&
+        file.languageId === candidate.languageId &&
+        file.content === candidate.content &&
+        file.visible === candidate.visible &&
+        file.readOnly === candidate.readOnly
+      );
+    })
+  );
 }
 
 export function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {

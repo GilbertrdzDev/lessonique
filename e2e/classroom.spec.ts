@@ -101,6 +101,139 @@ test.describe("classroom shell", () => {
     expect(persistedTheme).not.toBe(initialTheme);
   });
 
+  test("keeps Monaco height stable and applies the Deep Ocean dark theme", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+
+    const consoleErrors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") {
+        consoleErrors.push(message.text());
+      }
+    });
+    await page.reload();
+
+    const editor = page.getByRole("textbox", { name: "Workspace code editor" });
+    const editorPanel = page.locator("#workspace-editor-panel");
+    await expect(editor).toBeVisible({ timeout: 15_000 });
+
+    const initialHeight = await editorPanel.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    );
+    await page.waitForTimeout(1_500);
+    const settledHeight = await editorPanel.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    );
+
+    expect(Math.abs(settledHeight - initialHeight)).toBeLessThanOrEqual(1);
+    expect(settledHeight).toBeLessThan(720);
+
+    await page.getByRole("button", { name: "Toggle color theme" }).click();
+    await expect(editorPanel).toHaveAttribute(
+      "data-editor-theme",
+      "lessonique-deep-ocean",
+    );
+    await expect(page.locator(".monaco-editor")).toHaveCSS(
+      "background-color",
+      "rgb(6, 24, 38)",
+    );
+    expect(
+      consoleErrors.filter((message) =>
+        message.includes("Maximum update depth exceeded"),
+      ),
+    ).toEqual([]);
+  });
+
+  test("runs one console log per edit without resizing the workspace", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+
+    const editor = page.getByRole("textbox", { name: "Workspace code editor" });
+    const editorPanel = page.locator("#workspace-editor-panel");
+    const classroom = page.getByRole("main", { name: "Lessonique Classroom" });
+    const consoleEntries = page
+      .getByRole("log", { name: "Runtime console" })
+      .locator("[data-console-entry-id]");
+    await expect(editor).toBeVisible({ timeout: 15_000 });
+
+    const initialEditorHeight = await editorPanel.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    );
+    const initialClassroomHeight = await classroom.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    );
+
+    await page.getByRole("button", { name: "Clear console" }).click();
+    await page.getByRole("tab", { name: "script.js" }).click();
+    await editor.press("Control+A");
+    await page.keyboard.insertText("console.log('test');");
+
+    await expect(consoleEntries).toHaveCount(1, { timeout: 20_000 });
+    await expect(consoleEntries.first()).toContainText("test");
+    await page.waitForTimeout(2_000);
+
+    await expect(consoleEntries).toHaveCount(1);
+    expect(
+      await editorPanel.evaluate(
+        (element) => element.getBoundingClientRect().height,
+      ),
+    ).toBe(initialEditorHeight);
+    expect(
+      await classroom.evaluate(
+        (element) => element.getBoundingClientRect().height,
+      ),
+    ).toBe(initialClassroomHeight);
+  });
+
+  test("keeps high-volume console output inside its scrollable region", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+
+    const editor = page.getByRole("textbox", { name: "Workspace code editor" });
+    const editorPanel = page.locator("#workspace-editor-panel");
+    const classroom = page.getByRole("main", { name: "Lessonique Classroom" });
+    const runtimeConsole = page.getByRole("log", { name: "Runtime console" });
+    const consoleEntries = runtimeConsole.locator("[data-console-entry-id]");
+    await expect(editor).toBeVisible({ timeout: 15_000 });
+
+    const initialEditorHeight = await editorPanel.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    );
+    const initialClassroomHeight = await classroom.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    );
+
+    await page.getByRole("button", { name: "Clear console" }).click();
+    await page.getByRole("tab", { name: "script.js" }).click();
+    await editor.press("Control+A");
+    await page.keyboard.insertText(
+      "for (let index = 0; index < 120; index += 1) console.log(index);",
+    );
+
+    await expect(consoleEntries).toHaveCount(100, { timeout: 20_000 });
+    const consoleDimensions = await runtimeConsole.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }));
+
+    expect(consoleDimensions.scrollHeight).toBeGreaterThan(
+      consoleDimensions.clientHeight,
+    );
+    expect(
+      await editorPanel.evaluate(
+        (element) => element.getBoundingClientRect().height,
+      ),
+    ).toBe(initialEditorHeight);
+    expect(
+      await classroom.evaluate(
+        (element) => element.getBoundingClientRect().height,
+      ),
+    ).toBe(initialClassroomHeight);
+  });
+
   test("switches provider profiles without reloading the classroom", async ({
     page,
   }) => {

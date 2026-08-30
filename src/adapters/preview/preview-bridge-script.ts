@@ -115,12 +115,35 @@ export const PREVIEW_BRIDGE_SCRIPT = String.raw`(() => {
   addEventListener("scroll", scheduleUpdate, true);
 })();`;
 
+export type SandpackPreviewFiles = Record<
+  string,
+  { code: string; hidden?: boolean }
+>;
+
 export function createSandpackPreviewFiles(
   files: readonly WorkspaceFile[],
-): Record<string, { code: string; hidden?: boolean }> {
-  const result: Record<string, { code: string; hidden?: boolean }> = Object.fromEntries(
-    files.map(({ path, content }) => [`/${path}`, { code: content }]),
+): SandpackPreviewFiles {
+  return addPreviewBridge(
+    Object.fromEntries(
+      files.map(({ path, content }) => [`/${path}`, { code: content }]),
+    ),
   );
+}
+
+export function createSandpackPreviewFilesFromRuntime(
+  files: Readonly<Record<string, string>>,
+): SandpackPreviewFiles {
+  return addPreviewBridge(
+    Object.fromEntries(
+      Object.entries(files).map(([path, content]) => [
+        path.startsWith("/") ? path : `/${path}`,
+        { code: content },
+      ]),
+    ),
+  );
+}
+
+function addPreviewBridge(result: SandpackPreviewFiles): SandpackPreviewFiles {
   let htmlPath = Object.keys(result).find((path) => path.endsWith(".html"));
   if (!htmlPath) {
     const scriptPath = Object.keys(result).find((path) => path.endsWith(".js"));
