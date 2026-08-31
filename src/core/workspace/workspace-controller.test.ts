@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_SYSTEM_LIMITS } from "@/core/platform/contracts";
 import { createP0ProviderPlatform } from "@/providers/p0";
 
 import type {
@@ -54,6 +55,37 @@ describe("WorkspaceController", () => {
           path: "../escape.html",
           languageId: "language.html",
           content: "",
+          visible: true,
+        },
+      ]),
+    ).rejects.toThrow(WorkspaceValidationError);
+
+    expect(runtime.replaceFiles).not.toHaveBeenCalled();
+    expect(store.getSnapshot()).toEqual(previous);
+  });
+
+  it("enforces file-count and byte limits before mutating runtime or state", async () => {
+    const { controller, runtime, store } = createHarness();
+    await controller.activateProfile("profile.vanilla-web");
+    const previous = store.getSnapshot();
+    vi.mocked(runtime.replaceFiles).mockClear();
+
+    await expect(
+      controller.replaceFiles(
+        Array.from({ length: DEFAULT_SYSTEM_LIMITS.maxFiles + 1 }, (_, index) => ({
+          path: `file-${index}.js`,
+          languageId: "language.javascript",
+          content: "",
+          visible: true,
+        })),
+      ),
+    ).rejects.toThrow(WorkspaceValidationError);
+    await expect(
+      controller.replaceFiles([
+        {
+          path: "script.js",
+          languageId: "language.javascript",
+          content: "x".repeat(DEFAULT_SYSTEM_LIMITS.maxFileBytes + 1),
           visible: true,
         },
       ]),

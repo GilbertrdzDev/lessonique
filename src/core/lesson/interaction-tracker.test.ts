@@ -92,6 +92,30 @@ describe("InteractionTracker", () => {
     tracker.detachSources();
     expect(source.activeListeners).toBe(0);
   });
+
+  it("rejects unregistered and resolver-incompatible interactions without mutation", () => {
+    const { tracker, store, source } = createHarness();
+    tracker.attachSources([source]);
+    const previous = store.getSnapshot();
+    const invalidEvents = [
+      {
+        ...interaction("interaction.unregistered"),
+        typeId: "interaction.unregistered",
+      },
+      {
+        ...interaction("interaction.incompatible"),
+        targetRef: {
+          resolverId: "target.console-entry",
+          input: { entryId: "console.entry-1" },
+        },
+      },
+    ] as InteractionEvent[];
+
+    invalidEvents.forEach((event) => {
+      expect(() => source.emit(event)).toThrow();
+      expect(store.getSnapshot()).toBe(previous);
+    });
+  });
 });
 
 function createHarness() {

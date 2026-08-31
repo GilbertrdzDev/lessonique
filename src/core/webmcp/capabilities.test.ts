@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CapabilityCatalog } from "@/core/platform/capability-catalog";
+import { DEFAULT_SYSTEM_LIMITS } from "@/core/platform/contracts";
 import { createP0ProviderPlatform } from "@/providers/p0";
 
 import {
@@ -154,6 +155,26 @@ describe("CapabilityValidator", () => {
       expect.objectContaining({
         code: "invalid_capability_input",
         category: "assistant_placement",
+      }),
+    );
+  });
+
+  it("enforces the capability-declared callout limit", () => {
+    const validator = new CapabilityValidator(createP0ProviderPlatform());
+
+    expect(
+      validator.validateGuidanceEffect("effect.callout", {
+        text: "x".repeat(DEFAULT_SYSTEM_LIMITS.maxTooltipCharacters),
+      }).id,
+    ).toBe("effect.callout");
+    expect(() =>
+      validator.validateGuidanceEffect("effect.callout", {
+        text: "x".repeat(DEFAULT_SYSTEM_LIMITS.maxTooltipCharacters + 1),
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        code: "invalid_capability_input",
+        category: "guidance_effect",
       }),
     );
   });

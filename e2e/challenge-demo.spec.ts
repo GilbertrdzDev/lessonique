@@ -23,6 +23,8 @@ type ToolResultRecord = Readonly<{
 }>;
 
 test.describe("S007 challenge demo verification", () => {
+  test.describe.configure({ mode: "serial" });
+
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       const registeredTools: Array<{

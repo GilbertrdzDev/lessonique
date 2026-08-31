@@ -68,6 +68,10 @@ describe("execute_environment_action", () => {
       actionId: "runtime.run",
       input: { command: "whoami" },
     });
+    const forbiddenShell = await registry.invoke("execute_environment_action", {
+      actionId: "runtime.run",
+      input: { shellCommand: "whoami" },
+    });
 
     expect(unavailable).toEqual(
       expect.objectContaining({
@@ -82,6 +86,12 @@ describe("execute_environment_action", () => {
       expect.objectContaining({
         ok: false,
         error: expect.objectContaining({ code: "invalid_capability_input" }),
+      }),
+    );
+    expect(forbiddenShell).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: expect.objectContaining({ code: "invalid_input" }),
       }),
     );
   });

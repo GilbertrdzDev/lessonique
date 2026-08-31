@@ -118,6 +118,50 @@ describe("PreviewBridge", () => {
     );
   });
 
+  it("rejects unregistered interactions and malformed target payloads", () => {
+    const host = createHostWindow();
+    const frameWindow = { postMessage: vi.fn() };
+    const frame = {
+      contentWindow: frameWindow,
+      getBoundingClientRect: () => ({ left: 0, top: 0 }),
+    } as unknown as HTMLIFrameElement;
+    const bridge = new PreviewBridge(host.window);
+    bridge.attach(frame);
+    const listener = vi.fn();
+    bridge.subscribeToInteractions(listener, new AbortController().signal);
+    const handle = bridge.resolveAnchor(
+      "hero.button",
+      new AbortController().signal,
+    );
+
+    host.emitMessage(frameWindow, {
+      channel: "lessonique.preview.v1",
+      direction: "preview-to-host",
+      type: "interaction",
+      eventType: "keydown",
+      anchorId: "hero.button",
+    });
+    host.emitMessage(frameWindow, {
+      channel: "lessonique.preview.v1",
+      direction: "preview-to-host",
+      type: "interaction",
+      eventType: "click",
+      anchorId: "button[data-secret]",
+    });
+    host.emitMessage(frameWindow, {
+      channel: "lessonique.preview.v1",
+      direction: "preview-to-host",
+      type: "target",
+      requestId: "preview-target-1",
+      anchorId: "hero.button",
+      status: "resolved",
+      geometry: { left: 0, top: 0, width: Number.POSITIVE_INFINITY, height: 10 },
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(handle.getSnapshot()).toEqual({ status: "lost" });
+  });
+
   it("sends source-derived HTML queries as closed typed bridge messages", () => {
     const host = createHostWindow();
     const frameWindow = { postMessage: vi.fn() };
@@ -152,17 +196,27 @@ describe("PreviewBridge", () => {
       }),
       "*",
     );
-    expect(() =>
-      bridge.resolveQuery(
-        "source.invalid",
-        {
-          kind: "html-element",
-          occurrence: 0,
-          selector: "button.action",
-        } as never,
-        new AbortController().signal,
-      ),
-    ).toThrow();
+    const validPostCount = frameWindow.postMessage.mock.calls.length;
+    [
+      { selector: "button.action" },
+      { xpath: "//button" },
+      { domPath: "body/button[1]" },
+      { coordinates: [10, 20] },
+    ].forEach((unsafeInput) => {
+      expect(() =>
+        bridge.resolveQuery(
+          "source.invalid",
+          {
+            kind: "html-element",
+            tagName: "button",
+            occurrence: 0,
+            ...unsafeInput,
+          } as never,
+          new AbortController().signal,
+        ),
+      ).toThrow();
+    });
+    expect(frameWindow.postMessage).toHaveBeenCalledTimes(validPostCount);
   });
 });
 

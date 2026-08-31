@@ -154,30 +154,46 @@ export class PreviewTargetQueryRegistry {
 export function assertSafePreviewTargetQuery(
   query: PreviewTargetQuery,
 ): void {
+  if (!isRecord(query)) {
+    throw new Error("The preview target query must be an object.");
+  }
   if (query.kind === "registered-anchor") {
-    assertBoundedString(query.anchorId, "Registered preview anchor ID");
+    assertOnlyKeys(query, ["kind", "anchorId"], "Registered preview query");
+    assertSemanticId(query.anchorId, "Registered preview anchor ID");
     return;
   }
   if (query.kind !== "html-element") {
     throw new Error("The preview target query kind is not supported.");
   }
+  assertOnlyKeys(
+    query,
+    ["kind", "tagName", "id", "attributeName", "className", "occurrence"],
+    "HTML preview query",
+  );
   if (!Number.isInteger(query.occurrence) || query.occurrence < 0) {
     throw new Error("Preview target query occurrence must be a non-negative integer.");
   }
   if (!query.tagName && !query.id && !query.attributeName && !query.className) {
     throw new Error("HTML preview queries require a semantic element constraint.");
   }
-  if (query.tagName && !/^[A-Za-z][A-Za-z0-9-]*$/u.test(query.tagName)) {
+  if (
+    query.tagName !== undefined &&
+    (typeof query.tagName !== "string" ||
+      !/^[A-Za-z][A-Za-z0-9-]*$/u.test(query.tagName))
+  ) {
     throw new Error("HTML preview query tagName is invalid.");
   }
   if (
-    query.attributeName &&
-    !/^[A-Za-z_:][A-Za-z0-9_.:-]*$/u.test(query.attributeName)
+    query.attributeName !== undefined &&
+    (typeof query.attributeName !== "string" ||
+      !/^[A-Za-z_:][A-Za-z0-9_.:-]*$/u.test(query.attributeName))
   ) {
     throw new Error("HTML preview query attributeName is invalid.");
   }
-  if (query.id) assertBoundedString(query.id, "HTML preview query id");
-  if (query.className) {
+  if (query.id !== undefined) {
+    assertBoundedString(query.id, "HTML preview query id");
+  }
+  if (query.className !== undefined) {
     assertBoundedString(query.className, "HTML preview query className");
     if (/\s/u.test(query.className)) {
       throw new Error("HTML preview query className must be one class token.");
@@ -185,8 +201,31 @@ export function assertSafePreviewTargetQuery(
   }
 }
 
-function assertBoundedString(value: string, context: string): void {
-  if (value.length === 0 || value.length > 128) {
+function assertOnlyKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  context: string,
+): void {
+  const allowed = new Set(allowedKeys);
+  const unsupported = Object.keys(value).find((key) => !allowed.has(key));
+  if (unsupported) {
+    throw new Error(`${context} contains unsupported property "${unsupported}".`);
+  }
+}
+
+function assertSemanticId(value: unknown, context: string): asserts value is string {
+  assertBoundedString(value, context);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(value)) {
+    throw new Error(`${context} is invalid.`);
+  }
+}
+
+function assertBoundedString(value: unknown, context: string): asserts value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 128) {
     throw new Error(`${context} must contain between 1 and 128 characters.`);
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

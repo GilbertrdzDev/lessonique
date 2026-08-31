@@ -65,6 +65,38 @@ describe("AssistantOverlayHost", () => {
     expect(html).not.toMatch(/audio|speech|voice/iu);
   });
 
+  it("renders untrusted guidance as inert text instead of HTML", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      effects: [
+        {
+          effectId: "effect.callout",
+          input: { text: '<img src=x onerror="globalThis.compromised=true">' },
+        },
+      ],
+      guide: {
+        title: "Untrusted guide",
+        body: "<script>globalThis.compromised=true</script>",
+        supportingItems: ["<strong>Keep this literal</strong>"],
+      },
+      caption: "<iframe srcdoc=unsafe></iframe>",
+      hint: "<svg onload=unsafe></svg>",
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain("&lt;script&gt;globalThis.compromised=true&lt;/script&gt;");
+    expect(html).toContain("&lt;strong&gt;Keep this literal&lt;/strong&gt;");
+    expect(html).toContain("&lt;img src=x onerror=&quot;");
+    expect(html).toContain("&lt;iframe srcdoc=unsafe&gt;&lt;/iframe&gt;");
+    expect(html).toContain("&lt;svg onload=unsafe&gt;&lt;/svg&gt;");
+    expect(html).not.toMatch(/<(?:script|strong|img|iframe|svg)\b/iu);
+  });
+
   it.each([
     "assistant.idle",
     "assistant.explaining",
