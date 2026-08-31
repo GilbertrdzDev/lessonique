@@ -98,7 +98,12 @@ export function toTeachingScene(input: TeachingSceneInput): TeachingScene {
     beats: input.beats.map((beat) => ({
       id: beat.id,
       ...(beat.prepare ? { prepare: structuredClone(beat.prepare) } : {}),
-      ...(beat.target ? { target: structuredClone(beat.target) } : {}),
+      ...(beat.target
+        ? {
+            target: structuredClone(beat.target),
+            targetLossRecovery: "retry" as const,
+          }
+        : {}),
       ...(beat.assistant ? { assistant: structuredClone(beat.assistant) } : {}),
       effects: structuredClone(beat.effects ?? []),
       ...(beat.guide ? { guide: structuredClone(beat.guide) } : {}),

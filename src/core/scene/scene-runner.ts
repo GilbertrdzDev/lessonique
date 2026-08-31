@@ -295,10 +295,7 @@ export class SceneRunner {
                   : "assistant.warning",
               );
               if (waitResult.hint) this.#guides.showHint(waitResult.hint);
-              await cancellableDelay(
-                this.#prefersReducedMotion() ? 1 : 650,
-                signal,
-              );
+              await cancellableDelay(650, signal);
             }
           } else {
             this.#setSceneStatus("playing", beat);

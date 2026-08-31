@@ -3,10 +3,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createP0WorkspaceRuntime } from "@/providers/p0";
 
 import { createEarlyWebMCPToolRegistry } from "./mock-handlers";
+import { toTeachingScene } from "./teaching-scene-tools";
 
 describe("teaching scene WebMCP tools", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
+
+  it("applies bounded target retry without exposing recovery policy in the public input", () => {
+    const scene = toTeachingScene({
+      id: "scene.target-retry",
+      beats: [
+        {
+          id: "beat.target-retry",
+          target: {
+            resolverId: "target.surface-anchor",
+            input: { anchorId: "anchor.learning-plan" },
+          },
+        },
+      ],
+    });
+
+    expect(scene.beats[0]?.targetLossRecovery).toBe("retry");
+  });
 
   it("starts immediately, preserves structured guidance, and exposes real control state", async () => {
     const runtime = createP0WorkspaceRuntime();

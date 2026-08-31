@@ -190,6 +190,10 @@ describe("SceneRunner", () => {
     expect(runner.presentation.getSnapshot().assistant.stateId).toBe(
       "assistant.success",
     );
+    await vi.advanceTimersByTimeAsync(649);
+    expect(runner.presentation.getSnapshot().assistant.stateId).toBe(
+      "assistant.success",
+    );
     await vi.runAllTimersAsync();
     expect(runner.store.getSnapshot().status).toBe("completed");
   });
