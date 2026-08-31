@@ -74,6 +74,7 @@ export interface WorkspaceState {
   runtimeProviderId?: RuntimeProviderId;
   languageIds: readonly LanguageId[];
   files: readonly WorkspaceFile[];
+  directories: readonly string[];
   surfaces: readonly SurfaceState[];
   activeSurfaceId?: SurfaceId;
   activeFilePath?: string;
@@ -89,6 +90,7 @@ export interface WorkspaceEnvironmentConfiguration {
   runtimeProviderId: RuntimeProviderId;
   languageIds: readonly LanguageId[];
   files: readonly WorkspaceFile[];
+  directories?: readonly string[];
   surfaces: readonly SurfaceConfiguration[];
   activeFilePath?: string;
   activeSurfaceId?: SurfaceId;
@@ -133,6 +135,7 @@ export function createIdleWorkspaceState(): WorkspaceState {
     status: "idle",
     languageIds: [],
     files: [],
+    directories: [],
     surfaces: [],
     consoleEntries: [],
     interactionEvents: [],

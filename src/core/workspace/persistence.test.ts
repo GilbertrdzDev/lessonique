@@ -13,6 +13,7 @@ describe("WorkspacePersistence", () => {
     const persistence = new WorkspacePersistence(storage);
     const runtime = createP0WorkspaceRuntime();
     await runtime.controller.activateProfile("profile.javascript-console");
+    runtime.controller.createDirectory("lessons/empty");
     runtime.controller.recordInteraction({
       id: "interaction-1",
       typeId: "interaction.editor-change",
@@ -29,6 +30,7 @@ describe("WorkspacePersistence", () => {
         runtimeProviderId: "runtime.sandpack-vanilla",
         languageIds: ["language.javascript"],
         activeFilePath: "script.js",
+        directories: ["lessons", "lessons/empty"],
         interactionEvents: [],
         consoleEntries: [],
       }),
@@ -43,9 +45,36 @@ describe("WorkspacePersistence", () => {
 
     storage.setItem(
       "lessonique.workspace.v1",
-      JSON.stringify({ version: 2, profileId: "profile.future" }),
+      JSON.stringify({ version: 3, profileId: "profile.future" }),
     );
     expect(persistence.load()).toBeUndefined();
+  });
+
+  it("migrates version-one data by deriving directories from file paths", () => {
+    const storage = createStorage();
+    const persistence = new WorkspacePersistence(storage);
+    storage.setItem(
+      "lessonique.workspace.v1",
+      JSON.stringify({
+        version: 1,
+        profileId: "profile.vanilla-web",
+        runtimeProviderId: "runtime.sandpack-vanilla",
+        languageIds: ["language.html"],
+        files: [
+          {
+            path: "lessons/intro.html",
+            languageId: "language.html",
+            content: "",
+            visible: true,
+          },
+        ],
+        surfaces: [],
+        activeFilePath: "lessons/intro.html",
+        environmentRevision: 2,
+      }),
+    );
+
+    expect(persistence.load()?.directories).toEqual(["lessons"]);
   });
 
   it("restores only after provider validation succeeds", async () => {

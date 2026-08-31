@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test.describe("classroom shell", () => {
   test.beforeEach(async ({ page }) => {
@@ -321,8 +321,8 @@ test.describe("classroom shell", () => {
       }),
     );
     await expect(preview).toHaveAttribute("data-preview-viewport", "mobile");
-    await expect(page.getByRole("tab", { name: "script.js" })).toHaveAttribute(
-      "aria-selected",
+    await expect(getWorkspaceTab(page, "script.js")).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
     await expect(page.locator(".monaco-editor .view-lines")).toHaveCSS(
@@ -367,6 +367,302 @@ test.describe("classroom shell", () => {
       "font-size",
       "18px",
     );
+  });
+
+  test("navigates nested workspace files through the searchable Project Files panel", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await expect(
+      page.getByRole("combobox", { name: "Environment profile" }),
+    ).toBeEnabled();
+
+    const result = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      return tools.find(({ name }) => name === "apply_workspace_changes")?.execute({
+        operations: [
+          {
+            type: "create_file",
+            path: "src/components/header.html",
+            content: "<header>Lessonique</header>",
+          },
+          {
+            type: "create_file",
+            path: "src/components/footer.html",
+            content: "<footer>Keep learning</footer>",
+          },
+          {
+            type: "create_file",
+            path: "src/styles/theme.css",
+            content: ":root { color-scheme: dark; }",
+          },
+        ],
+        openAfter: "src/components/header.html",
+      });
+    });
+    expect(result).toEqual(expect.objectContaining({ ok: true }));
+
+    const panel = page.getByRole("complementary", { name: "Project Files" });
+    const classroom = page.getByRole("main", { name: "Lessonique Classroom" });
+    await expect(panel).toBeVisible();
+    await expect(
+      panel.getByRole("treeitem", { name: "lessonique-workspace", exact: true }),
+    ).toHaveAttribute("aria-expanded", "true");
+    await expect(panel.locator('[data-folder-path="src/components"]')).toBeVisible();
+
+    const componentsFolder = panel.locator('[data-folder-path="src/components"]');
+    const headerFile = panel.locator(
+      '[data-file-path="src/components/header.html"]',
+    );
+    const footerFile = panel.locator(
+      '[data-file-path="src/components/footer.html"]',
+    );
+    await componentsFolder.click();
+    await expect(headerFile).toHaveCount(0);
+    await componentsFolder.click();
+    await expect(headerFile).toBeVisible();
+
+    const initialClassroomHeight = await classroom.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    );
+    const search = panel.getByRole("searchbox", { name: "Search project files" });
+    await page.keyboard.press("Control+K");
+    await expect(search).toBeFocused();
+    await search.fill("COMPONENTS/HEAD");
+    await expect(headerFile).toBeVisible();
+    await expect(footerFile).toHaveCount(0);
+    await expect(panel.locator('[data-folder-path="src"]')).toBeVisible();
+    await expect(componentsFolder).toBeVisible();
+
+    await search.press("Escape");
+    await expect(search).toHaveValue("");
+    await footerFile.click();
+    await expect(
+      panel.getByRole("treeitem", {
+        name: "src/components/footer.html",
+        exact: true,
+      }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(getWorkspaceTab(page, "src/components/footer.html")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      await classroom.evaluate(
+        (element) => element.getBoundingClientRect().height,
+      ),
+    ).toBe(initialClassroomHeight);
+
+    await page.getByRole("button", { name: "Toggle color theme" }).click();
+    await expect(page.locator("html")).toHaveClass(/dark/u);
+    await testInfo.attach("lessonique-project-files-panel", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
+  });
+
+  test("resizes, collapses, and manages basic Project Files entries", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await expect(
+      page.getByRole("combobox", { name: "Environment profile" }),
+    ).toBeEnabled();
+
+    const initialLayout = await measureWorkspaceReflow(page);
+    expect(Math.abs(initialLayout.bodyRight - initialLayout.contentRight)).toBeLessThanOrEqual(1);
+
+    const resizeHandle = page.getByRole("separator", {
+      name: "Resize project files panel",
+    });
+    await expect(resizeHandle).toHaveCSS("cursor", "col-resize");
+    await expect(resizeHandle).toHaveAttribute("aria-valuenow", "256");
+    await resizeHandle.press("End");
+    await expect(resizeHandle).toHaveAttribute("aria-valuenow", "360");
+    const maximumPanelLayout = await measureWorkspaceReflow(page);
+    expect(maximumPanelLayout.contentWidth).toBeLessThan(initialLayout.contentWidth);
+    expect(Math.abs(maximumPanelLayout.bodyRight - maximumPanelLayout.contentRight)).toBeLessThanOrEqual(1);
+    await resizeHandle.press("Home");
+    await expect(resizeHandle).toHaveAttribute("aria-valuenow", "208");
+    const minimumPanelLayout = await measureWorkspaceReflow(page);
+    expect(minimumPanelLayout.contentWidth).toBeGreaterThan(maximumPanelLayout.contentWidth);
+    expect(Math.abs(minimumPanelLayout.bodyRight - minimumPanelLayout.contentRight)).toBeLessThanOrEqual(1);
+    await resizeHandle.press("ArrowRight");
+    await expect(resizeHandle).toHaveAttribute("aria-valuenow", "224");
+
+    const resizeBounds = await resizeHandle.boundingBox();
+    if (!resizeBounds) throw new Error("Project Files resize handle is missing.");
+    await page.mouse.move(
+      resizeBounds.x + resizeBounds.width / 2,
+      resizeBounds.y + resizeBounds.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      resizeBounds.x + resizeBounds.width / 2 + 40,
+      resizeBounds.y + resizeBounds.height / 2,
+    );
+    await page.mouse.up();
+    await expect.poll(async () => Number(await resizeHandle.getAttribute("aria-valuenow"))).toBeGreaterThan(224);
+
+    let panel = page.getByRole("complementary", { name: "Project Files" });
+    const activeEntryRow = panel.locator('[data-project-entry-row="index.html"]');
+    const fileTree = panel.getByRole("tree", { name: "Workspace file tree" });
+    await activeEntryRow.hover();
+    const [entryRowBounds, fileTreeBounds] = await Promise.all([
+      activeEntryRow.boundingBox(),
+      fileTree.boundingBox(),
+    ]);
+    if (!entryRowBounds || !fileTreeBounds) {
+      throw new Error("Project Files row geometry is unavailable.");
+    }
+    expect(Math.abs(entryRowBounds.width - fileTreeBounds.width)).toBeLessThanOrEqual(1);
+    await expect(activeEntryRow).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+
+    await getWorkspaceTab(page, "styles.css").click();
+    await page.getByRole("button", { name: "Close file tab styles.css" }).click();
+    await expect(getWorkspaceTab(page, "styles.css")).toHaveCount(0);
+    await expect(getWorkspaceTab(page, "index.html")).toBeVisible();
+    await expect(getWorkspaceTab(page, "script.js")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(panel.locator('[data-file-path="styles.css"]')).toBeVisible();
+    await panel.locator('[data-file-path="styles.css"]').click();
+    await expect(getWorkspaceTab(page, "styles.css")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    const expandedLayout = await measureWorkspaceReflow(page);
+    await page.getByRole("button", { name: "Collapse project files" }).click();
+    await expect(panel).toHaveCount(0);
+    const collapsedLayout = await measureWorkspaceReflow(page);
+    expect(collapsedLayout.contentWidth).toBeGreaterThan(expandedLayout.contentWidth);
+    expect(Math.abs(collapsedLayout.bodyLeft - collapsedLayout.contentLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(collapsedLayout.bodyRight - collapsedLayout.contentRight)).toBeLessThanOrEqual(1);
+    await page.getByRole("button", { name: "Expand project files" }).click();
+    panel = page.getByRole("complementary", { name: "Project Files" });
+    await expect(panel).toBeVisible();
+
+    await panel.getByRole("button", { name: "Create folder" }).click();
+    let operation = panel.getByRole("dialog", { name: "Create folder" });
+    await operation.getByRole("textbox", { name: "Folder path" }).fill("lessons/empty");
+    await operation.getByRole("button", { name: "Create", exact: true }).click();
+    const lessonsFolder = panel.locator('[data-folder-path="lessons"]');
+    await expect(lessonsFolder).toBeVisible();
+    if ((await lessonsFolder.getAttribute("aria-expanded")) === "false") {
+      await lessonsFolder.click();
+    }
+    await expect(panel.locator('[data-folder-path="lessons/empty"]')).toBeVisible();
+
+    await panel.getByRole("button", { name: "Create file" }).click();
+    operation = panel.getByRole("dialog", { name: "Create file" });
+    await operation.getByRole("textbox", { name: "File path" }).fill("notes.txt");
+    await operation.getByRole("button", { name: "Create", exact: true }).click();
+    await expect(operation.getByRole("alert")).toContainText("must use one of");
+    await operation.getByRole("button", { name: "Cancel", exact: true }).click();
+
+    await panel.getByRole("button", { name: "Create file" }).click();
+    operation = panel.getByRole("dialog", { name: "Create file" });
+    await operation.getByRole("textbox", { name: "File path" }).fill("lessons/intro.js");
+    await operation.getByRole("button", { name: "Create", exact: true }).click();
+    await expect(getWorkspaceTab(page, "lessons/intro.js")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await panel.getByRole("button", { name: "Rename file lessons/intro.js" }).click();
+    operation = panel.getByRole("dialog", { name: "Rename file" });
+    await operation.getByRole("textbox", { name: "New name" }).fill("lesson.js");
+    await operation.getByRole("button", { name: "Rename", exact: true }).click();
+    await expect(panel.locator('[data-file-path="lessons/lesson.js"]')).toBeVisible();
+    await expect(panel.locator('[data-file-path="lessons/intro.js"]')).toHaveCount(0);
+
+    await panel
+      .getByRole("button", { name: "Rename folder lessons", exact: true })
+      .click();
+    operation = panel.getByRole("dialog", { name: "Rename folder" });
+    await operation.getByRole("textbox", { name: "New name" }).fill("examples");
+    await operation.getByRole("button", { name: "Rename", exact: true }).click();
+    const examplesFolder = panel.locator('[data-folder-path="examples"]');
+    await expect(examplesFolder).toBeVisible();
+    if ((await examplesFolder.getAttribute("aria-expanded")) === "false") {
+      await examplesFolder.click();
+    }
+    await expect(panel.locator('[data-folder-path="examples/empty"]')).toBeVisible();
+    await expect(panel.locator('[data-file-path="examples/lesson.js"]')).toBeVisible();
+    await expect(getWorkspaceTab(page, "examples/lesson.js")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    const inspected = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      return tools.find(({ name }) => name === "inspect_classroom")?.execute({
+        include: ["workspace"],
+      });
+    });
+    expect(inspected).toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          workspace: expect.objectContaining({
+            directories: expect.arrayContaining(["examples", "examples/empty"]),
+          }),
+        }),
+      }),
+    );
+
+    await page.reload();
+    await expect(
+      page.getByRole("combobox", { name: "Environment profile" }),
+    ).toBeEnabled();
+    panel = page.getByRole("complementary", { name: "Project Files" });
+    const restoredExamplesFolder = panel.locator('[data-folder-path="examples"]');
+    await expect(restoredExamplesFolder).toBeVisible();
+    if ((await restoredExamplesFolder.getAttribute("aria-expanded")) === "false") {
+      await restoredExamplesFolder.click();
+    }
+    await expect(panel.locator('[data-folder-path="examples/empty"]')).toBeVisible();
+    await expect(panel.locator('[data-file-path="examples/lesson.js"]')).toBeVisible();
+
+    await panel.getByRole("button", { name: "Delete file examples/lesson.js" }).click();
+    operation = panel.getByRole("dialog", { name: "Delete file?" });
+    await operation.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(panel.locator('[data-file-path="examples/lesson.js"]')).toHaveCount(0);
+
+    await panel.getByRole("button", { name: "Create file" }).click();
+    operation = panel.getByRole("dialog", { name: "Create file" });
+    await operation.getByRole("textbox", { name: "File path" }).fill("examples/nested.js");
+    await operation.getByRole("button", { name: "Create", exact: true }).click();
+    await expect(panel.locator('[data-file-path="examples/nested.js"]')).toBeVisible();
+
+    await panel
+      .getByRole("button", { name: "Delete folder examples", exact: true })
+      .click();
+    operation = panel.getByRole("dialog", { name: "Delete folder?" });
+    await expect(operation).toContainText("every file and folder inside it");
+    await operation.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(panel.locator('[data-folder-path="examples"]')).toHaveCount(0);
+    await expect(getWorkspaceTab(page, "examples/nested.js")).toHaveCount(0);
+
+    await testInfo.attach("lessonique-project-files-management", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
   });
 
   test("runs the complete reduced-motion companion scene through real WebMCP tools", async ({
@@ -639,12 +935,12 @@ test.describe("classroom shell", () => {
         }),
       }),
     );
-    await expect(page.getByRole("tab", { name: "lesson.html" })).toHaveAttribute(
-      "aria-selected",
+    await expect(getWorkspaceTab(page, "lesson.html")).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
-    await expect(page.getByRole("tab", { name: "lesson.css" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "lesson.js" })).toBeVisible();
+    await expect(getWorkspaceTab(page, "lesson.css")).toBeVisible();
+    await expect(getWorkspaceTab(page, "lesson.js")).toBeVisible();
 
     const inspected = await page.evaluate(async () => {
       const tools = (
@@ -714,7 +1010,7 @@ test.describe("classroom shell", () => {
         }),
       }),
     );
-    await expect(page.getByRole("tab", { name: "lesson.html" })).toHaveCount(0);
+    await expect(getWorkspaceTab(page, "lesson.html")).toHaveCount(0);
   });
 
   test("loads semantic landmarks without horizontal overflow", async ({ page }) => {
@@ -724,6 +1020,9 @@ test.describe("classroom shell", () => {
     ).toBeVisible();
     await expect(
       page.getByRole("main", { name: "Lessonique Classroom" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("complementary", { name: "Project Files" }),
     ).toBeVisible();
     await expect(
       page.getByRole("complementary", { name: "Learning agent" }),
@@ -923,7 +1222,7 @@ test.describe("classroom shell", () => {
     );
 
     await page.getByRole("button", { name: "Clear console" }).click();
-    await page.getByRole("tab", { name: "script.js" }).click();
+    await getWorkspaceTab(page, "script.js").click();
     await editor.press("Control+A");
     await page.keyboard.insertText("console.log('test');");
 
@@ -964,7 +1263,7 @@ test.describe("classroom shell", () => {
     );
 
     await page.getByRole("button", { name: "Clear console" }).click();
-    await page.getByRole("tab", { name: "script.js" }).click();
+    await getWorkspaceTab(page, "script.js").click();
     await editor.press("Control+A");
     await page.keyboard.insertText(
       "for (let index = 0; index < 120; index += 1) console.log(index);",
@@ -996,19 +1295,19 @@ test.describe("classroom shell", () => {
   }) => {
     const profile = page.getByRole("combobox", { name: "Environment profile" });
     await expect(profile).toBeEnabled();
-    await expect(page.getByRole("tab", { name: "index.html" })).toBeVisible();
+    await expect(getWorkspaceTab(page, "index.html")).toBeVisible();
     await expect(page.getByText("Live Preview", { exact: true })).toBeVisible();
 
     const startedAt = Date.now();
     await profile.selectOption("profile.javascript-console");
-    await expect(page.getByRole("tab", { name: "script.js" })).toBeVisible();
+    await expect(getWorkspaceTab(page, "script.js")).toBeVisible();
     expect(Date.now() - startedAt).toBeLessThan(1_000);
-    await expect(page.getByRole("tab", { name: "index.html" })).toHaveCount(0);
+    await expect(getWorkspaceTab(page, "index.html")).toHaveCount(0);
     await expect(page.getByText("Live Preview", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("log", { name: "Runtime console" })).toBeVisible();
 
     await profile.selectOption("profile.vanilla-web");
-    await expect(page.getByRole("tab", { name: "index.html" })).toBeVisible();
+    await expect(getWorkspaceTab(page, "index.html")).toBeVisible();
     await expect(page.getByText("Live Preview", { exact: true })).toBeVisible();
   });
 
@@ -1035,13 +1334,13 @@ test.describe("classroom shell", () => {
     const profile = page.getByRole("combobox", { name: "Environment profile" });
     await expect(profile).toBeEnabled();
     await profile.selectOption("profile.javascript-console");
-    await expect(page.getByRole("tab", { name: "script.js" })).toBeVisible();
+    await expect(getWorkspaceTab(page, "script.js")).toBeVisible();
 
     await page.reload();
 
     await expect(profile).toHaveValue("profile.javascript-console");
-    await expect(page.getByRole("tab", { name: "script.js" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "index.html" })).toHaveCount(0);
+    await expect(getWorkspaceTab(page, "script.js")).toBeVisible();
+    await expect(getWorkspaceTab(page, "index.html")).toHaveCount(0);
   });
 
   test("updates the preview and console from independent HTML, CSS, and JavaScript models", async ({
@@ -1059,15 +1358,15 @@ test.describe("classroom shell", () => {
       await page.waitForTimeout(350);
     }
 
-    await page.getByRole("tab", { name: "index.html" }).click();
+    await getWorkspaceTab(page, "index.html").click();
     await replaceActiveFile(
       '<!doctype html><html lang="en"><head><link rel="stylesheet" href="./styles.css"></head><body><button id="lessonique-demo">Waiting</button><script src="./script.js"></script></body></html>',
     );
-    await page.getByRole("tab", { name: "styles.css" }).click();
+    await getWorkspaceTab(page, "styles.css").click();
     await replaceActiveFile(
       "#lessonique-demo { color: rgb(255, 0, 0); font-weight: 700; }",
     );
-    await page.getByRole("tab", { name: "script.js" }).click();
+    await getWorkspaceTab(page, "script.js").click();
     await replaceActiveFile("const result = ;");
     await expect(page.locator(".monaco-editor .squiggly-error")).toBeVisible({
       timeout: 5_000,
@@ -1088,6 +1387,29 @@ test.describe("classroom shell", () => {
     );
   });
 });
+
+function getWorkspaceTab(page: Page, path: string) {
+  return page.locator(`[data-workspace-tab-path=${JSON.stringify(path)}]`);
+}
+
+async function measureWorkspaceReflow(page: Page) {
+  return page.evaluate(() => {
+    const body = document.querySelector<HTMLElement>('[data-slot="workspace-body"]');
+    const content = document.querySelector<HTMLElement>('[data-slot="workspace-content"]');
+    if (!body || !content) {
+      throw new Error("Workspace reflow elements are unavailable.");
+    }
+    const bodyBounds = body.getBoundingClientRect();
+    const contentBounds = content.getBoundingClientRect();
+    return {
+      bodyLeft: bodyBounds.left,
+      bodyRight: bodyBounds.right,
+      contentLeft: contentBounds.left,
+      contentRight: contentBounds.right,
+      contentWidth: contentBounds.width,
+    };
+  });
+}
 
 async function targetAlignmentDelta(page: import("@playwright/test").Page) {
   return page.evaluate(() => {

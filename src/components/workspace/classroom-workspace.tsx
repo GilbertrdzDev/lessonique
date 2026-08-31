@@ -3,6 +3,8 @@
 import {
   CodeXml,
   Monitor,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   RotateCcw,
   Smartphone,
@@ -12,14 +14,19 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 
 import { MonacoEditorSurface } from "@/components/workspace/monaco-editor-surface";
+import { ProjectFilesPanel } from "@/components/workspace/project-files-panel";
 import { SandpackRuntimeView, type PreviewViewport } from "@/components/workspace/sandpack-runtime-view";
 import { WorkspaceConsole } from "@/components/workspace/workspace-console";
 import { WorkspaceTabs } from "@/components/workspace/workspace-tabs";
@@ -28,11 +35,25 @@ import type { SurfaceConfiguration } from "@/core/platform/contracts";
 import type { SurfaceState } from "@/core/workspace/contracts";
 import { WorkspacePersistence } from "@/core/workspace/persistence";
 import {
+  isSameOrDescendantPath,
+  replaceWorkspacePathPrefix,
+} from "@/core/workspace/workspace-entry-paths";
+import {
   P0_ENVIRONMENT_ACTION_IDS,
   P0_ENVIRONMENT_PROFILE_IDS,
   P0_INTERACTION_ANCHOR_IDS,
   P0_SURFACE_IDS,
 } from "@/providers/p0";
+
+const MINIMUM_PROJECT_FILES_WIDTH = 208;
+const MAXIMUM_PROJECT_FILES_WIDTH = 360;
+const DEFAULT_PROJECT_FILES_WIDTH = 256;
+
+type ProjectFilesResizeSession = Readonly<{
+  pointerId: number;
+  startWidth: number;
+  startX: number;
+}>;
 
 export function ClassroomWorkspace() {
   const workspace = useWorkspaceRuntime();
@@ -44,6 +65,17 @@ export function ClassroomWorkspace() {
   );
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
+  const [isProjectFilesCollapsed, setIsProjectFilesCollapsed] = useState(false);
+  const [projectFilesWidth, setProjectFilesWidth] = useState(
+    DEFAULT_PROJECT_FILES_WIDTH,
+  );
+  const [openFilePaths, setOpenFilePaths] = useState<string[]>([]);
+  const projectFilesResizeSession = useRef<ProjectFilesResizeSession | null>(
+    null,
+  );
+  const openTabsProfileIdRef = useRef<string | undefined>(undefined);
+  const availableFilePathsRef = useRef<string[]>([]);
+  const previousActiveFilePathRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
@@ -83,6 +115,46 @@ export function ClassroomWorkspace() {
     };
   }, [workspace]);
 
+  useEffect(() => {
+    const availableFilePaths = state.files
+      .filter(({ visible }) => visible)
+      .map(({ path }) => path);
+    const profileChanged = openTabsProfileIdRef.current !== state.profileId;
+    const activeFileChanged =
+      previousActiveFilePathRef.current !== state.activeFilePath;
+    const fileCollectionReplaced =
+      availableFilePathsRef.current.length > 0 &&
+      availableFilePaths.length > 0 &&
+      !availableFilePathsRef.current.some((path) =>
+        availableFilePaths.includes(path),
+      );
+
+    openTabsProfileIdRef.current = state.profileId;
+    availableFilePathsRef.current = availableFilePaths;
+    previousActiveFilePathRef.current = state.activeFilePath;
+
+    setOpenFilePaths((current) => {
+      if (!state.profileId) {
+        return current.length === 0 ? current : [];
+      }
+      if (profileChanged || fileCollectionReplaced) {
+        return availableFilePaths;
+      }
+      const next = current.filter((path) =>
+        availableFilePaths.includes(path),
+      );
+      if (
+        activeFileChanged &&
+        state.activeFilePath &&
+        availableFilePaths.includes(state.activeFilePath) &&
+        !next.includes(state.activeFilePath)
+      ) {
+        next.push(state.activeFilePath);
+      }
+      return stringArraysEqual(current, next) ? current : next;
+    });
+  }, [state.activeFilePath, state.files, state.profileId]);
+
   const changeProfile = async (profileId: string) => {
     setIsTransitioning(true);
     setErrorMessage(undefined);
@@ -119,6 +191,64 @@ export function ClassroomWorkspace() {
   const editorVisible = isSurfaceVisible(state.surfaces, P0_SURFACE_IDS.editor);
   const previewVisible = isSurfaceVisible(state.surfaces, P0_SURFACE_IDS.preview);
   const consoleVisible = isSurfaceVisible(state.surfaces, P0_SURFACE_IDS.console);
+  const openFiles = useMemo(
+    () =>
+      openFilePaths
+        .map((path) => state.files.find((file) => file.path === path))
+        .filter((file) => file !== undefined),
+    [openFilePaths, state.files],
+  );
+  const activeOpenFilePath =
+    state.activeFilePath && openFilePaths.includes(state.activeFilePath)
+      ? state.activeFilePath
+      : undefined;
+
+  const openWorkspaceFile = async (path: string) => {
+    setOpenFilePaths((current) =>
+      current.includes(path) ? current : [...current, path],
+    );
+    setErrorMessage(undefined);
+    try {
+      await workspace.controller.openFile(path);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
+  };
+
+  const closeWorkspaceTab = (path: string) => {
+    const closingIndex = openFilePaths.indexOf(path);
+    if (closingIndex < 0) {
+      return;
+    }
+    const remainingPaths = openFilePaths.filter((candidate) => candidate !== path);
+    setOpenFilePaths(remainingPaths);
+    if (state.activeFilePath !== path || remainingPaths.length === 0) {
+      return;
+    }
+    const nextActivePath =
+      remainingPaths[Math.min(closingIndex, remainingPaths.length - 1)];
+    if (nextActivePath) {
+      void openWorkspaceFile(nextActivePath);
+    }
+  };
+
+  const renameWorkspaceFile = async (path: string, nextPath: string) => {
+    await workspace.controller.renameFile(path, nextPath);
+    setOpenFilePaths((current) =>
+      current.map((candidate) => (candidate === path ? nextPath : candidate)),
+    );
+  };
+
+  const renameWorkspaceDirectory = async (path: string, nextPath: string) => {
+    await workspace.controller.renameDirectory(path, nextPath);
+    setOpenFilePaths((current) =>
+      current.map((candidate) =>
+        isSameOrDescendantPath(candidate, path)
+          ? replaceWorkspacePathPrefix(candidate, path, nextPath)
+          : candidate,
+      ),
+    );
+  };
 
   const changeViewport = async (viewport: PreviewViewport) => {
     const configurations = state.surfaces.map((surface) =>
@@ -129,6 +259,61 @@ export function ClassroomWorkspace() {
       ),
     );
     await workspace.controller.configureSurfaces(configurations);
+  };
+
+  const handleProjectFilesPointerDown = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    projectFilesResizeSession.current = {
+      pointerId: event.pointerId,
+      startWidth: projectFilesWidth,
+      startX: event.clientX,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleProjectFilesPointerMove = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    const session = projectFilesResizeSession.current;
+    if (session?.pointerId !== event.pointerId) {
+      return;
+    }
+    setProjectFilesWidth(
+      clampProjectFilesWidth(
+        session.startWidth + event.clientX - session.startX,
+      ),
+    );
+  };
+
+  const finishProjectFilesResize = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (projectFilesResizeSession.current?.pointerId !== event.pointerId) {
+      return;
+    }
+    projectFilesResizeSession.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const handleProjectFilesResizeKeyDown = (
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setProjectFilesWidth((current) => clampProjectFilesWidth(current - 16));
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setProjectFilesWidth((current) => clampProjectFilesWidth(current + 16));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setProjectFilesWidth(MINIMUM_PROJECT_FILES_WIDTH);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setProjectFilesWidth(MAXIMUM_PROJECT_FILES_WIDTH);
+    }
   };
 
   return (
@@ -185,6 +370,21 @@ export function ClassroomWorkspace() {
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <WorkspaceAction
+              controls="project-files-panel"
+              expanded={!isProjectFilesCollapsed}
+              icon={
+                isProjectFilesCollapsed ? PanelLeftOpen : PanelLeftClose
+              }
+              label={
+                isProjectFilesCollapsed
+                  ? "Expand project files"
+                  : "Collapse project files"
+              }
+              onClick={() =>
+                setIsProjectFilesCollapsed((current) => !current)
+              }
+            />
+            <WorkspaceAction
               icon={Play}
               label="Run workspace"
               onClick={() => void executeAction(P0_ENVIRONMENT_ACTION_IDS.run)}
@@ -221,116 +421,165 @@ export function ClassroomWorkspace() {
           </div>
         ) : (
           <div
-            className={
-              previewVisible
-                ? "grid min-h-0 flex-1 grid-rows-[minmax(22rem,3fr)_minmax(14rem,2fr)]"
-                : "grid min-h-0 flex-1 grid-rows-[minmax(24rem,2fr)_minmax(14rem,1fr)]"
-            }
+            className="flex min-h-0 flex-1 flex-col md:flex-row"
+            data-slot="workspace-body"
           >
-            {editorVisible ? (
-              <WorkspaceSemanticAnchor
-                anchorId={P0_INTERACTION_ANCHOR_IDS.editor}
-                interactionAdapter={workspace.interactionAnchorAdapter}
+            {!isProjectFilesCollapsed ? (
+              <div
+                className="relative h-40 w-full shrink-0 md:h-auto md:w-[var(--project-files-width)]"
+                style={
+                  {
+                    "--project-files-width": `${projectFilesWidth}px`,
+                  } as CSSProperties
+                }
               >
-                <WorkspaceTabs
+                <ProjectFilesPanel
                   activeFilePath={state.activeFilePath}
+                  directories={state.directories}
                   files={state.files}
-                  onSelect={(path) => void workspace.controller.openFile(path)}
-                />
-                <MonacoEditorSurface
-                  activeFilePath={state.activeFilePath}
-                  adapter={workspace.monacoEditorAdapter}
-                  diagnostics={workspace.codeIntelligence.diagnostics}
-                  files={state.files}
-                  languages={registries.languages}
-                  onContentChange={(path, content) =>
-                    workspace.controller.updateFileContent(path, content)
+                  onCreateDirectory={(path) =>
+                    workspace.controller.createDirectory(path)
                   }
+                  onCreateFile={(path) => workspace.controller.createFile(path)}
+                  onDeleteDirectory={(path) =>
+                    workspace.controller.deleteDirectory(path)
+                  }
+                  onDeleteFile={(path) => workspace.controller.deleteFile(path)}
+                  onRenameDirectory={renameWorkspaceDirectory}
+                  onRenameFile={renameWorkspaceFile}
+                  onSelect={(path) => void openWorkspaceFile(path)}
                 />
-              </WorkspaceSemanticAnchor>
+                <div
+                  aria-label="Resize project files panel"
+                  aria-orientation="vertical"
+                  aria-valuemax={MAXIMUM_PROJECT_FILES_WIDTH}
+                  aria-valuemin={MINIMUM_PROJECT_FILES_WIDTH}
+                  aria-valuenow={projectFilesWidth}
+                  className="absolute -right-3 top-1/2 z-20 hidden h-20 w-6 -translate-y-1/2 cursor-col-resize touch-none select-none items-center justify-center rounded-full outline-none before:h-9 before:w-1 before:rounded-full before:bg-border before:transition-[height,background-color] hover:before:h-11 hover:before:bg-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:before:h-11 focus-visible:before:bg-primary active:before:bg-primary md:flex"
+                  onKeyDown={handleProjectFilesResizeKeyDown}
+                  onPointerCancel={finishProjectFilesResize}
+                  onPointerDown={handleProjectFilesPointerDown}
+                  onPointerMove={handleProjectFilesPointerMove}
+                  onPointerUp={finishProjectFilesResize}
+                  role="separator"
+                  tabIndex={0}
+                />
+              </div>
             ) : null}
-
             <div
               className={
                 previewVisible
-                  ? "grid min-h-0 border-t lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]"
-                  : "min-h-0 border-t"
+                  ? "grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(15rem,3fr)_minmax(10rem,2fr)] md:grid-rows-[minmax(22rem,3fr)_minmax(14rem,2fr)]"
+                  : "grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(15rem,2fr)_minmax(10rem,1fr)] md:grid-rows-[minmax(24rem,2fr)_minmax(14rem,1fr)]"
               }
+              data-slot="workspace-content"
             >
-              {previewVisible ? (
+              {editorVisible ? (
                 <WorkspaceSemanticAnchor
-                  anchorId={P0_INTERACTION_ANCHOR_IDS.preview}
-                  className="flex min-h-0 flex-col overflow-hidden border-b lg:border-b-0 lg:border-r"
+                  anchorId={P0_INTERACTION_ANCHOR_IDS.editor}
                   interactionAdapter={workspace.interactionAnchorAdapter}
                 >
-                  <div className="flex items-center justify-between border-b bg-card/70 px-3 py-2">
-                    <span className="flex items-center gap-2 text-xs font-semibold">
-                      <Monitor aria-hidden="true" className="size-3.5 text-primary" />
-                      Live Preview
-                    </span>
-                    <div aria-label="Preview viewport" className="flex gap-1">
-                      {[
-                        { id: "desktop" as const, icon: Monitor, label: "Desktop preview" },
-                        { id: "tablet" as const, icon: Tablet, label: "Tablet preview" },
-                        { id: "mobile" as const, icon: Smartphone, label: "Mobile preview" },
-                      ].map(({ id, icon: Icon, label }) => (
-                        <button
-                          aria-label={label}
-                          aria-pressed={previewViewport === id}
-                          className="rounded-md border p-1.5 text-muted-foreground transition-colors hover:text-foreground aria-pressed:border-primary/50 aria-pressed:bg-brand-soft aria-pressed:text-primary"
-                          key={id}
-                          onClick={() => void changeViewport(id)}
-                          type="button"
-                        >
-                          <Icon aria-hidden="true" className="size-3.5" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div
-                    aria-label="Scrollable live preview"
-                    className="min-h-0 flex-1 overflow-auto bg-muted/30 p-3"
-                    role="region"
-                    tabIndex={0}
-                  >
-                    <SandpackRuntimeView
-                      files={state.files}
-                      onConsoleEntriesChange={updateConsoleEntries}
-                      previewAdapter={workspace.previewSurfaceAdapter}
-                      runtime={workspace.sandpackRuntimeAdapter}
-                      viewport={previewViewport}
-                    />
-                  </div>
-                </WorkspaceSemanticAnchor>
-              ) : (
-                <SandpackRuntimeView
-                  files={state.files}
-                  onConsoleEntriesChange={updateConsoleEntries}
-                  previewAdapter={workspace.previewSurfaceAdapter}
-                  runtime={workspace.sandpackRuntimeAdapter}
-                  showPreview={false}
-                  viewport="desktop"
-                />
-              )}
-
-              {consoleVisible ? (
-                <WorkspaceSemanticAnchor
-                  anchorId={P0_INTERACTION_ANCHOR_IDS.console}
-                  className="flex min-h-0 flex-col overflow-hidden"
-                  interactionAdapter={workspace.interactionAnchorAdapter}
-                >
-                  <div className="flex items-center gap-2 border-b bg-card/70 px-3 py-2 text-xs font-semibold">
-                    <SquareTerminal aria-hidden="true" className="size-3.5 text-primary" />
-                    Console
-                  </div>
-                  <div className="min-h-0 flex-1">
-                    <WorkspaceConsole
-                      adapter={workspace.consoleSurfaceAdapter}
-                      entries={state.consoleEntries}
-                    />
-                  </div>
+                  <WorkspaceTabs
+                    activeFilePath={activeOpenFilePath}
+                    files={openFiles}
+                    onClose={closeWorkspaceTab}
+                    onSelect={(path) => void openWorkspaceFile(path)}
+                  />
+                  <MonacoEditorSurface
+                    activeFilePath={activeOpenFilePath}
+                    adapter={workspace.monacoEditorAdapter}
+                    diagnostics={workspace.codeIntelligence.diagnostics}
+                    files={state.files}
+                    languages={registries.languages}
+                    onContentChange={(path, content) =>
+                      workspace.controller.updateFileContent(path, content)
+                    }
+                  />
                 </WorkspaceSemanticAnchor>
               ) : null}
+
+              <div
+                className={
+                  previewVisible
+                    ? "grid min-h-0 border-t lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]"
+                    : "min-h-0 border-t"
+                }
+              >
+                {previewVisible ? (
+                  <WorkspaceSemanticAnchor
+                    anchorId={P0_INTERACTION_ANCHOR_IDS.preview}
+                    className="flex min-h-0 flex-col overflow-hidden border-b lg:border-r lg:border-b-0"
+                    interactionAdapter={workspace.interactionAnchorAdapter}
+                  >
+                    <div className="flex items-center justify-between border-b bg-card/70 px-3 py-2">
+                      <span className="flex items-center gap-2 text-xs font-semibold">
+                        <Monitor aria-hidden="true" className="size-3.5 text-primary" />
+                        Live Preview
+                      </span>
+                      <div aria-label="Preview viewport" className="flex gap-1">
+                        {[
+                          { id: "desktop" as const, icon: Monitor, label: "Desktop preview" },
+                          { id: "tablet" as const, icon: Tablet, label: "Tablet preview" },
+                          { id: "mobile" as const, icon: Smartphone, label: "Mobile preview" },
+                        ].map(({ id, icon: Icon, label }) => (
+                          <button
+                            aria-label={label}
+                            aria-pressed={previewViewport === id}
+                            className="rounded-md border p-1.5 text-muted-foreground transition-colors hover:text-foreground aria-pressed:border-primary/50 aria-pressed:bg-brand-soft aria-pressed:text-primary"
+                            key={id}
+                            onClick={() => void changeViewport(id)}
+                            type="button"
+                          >
+                            <Icon aria-hidden="true" className="size-3.5" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div
+                      aria-label="Scrollable live preview"
+                      className="min-h-0 flex-1 overflow-auto bg-muted/30 p-3"
+                      role="region"
+                      tabIndex={0}
+                    >
+                      <SandpackRuntimeView
+                        files={state.files}
+                        onConsoleEntriesChange={updateConsoleEntries}
+                        previewAdapter={workspace.previewSurfaceAdapter}
+                        runtime={workspace.sandpackRuntimeAdapter}
+                        viewport={previewViewport}
+                      />
+                    </div>
+                  </WorkspaceSemanticAnchor>
+                ) : (
+                  <SandpackRuntimeView
+                    files={state.files}
+                    onConsoleEntriesChange={updateConsoleEntries}
+                    previewAdapter={workspace.previewSurfaceAdapter}
+                    runtime={workspace.sandpackRuntimeAdapter}
+                    showPreview={false}
+                    viewport="desktop"
+                  />
+                )}
+
+                {consoleVisible ? (
+                  <WorkspaceSemanticAnchor
+                    anchorId={P0_INTERACTION_ANCHOR_IDS.console}
+                    className="flex min-h-0 flex-col overflow-hidden"
+                    interactionAdapter={workspace.interactionAnchorAdapter}
+                  >
+                    <div className="flex items-center gap-2 border-b bg-card/70 px-3 py-2 text-xs font-semibold">
+                      <SquareTerminal aria-hidden="true" className="size-3.5 text-primary" />
+                      Console
+                    </div>
+                    <div className="min-h-0 flex-1">
+                      <WorkspaceConsole
+                        adapter={workspace.consoleSurfaceAdapter}
+                        entries={state.consoleEntries}
+                      />
+                    </div>
+                  </WorkspaceSemanticAnchor>
+                ) : null}
+              </div>
             </div>
           </div>
         )}
@@ -340,16 +589,22 @@ export function ClassroomWorkspace() {
 }
 
 function WorkspaceAction({
+  controls,
+  expanded,
   icon: Icon,
   label,
   onClick,
 }: Readonly<{
+  controls?: string;
+  expanded?: boolean;
   icon: typeof Play;
   label: string;
   onClick(): void;
 }>) {
   return (
     <button
+      aria-controls={controls}
+      aria-expanded={expanded}
       aria-label={label}
       className="rounded-lg border bg-background/70 p-2 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
       onClick={onClick}
@@ -358,6 +613,23 @@ function WorkspaceAction({
     >
       <Icon aria-hidden="true" className="size-3.5" />
     </button>
+  );
+}
+
+function clampProjectFilesWidth(width: number): number {
+  return Math.min(
+    MAXIMUM_PROJECT_FILES_WIDTH,
+    Math.max(MINIMUM_PROJECT_FILES_WIDTH, width),
+  );
+}
+
+function stringArraysEqual(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
   );
 }
 

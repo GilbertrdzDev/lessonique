@@ -58,6 +58,7 @@ describe("inspect_classroom", () => {
     );
     expect(data.workspace).toEqual(
       expect.objectContaining({
+        directories: [],
         files: expect.arrayContaining([
           expect.objectContaining({ path: "index.html", bytes: expect.any(Number) }),
         ]),

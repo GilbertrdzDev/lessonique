@@ -81,6 +81,100 @@ describe("WorkspaceController", () => {
     );
   });
 
+  it("creates, renames, and deletes provider-supported learner files", async () => {
+    const { controller, runtime, store } = createHarness();
+    await controller.activateProfile("profile.vanilla-web");
+
+    await controller.createFile("lessons/intro.js", "export const ready = true;");
+    expect(store.getSnapshot()).toEqual(
+      expect.objectContaining({
+        activeFilePath: "lessons/intro.js",
+        directories: ["lessons"],
+      }),
+    );
+    expect(store.getSnapshot().files).toContainEqual(
+      expect.objectContaining({
+        path: "lessons/intro.js",
+        languageId: "language.javascript",
+      }),
+    );
+
+    await controller.renameFile("lessons/intro.js", "lessons/intro.css");
+    expect(store.getSnapshot().activeFilePath).toBe("lessons/intro.css");
+    expect(store.getSnapshot().files).toContainEqual(
+      expect.objectContaining({
+        path: "lessons/intro.css",
+        languageId: "language.css",
+      }),
+    );
+
+    await controller.deleteFile("lessons/intro.css");
+    expect(store.getSnapshot().files).not.toContainEqual(
+      expect.objectContaining({ path: "lessons/intro.css" }),
+    );
+    expect(store.getSnapshot().directories).toContain("lessons");
+    expect(runtime.applyOperations).toHaveBeenCalled();
+  });
+
+  it("renames and recursively deletes folders as atomic runtime batches", async () => {
+    const { controller, runtime, store } = createHarness();
+    await controller.activateProfile("profile.vanilla-web");
+    controller.createDirectory("components/cards/empty");
+    await controller.createFile("components/cards/card.html", "<article></article>");
+    await controller.createFile("components/cards/card.js", "export {};");
+
+    await controller.renameDirectory("components", "ui");
+    expect(store.getSnapshot()).toEqual(
+      expect.objectContaining({
+        activeFilePath: "ui/cards/card.js",
+        directories: ["ui", "ui/cards", "ui/cards/empty"],
+      }),
+    );
+    expect(store.getSnapshot().files.map(({ path }) => path)).toEqual(
+      expect.arrayContaining(["ui/cards/card.html", "ui/cards/card.js"]),
+    );
+    const afterRename = store.getSnapshot();
+    vi.mocked(runtime.applyOperations).mockClear();
+
+    await expect(
+      controller.renameDirectory("ui", "ui/cards/nested"),
+    ).rejects.toThrow(/inside itself/u);
+    expect(store.getSnapshot()).toEqual(afterRename);
+    expect(runtime.applyOperations).not.toHaveBeenCalled();
+
+    await controller.deleteDirectory("ui");
+    expect(store.getSnapshot().directories).toEqual([]);
+    expect(store.getSnapshot().files.every(({ path }) => !path.startsWith("ui/"))).toBe(
+      true,
+    );
+  });
+
+  it("rejects invalid entry paths, collisions, and read-only deletion without mutation", async () => {
+    const { controller, runtime, store } = createHarness();
+    await controller.activateProfile("profile.vanilla-web");
+    const previous = store.getSnapshot();
+    vi.mocked(runtime.applyOperations).mockClear();
+
+    await expect(controller.createFile("notes.txt")).rejects.toThrow(
+      /must use one of/u,
+    );
+    controller.createDirectory("src.js");
+    expect(() => controller.createDirectory("src.js")).toThrow(/already exists/u);
+    await expect(controller.renameFile("index.html", "src.js")).rejects.toThrow(
+      /both a file and a folder/u,
+    );
+    expect(store.getSnapshot().files).toEqual(previous.files);
+    expect(runtime.applyOperations).not.toHaveBeenCalled();
+
+    await controller.replaceFiles([
+      { ...previous.files[0]!, readOnly: true },
+      ...previous.files.slice(1),
+    ]);
+    const readOnlyState = store.getSnapshot();
+    await expect(controller.deleteFile("index.html")).rejects.toThrow(/read-only/u);
+    expect(store.getSnapshot()).toEqual(readOnlyState);
+  });
+
   it("leaves surface state unchanged when an option is invalid", async () => {
     const { controller, store } = createHarness();
     await controller.activateProfile("profile.vanilla-web");
@@ -235,7 +329,11 @@ function createRuntimeAdapter(): RuntimeAdapter {
     }),
     applyOperations: vi.fn(async (operations: readonly WorkspaceFileOperation[]) => {
       operations.forEach((operation) => {
-        if (operation.type === "update") {
+        if (operation.type === "create") {
+          files = [...files, { ...operation.file }];
+        } else if (operation.type === "delete") {
+          files = files.filter((file) => file.path !== operation.path);
+        } else {
           files = files.map((file) =>
             file.path === operation.path
               ? { ...file, content: operation.content }

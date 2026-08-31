@@ -30,6 +30,11 @@ import type {
 } from "./runtime-adapter";
 import type { SurfaceAdapterRegistry } from "./surface-adapter";
 import { WorkspaceStore } from "./store";
+import {
+  deriveWorkspaceDirectories,
+  isSameOrDescendantPath,
+  replaceWorkspacePathPrefix,
+} from "./workspace-entry-paths";
 
 export class WorkspaceValidationError extends Error {
   constructor(message: string) {
@@ -82,7 +87,11 @@ export class WorkspaceController {
       );
     }
     this.#validateLanguageSelection(profile, configuration.languageIds);
-    this.#validateFiles(profile, configuration.files);
+    const directories = deriveWorkspaceDirectories(
+      configuration.files,
+      configuration.directories,
+    );
+    this.#validateWorkspaceEntries(profile, configuration.files, directories);
     configuration.files.forEach((file) => {
       if (!configuration.languageIds.includes(file.languageId)) {
         throw new WorkspaceValidationError(
@@ -131,7 +140,11 @@ export class WorkspaceController {
       );
     }
     this.#validateLanguageSelection(profile, configuration.languageIds);
-    this.#validateFiles(profile, configuration.files);
+    const directories = deriveWorkspaceDirectories(
+      configuration.files,
+      configuration.directories,
+    );
+    this.#validateWorkspaceEntries(profile, configuration.files, directories);
     configuration.files.forEach((file) => {
       if (!configuration.languageIds.includes(file.languageId)) {
         throw new WorkspaceValidationError(
@@ -176,6 +189,7 @@ export class WorkspaceController {
       runtimeProviderId: nextRuntime.providerId,
       languageIds: [...configuration.languageIds],
       files: configuration.files.map((file) => ({ ...file })),
+      directories,
       surfaces,
       ...(activeSurfaceId ? { activeSurfaceId } : {}),
       ...(activeFilePath ? { activeFilePath } : {}),
@@ -208,23 +222,205 @@ export class WorkspaceController {
 
   async replaceFiles(files: readonly WorkspaceFile[]): Promise<void> {
     const { profile, runtime } = this.#requireActiveEnvironment();
-    this.#validateFiles(profile, files);
+    const directories = deriveWorkspaceDirectories(
+      files,
+      this.#store.getSnapshot().directories,
+    );
+    this.#validateWorkspaceEntries(profile, files, directories);
     await runtime.replaceFiles(files);
-    this.#commitFiles(files);
+    this.#commitFiles(files, directories);
   }
 
   async applyFileOperations(
     operations: readonly WorkspaceFileOperation[],
   ): Promise<void> {
     const { profile, runtime } = this.#requireActiveEnvironment();
-    const nextFiles = applyOperations(this.#store.getSnapshot().files, operations);
-    this.#validateFiles(profile, nextFiles);
+    const state = this.#store.getSnapshot();
+    const nextFiles = applyOperations(state.files, operations);
+    const directories = deriveWorkspaceDirectories(nextFiles, state.directories);
+    this.#validateWorkspaceEntries(profile, nextFiles, directories);
     await runtime.applyOperations(operations);
-    this.#commitFiles(nextFiles);
+    this.#commitFiles(nextFiles, directories);
   }
 
   async updateFileContent(path: string, content: string): Promise<void> {
     await this.applyFileOperations([{ type: "update", path, content }]);
+  }
+
+  async createFile(path: string, content = ""): Promise<void> {
+    const { profile } = this.#requireActiveEnvironment();
+    validateWorkspacePath(path);
+    const languageId = this.#resolveLanguageForPath(profile, path);
+    await this.applyFileOperations([
+      {
+        type: "create",
+        file: { path, languageId, content, visible: true },
+      },
+    ]);
+    await this.openFile(path);
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    await this.applyFileOperations([{ type: "delete", path }]);
+  }
+
+  async renameFile(path: string, nextPath: string): Promise<void> {
+    if (path === nextPath) {
+      return;
+    }
+    const { profile, runtime } = this.#requireActiveEnvironment();
+    validateWorkspacePath(nextPath);
+    const state = this.#store.getSnapshot();
+    const file = state.files.find((candidate) => candidate.path === path);
+    if (!file) {
+      throw new WorkspaceValidationError(
+        `Workspace file "${path}" does not exist.`,
+      );
+    }
+    if (file.readOnly) {
+      throw new WorkspaceValidationError(
+        `Workspace file "${path}" is read-only.`,
+      );
+    }
+    const renamedFile: WorkspaceFile = {
+      ...file,
+      path: nextPath,
+      languageId: this.#resolveLanguageForPath(profile, nextPath),
+    };
+    const operations: WorkspaceFileOperation[] = [
+      { type: "create", file: renamedFile },
+      { type: "delete", path },
+    ];
+    const nextFiles = applyOperations(state.files, operations);
+    const directories = deriveWorkspaceDirectories(nextFiles, state.directories);
+    this.#validateWorkspaceEntries(profile, nextFiles, directories);
+    await runtime.applyOperations(operations);
+    this.#commitFiles(
+      nextFiles,
+      directories,
+      state.activeFilePath === path ? nextPath : undefined,
+    );
+  }
+
+  createDirectory(path: string): void {
+    const { profile } = this.#requireActiveEnvironment();
+    validateWorkspacePath(path);
+    const state = this.#store.getSnapshot();
+    if (state.directories.includes(path)) {
+      throw new WorkspaceValidationError(
+        `Workspace folder "${path}" already exists.`,
+      );
+    }
+    const directories = deriveWorkspaceDirectories(state.files, [
+      ...state.directories,
+      path,
+    ]);
+    this.#validateWorkspaceEntries(profile, state.files, directories);
+    this.#commitFiles(state.files, directories);
+  }
+
+  async deleteDirectory(path: string): Promise<void> {
+    const { profile, runtime } = this.#requireActiveEnvironment();
+    const state = this.#store.getSnapshot();
+    if (!state.directories.includes(path)) {
+      throw new WorkspaceValidationError(
+        `Workspace folder "${path}" does not exist.`,
+      );
+    }
+    const removedFiles = state.files.filter((file) =>
+      isSameOrDescendantPath(file.path, path),
+    );
+    const readOnlyFile = removedFiles.find(({ readOnly }) => readOnly);
+    if (readOnlyFile) {
+      throw new WorkspaceValidationError(
+        `Workspace file "${readOnlyFile.path}" is read-only.`,
+      );
+    }
+    const operations: WorkspaceFileOperation[] = removedFiles.map((file) => ({
+      type: "delete",
+      path: file.path,
+    }));
+    const nextFiles = state.files.filter(
+      (file) => !isSameOrDescendantPath(file.path, path),
+    );
+    const directories = deriveWorkspaceDirectories(
+      nextFiles,
+      state.directories.filter(
+        (directory) => !isSameOrDescendantPath(directory, path),
+      ),
+    );
+    this.#validateWorkspaceEntries(profile, nextFiles, directories);
+    if (operations.length > 0) {
+      await runtime.applyOperations(operations);
+    }
+    this.#commitFiles(nextFiles, directories);
+  }
+
+  async renameDirectory(path: string, nextPath: string): Promise<void> {
+    if (path === nextPath) {
+      return;
+    }
+    const { profile, runtime } = this.#requireActiveEnvironment();
+    validateWorkspacePath(nextPath);
+    const state = this.#store.getSnapshot();
+    if (!state.directories.includes(path)) {
+      throw new WorkspaceValidationError(
+        `Workspace folder "${path}" does not exist.`,
+      );
+    }
+    if (isSameOrDescendantPath(nextPath, path)) {
+      throw new WorkspaceValidationError(
+        `Workspace folder "${path}" cannot be moved inside itself.`,
+      );
+    }
+    if (state.directories.includes(nextPath)) {
+      throw new WorkspaceValidationError(
+        `Workspace folder "${nextPath}" already exists.`,
+      );
+    }
+    const movedFiles = state.files.filter((file) =>
+      isSameOrDescendantPath(file.path, path),
+    );
+    const readOnlyFile = movedFiles.find(({ readOnly }) => readOnly);
+    if (readOnlyFile) {
+      throw new WorkspaceValidationError(
+        `Workspace file "${readOnlyFile.path}" is read-only.`,
+      );
+    }
+    const renamedFiles = movedFiles.map((file) => ({
+      ...file,
+      path: replaceWorkspacePathPrefix(file.path, path, nextPath),
+    }));
+    const renamedByPreviousPath = new Map(
+      movedFiles.map((file, index) => [file.path, renamedFiles[index]!]),
+    );
+    const nextFiles = state.files.map(
+      (file) => renamedByPreviousPath.get(file.path) ?? { ...file },
+    );
+    const directories = deriveWorkspaceDirectories(
+      nextFiles,
+      state.directories.map((directory) =>
+        isSameOrDescendantPath(directory, path)
+          ? replaceWorkspacePathPrefix(directory, path, nextPath)
+          : directory,
+      ),
+    );
+    this.#validateWorkspaceEntries(profile, nextFiles, directories);
+    const operations: WorkspaceFileOperation[] = [
+      ...renamedFiles.map((file) => ({ type: "create" as const, file })),
+      ...movedFiles.map((file) => ({
+        type: "delete" as const,
+        path: file.path,
+      })),
+    ];
+    if (operations.length > 0) {
+      await runtime.applyOperations(operations);
+    }
+    const nextActiveFilePath =
+      state.activeFilePath && isSameOrDescendantPath(state.activeFilePath, path)
+        ? replaceWorkspacePathPrefix(state.activeFilePath, path, nextPath)
+        : undefined;
+    this.#commitFiles(nextFiles, directories, nextActiveFilePath);
   }
 
   async openFile(path: string): Promise<void> {
@@ -361,7 +557,11 @@ export class WorkspaceController {
         "The persisted runtime does not match its environment profile.",
       );
     }
-    this.#validateFiles(profile, state.files);
+    const directories = deriveWorkspaceDirectories(
+      state.files,
+      state.directories,
+    );
+    this.#validateWorkspaceEntries(profile, state.files, directories);
     const surfaces = this.#resolveSurfaces(
       profile,
       state.surfaces.map(toSurfaceConfiguration),
@@ -378,6 +578,7 @@ export class WorkspaceController {
       status: "ready",
       languageIds: [...state.languageIds],
       files: state.files.map((file) => ({ ...file })),
+      directories,
       surfaces,
       consoleEntries: state.consoleEntries.map((entry) => ({ ...entry })),
       interactionEvents: state.interactionEvents.map((event) => ({ ...event })),
@@ -594,6 +795,57 @@ export class WorkspaceController {
     });
   }
 
+  #validateWorkspaceEntries(
+    profile: EnvironmentProfile,
+    files: readonly WorkspaceFile[],
+    directories: readonly string[],
+  ): void {
+    this.#validateFiles(profile, files);
+    const filePaths = new Set(files.map(({ path }) => path));
+    const seenDirectories = new Set<string>();
+    directories.forEach((path) => {
+      validateWorkspacePath(path);
+      if (seenDirectories.has(path)) {
+        throw new WorkspaceValidationError(
+          `Workspace folder path "${path}" is duplicated.`,
+        );
+      }
+      if (filePaths.has(path)) {
+        throw new WorkspaceValidationError(
+          `Workspace path "${path}" cannot be both a file and a folder.`,
+        );
+      }
+      const segments = path.split("/");
+      for (let index = 1; index < segments.length; index += 1) {
+        const ancestor = segments.slice(0, index).join("/");
+        if (filePaths.has(ancestor)) {
+          throw new WorkspaceValidationError(
+            `Workspace file "${ancestor}" cannot contain another entry.`,
+          );
+        }
+      }
+      seenDirectories.add(path);
+    });
+  }
+
+  #resolveLanguageForPath(
+    profile: EnvironmentProfile,
+    path: string,
+  ): WorkspaceFile["languageId"] {
+    for (const languageId of profile.allowedLanguageIds) {
+      const language = this.#registries.languages.require(languageId);
+      if (language.extensions.some((extension) => path.endsWith(extension))) {
+        return language.id;
+      }
+    }
+    const allowedExtensions = profile.allowedLanguageIds.flatMap(
+      (languageId) => this.#registries.languages.require(languageId).extensions,
+    );
+    throw new WorkspaceValidationError(
+      `Workspace file "${path}" must use one of: ${allowedExtensions.join(", ")}.`,
+    );
+  }
+
   #validateLanguageSelection(
     profile: EnvironmentProfile,
     languageIds: readonly string[],
@@ -673,17 +925,23 @@ export class WorkspaceController {
     }
   }
 
-  #commitFiles(files: readonly WorkspaceFile[]): void {
+  #commitFiles(
+    files: readonly WorkspaceFile[],
+    directories: readonly string[],
+    requestedActiveFilePath?: string,
+  ): void {
     const state = this.#store.getSnapshot();
     const runtimeSnapshot = this.#runtime?.getSnapshot();
     const activeFilePath = files.some(
-      ({ path, visible }) => path === state.activeFilePath && visible,
+      ({ path, visible }) =>
+        path === (requestedActiveFilePath ?? state.activeFilePath) && visible,
     )
-      ? state.activeFilePath
+      ? (requestedActiveFilePath ?? state.activeFilePath)
       : files.find(({ visible }) => visible)?.path;
     this.#store.commit({
       ...state,
       files: files.map((file) => ({ ...file })),
+      directories: [...directories],
       activeFilePath,
       runtime: runtimeSnapshot
         ? {
@@ -769,10 +1027,6 @@ function applyOperations(
         `Workspace file "${operation.path}" does not exist.`,
       );
     }
-    if (operation.type === "delete") {
-      files.splice(index, 1);
-      return;
-    }
     const current = files[index];
     if (!current) {
       return;
@@ -781,6 +1035,10 @@ function applyOperations(
       throw new WorkspaceValidationError(
         `Workspace file "${operation.path}" is read-only.`,
       );
+    }
+    if (operation.type === "delete") {
+      files.splice(index, 1);
+      return;
     }
     files[index] = { ...current, content: operation.content };
   });

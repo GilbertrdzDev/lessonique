@@ -17,6 +17,7 @@ export const lessoniqueDeepOceanTheme: editor.IStandaloneThemeData = {
     { token: "type.identifier", foreground: "82AAFF" },
     { token: "identifier", foreground: "D6E9F2" },
     { token: "function", foreground: "82AAFF" },
+    { token: "metatag", foreground: "D36F6F" },
     { token: "tag", foreground: "7FDBCA" },
     { token: "attribute.name", foreground: "FFCB6B" },
     { token: "delimiter", foreground: "89DDFF" },

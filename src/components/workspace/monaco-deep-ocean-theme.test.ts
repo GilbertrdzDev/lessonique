@@ -17,5 +17,9 @@ describe("Lessonique Deep Ocean Monaco theme", () => {
     expect(lessoniqueDeepOceanTheme.colors["editorCursor.foreground"]).toBe(
       "#54D6D8",
     );
+    expect(lessoniqueDeepOceanTheme.rules).toContainEqual({
+      token: "metatag",
+      foreground: "D36F6F",
+    });
   });
 });

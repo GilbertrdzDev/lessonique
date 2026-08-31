@@ -8,8 +8,9 @@ import {
   type WorkspaceFile,
   type WorkspaceState,
 } from "./contracts";
+import { deriveWorkspaceDirectories } from "./workspace-entry-paths";
 
-const PERSISTENCE_VERSION = 1;
+const PERSISTENCE_VERSION = 2;
 const MAX_PERSISTED_BYTES = 1_000_000;
 
 export interface WorkspaceStorage {
@@ -24,6 +25,7 @@ type PersistedWorkspace = {
   runtimeProviderId: string;
   languageIds: string[];
   files: WorkspaceFile[];
+  directories: string[];
   surfaces: SurfaceState[];
   activeSurfaceId?: string;
   activeFilePath?: string;
@@ -52,6 +54,7 @@ export class WorkspacePersistence {
       runtimeProviderId: state.runtimeProviderId,
       languageIds: [...state.languageIds],
       files: state.files.map((file) => ({ ...file })),
+      directories: [...state.directories],
       surfaces: state.surfaces.map((surface) => ({
         ...surface,
         options: { ...surface.options },
@@ -93,7 +96,7 @@ export class WorkspacePersistence {
 }
 
 function parsePersistedWorkspace(value: unknown): WorkspaceState | undefined {
-  if (!isRecord(value) || value.version !== PERSISTENCE_VERSION) {
+  if (!isRecord(value) || (value.version !== 1 && value.version !== 2)) {
     return undefined;
   }
   if (
@@ -101,6 +104,7 @@ function parsePersistedWorkspace(value: unknown): WorkspaceState | undefined {
     typeof value.runtimeProviderId !== "string" ||
     !isStringArray(value.languageIds) ||
     !Array.isArray(value.files) ||
+    (value.version === PERSISTENCE_VERSION && !isStringArray(value.directories)) ||
     !Array.isArray(value.surfaces) ||
     !Number.isInteger(value.environmentRevision) ||
     Number(value.environmentRevision) < 0
@@ -128,6 +132,10 @@ function parsePersistedWorkspace(value: unknown): WorkspaceState | undefined {
     runtimeProviderId: value.runtimeProviderId,
     languageIds: [...value.languageIds],
     files: files as WorkspaceFile[],
+    directories: deriveWorkspaceDirectories(
+      files as WorkspaceFile[],
+      isStringArray(value.directories) ? value.directories : [],
+    ),
     surfaces: surfaces as SurfaceState[],
     ...(value.activeSurfaceId
       ? { activeSurfaceId: value.activeSurfaceId }

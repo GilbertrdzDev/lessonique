@@ -29,14 +29,17 @@ describe("WorkspaceTabs", () => {
             visible: false,
           },
         ],
+        onClose: vi.fn(),
         onSelect: vi.fn(),
       }),
     );
 
-    expect(markup).toContain('role="tablist"');
+    expect(markup).toContain('aria-label="Open workspace files"');
     expect(markup).toContain("index.html");
     expect(markup).toContain("styles.css");
     expect(markup).not.toContain("hidden.js");
-    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain('data-workspace-tab-path="index.html"');
+    expect(markup).toContain('aria-label="Close file tab styles.css"');
   });
 });

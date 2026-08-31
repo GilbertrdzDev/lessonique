@@ -10,6 +10,7 @@ describe("WorkspaceStore", () => {
       status: "idle",
       languageIds: [],
       files: [],
+      directories: [],
       surfaces: [],
       consoleEntries: [],
       interactionEvents: [],

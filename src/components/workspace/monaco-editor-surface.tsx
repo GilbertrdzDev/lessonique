@@ -77,6 +77,8 @@ export function MonacoEditorSurface({
     const activePath = activeFilePathRef.current;
     if (activePath) {
       editorInstance.setModel(registry.require(activePath));
+    } else {
+      editorInstance.setModel(null);
     }
     synchronizingRef.current = false;
     syncDiagnosticMarkers(monaco, registry, filesRef.current, diagnostics);
@@ -109,6 +111,8 @@ export function MonacoEditorSurface({
     registry.sync(files);
     if (activeFilePath) {
       editorInstance.setModel(registry.require(activeFilePath));
+    } else {
+      editorInstance.setModel(null);
     }
     synchronizingRef.current = false;
     const monaco = monacoRef.current;
@@ -137,10 +141,11 @@ export function MonacoEditorSurface({
 
   return (
     <div
+      aria-label="Workspace editor"
       className="min-h-0 flex-1 overflow-hidden"
       data-editor-theme={editorTheme}
       id="workspace-editor-panel"
-      role="tabpanel"
+      role="region"
     >
       <MonacoEditor
         beforeMount={handleBeforeMount}

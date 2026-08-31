@@ -60,6 +60,7 @@ export function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
     ...state,
     languageIds: [...state.languageIds],
     files: state.files.map((file) => ({ ...file })),
+    directories: [...state.directories],
     surfaces: state.surfaces.map((surface) => ({
       ...surface,
       options: { ...surface.options },

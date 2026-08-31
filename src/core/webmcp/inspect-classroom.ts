@@ -89,6 +89,7 @@ export class InspectClassroomService {
       data.workspace = {
         status: workspace.status,
         environmentRevision: workspace.environmentRevision,
+        directories: [...workspace.directories],
         files: workspace.files.map(({ path, languageId, content, visible, readOnly }) => ({
           path,
           languageId,
