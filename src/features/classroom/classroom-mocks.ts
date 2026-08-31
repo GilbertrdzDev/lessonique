@@ -32,21 +32,15 @@ export type ToolCapability = Readonly<{
   label: string;
 }>;
 
-export const classroomHeaderMock = {
-  connectionDetail: "Secure and active channel",
-  connectionLabel: "Connected through WebMCP",
-  requestDetail: "Guided session led by ChatGPT",
-  requestLabel: "Request received from ChatGPT",
-  technologies: [
-    { id: "language.html", label: "HTML", shortLabel: "HTML" },
-    { id: "language.css", label: "CSS", shortLabel: "CSS" },
-    {
-      id: "language.javascript",
-      label: "JavaScript",
-      shortLabel: "JS",
-    },
-  ] satisfies readonly TechnologyCapability[],
-} as const;
+export const classroomTechnologiesMock = [
+  { id: "language.html", label: "HTML", shortLabel: "HTML" },
+  { id: "language.css", label: "CSS", shortLabel: "CSS" },
+  {
+    id: "language.javascript",
+    label: "JavaScript",
+    shortLabel: "JS",
+  },
+] satisfies readonly TechnologyCapability[];
 
 export const learningPlanMock = [
   { id: "understand", label: "Understand the objective", state: "complete" },
@@ -67,7 +61,7 @@ export const activityFeedMock = [
   {
     id: "webmcp-connected",
     kind: "connection",
-    label: "Connected through WebMCP",
+    label: "WebMCP connection event",
     occurredAt: "2026-08-29T10:24:31-05:00",
   },
   {

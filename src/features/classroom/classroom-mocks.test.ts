@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   activityFeedMock,
-  classroomHeaderMock,
+  classroomTechnologiesMock,
   learningPlanMock,
   toolCapabilitiesMock,
 } from "./classroom-mocks";
@@ -10,7 +10,7 @@ import {
 describe("classroom mocks", () => {
   it("uses unique extensible identifiers", () => {
     const identifiers = [
-      ...classroomHeaderMock.technologies.map((item) => item.id),
+      ...classroomTechnologiesMock.map((item) => item.id),
       ...learningPlanMock.map((item) => item.id),
       ...activityFeedMock.map((item) => item.id),
       ...toolCapabilitiesMock.map((item) => item.id),

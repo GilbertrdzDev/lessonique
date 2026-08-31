@@ -25,8 +25,12 @@ describe("ClassroomPage", () => {
     expect(markup).toContain('aria-label="Primary navigation"');
     expect(markup).toContain('aria-labelledby="classroom-title"');
     expect(markup).toContain('aria-label="Learning agent"');
-    expect(markup).toContain("Request received from ChatGPT");
-    expect(markup).toContain("Connected through WebMCP");
+    expect(markup).toContain('data-webmcp-availability="detecting"');
+    expect(markup).toContain("Waiting for WebMCP");
+    expect(markup).toContain("Detecting WebMCP");
+    expect(markup).not.toContain("Request received from ChatGPT");
+    expect(markup).not.toContain("Connected through WebMCP");
+    expect(markup).not.toContain("WebMCP Ready");
     expect(markup).toContain("Learning Plan");
     expect(markup).toContain("Lessonique Classroom");
   });

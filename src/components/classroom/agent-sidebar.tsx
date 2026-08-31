@@ -31,6 +31,11 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { DevToolPanel } from "@/components/webmcp/dev-tool-panel";
+import {
+  getWebMCPAvailabilityPresentation,
+  type WebMCPAvailability,
+} from "@/components/webmcp/webmcp-availability";
+import { useWebMCPRuntime } from "@/components/webmcp/webmcp-registration-provider";
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import {
   activityFeedMock,
@@ -81,30 +86,57 @@ function clampPanelWidth(width: number) {
   return Math.min(MAXIMUM_PANEL_WIDTH, Math.max(MINIMUM_PANEL_WIDTH, width));
 }
 
-function AgentStatus() {
+function AgentStatus({
+  availability,
+}: Readonly<{ availability: WebMCPAvailability }>) {
+  const presentation = getWebMCPAvailabilityPresentation(availability);
+
   return (
-    <div className="flex items-center gap-3 border-b px-4 py-4">
+    <div
+      className="flex items-center gap-3 border-b px-4 py-4"
+      data-webmcp-availability={availability}
+    >
       <div className="relative grid size-11 shrink-0 place-items-center rounded-2xl bg-brand-soft text-primary">
         <Bot aria-hidden="true" className="size-6" />
         <span
           aria-hidden="true"
-          className="absolute -bottom-1 -right-1 size-3 rounded-full border-2 border-card bg-success"
+          className={cn(
+            "absolute -bottom-1 -right-1 size-3 rounded-full border-2 border-card",
+            availability === "detecting" && "bg-muted-foreground/45",
+            availability === "ready" && "bg-success",
+            availability === "unsupported" && "bg-warning",
+          )}
+          data-webmcp-status-indicator
+          data-webmcp-status-tone={availability}
         />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold">Learning Agent</p>
         <p className="mt-1 flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-          <span aria-hidden="true" className="size-2 rounded-full bg-success" />
-          Guided session through ChatGPT
+          <span
+            aria-hidden="true"
+            className={cn(
+              "size-2 rounded-full",
+              availability === "detecting" && "bg-muted-foreground/45",
+              availability === "ready" && "bg-success",
+              availability === "unsupported" && "bg-warning",
+            )}
+            data-webmcp-status-indicator
+            data-webmcp-status-tone={availability}
+          />
+          {presentation.agentDetail}
         </p>
       </div>
     </div>
   );
 }
 
-function LearningPlan() {
+function LearningPlan({
+  availability,
+}: Readonly<{ availability: WebMCPAvailability }>) {
   const workspace = useWorkspaceRuntime();
   const anchorRef = useInteractionAnchor(P0_INTERACTION_ANCHOR_IDS.plan);
+  const presentation = getWebMCPAvailabilityPresentation(availability);
   const lesson = useSyncExternalStore(
     workspace.lessonStore.subscribe,
     workspace.lessonStore.getSnapshot,
@@ -123,6 +155,7 @@ function LearningPlan() {
                 : ("pending" as const),
         }))
       : learningPlanMock;
+  const isPlaceholderPlan = lesson.plan.steps.length === 0;
   const currentStepIndex = planSteps.findIndex(
     (step) => step.state === "current",
   );
@@ -132,60 +165,76 @@ function LearningPlan() {
       aria-labelledby="learning-plan-title"
       className="rounded-2xl border p-3"
       data-interaction-anchor={P0_INTERACTION_ANCHOR_IDS.plan}
+      data-webmcp-availability={availability}
       ref={anchorRef}
     >
       <div className="mb-2.5 flex items-center justify-between gap-3 px-1">
         <h2 className="text-sm font-bold" id="learning-plan-title">
           Learning Plan
         </h2>
-        <span className="rounded-lg bg-secondary px-2 py-1 text-[0.68rem] font-medium text-muted-foreground">
-          Step {Math.max(1, currentStepIndex + 1)} of {planSteps.length}
-        </span>
+        {isPlaceholderPlan && availability !== "ready" ? (
+          <span className="rounded-lg bg-secondary px-2 py-1 text-[0.68rem] font-medium text-muted-foreground">
+            {availability === "detecting" ? "Detecting" : "Unavailable"}
+          </span>
+        ) : (
+          <span className="rounded-lg bg-secondary px-2 py-1 text-[0.68rem] font-medium text-muted-foreground">
+            Step {Math.max(1, currentStepIndex + 1)} of {planSteps.length}
+          </span>
+        )}
       </div>
-      <ol className="space-y-1">
-        {planSteps.map((step, index) => {
-          const isCurrent = step.state === "current";
-          const isComplete = step.state === "complete";
+      {isPlaceholderPlan && availability !== "ready" ? (
+        <p className="rounded-xl bg-muted/45 px-3 py-4 text-xs leading-relaxed text-muted-foreground">
+          {presentation.planDetail}
+        </p>
+      ) : (
+        <ol className="space-y-1">
+          {planSteps.map((step, index) => {
+            const isCurrent = step.state === "current";
+            const isComplete = step.state === "complete";
 
-          return (
-            <li
-              aria-current={isCurrent ? "step" : undefined}
-              className={cn(
-                "flex min-h-10 items-center gap-3 rounded-xl px-2.5 py-2 text-xs",
-                isCurrent && "bg-brand-soft text-accent-foreground",
-              )}
-              key={step.id}
-            >
-              <span
+            return (
+              <li
+                aria-current={isCurrent ? "step" : undefined}
                 className={cn(
-                  "grid size-6 shrink-0 place-items-center rounded-full border text-[0.68rem] font-semibold",
-                  isCurrent && "border-primary bg-background text-primary",
-                  isComplete && "border-success bg-success text-white",
+                  "flex min-h-10 items-center gap-3 rounded-xl px-2.5 py-2 text-xs",
+                  isCurrent && "bg-brand-soft text-accent-foreground",
                 )}
+                key={step.id}
               >
-                {isComplete ? (
-                  <Check aria-hidden="true" className="size-3.5" />
-                ) : (
-                  index + 1
-                )}
-              </span>
-              <span
-                className={cn("min-w-0 flex-1", isCurrent && "font-semibold")}
-              >
-                {step.label}
+                <span
+                  className={cn(
+                    "grid size-6 shrink-0 place-items-center rounded-full border text-[0.68rem] font-semibold",
+                    isCurrent && "border-primary bg-background text-primary",
+                    isComplete && "border-success bg-success text-white",
+                  )}
+                >
+                  {isComplete ? (
+                    <Check aria-hidden="true" className="size-3.5" />
+                  ) : (
+                    index + 1
+                  )}
+                </span>
+                <span
+                  className={cn(
+                    "min-w-0 flex-1",
+                    isCurrent && "font-semibold",
+                  )}
+                >
+                  {step.label}
+                  {isCurrent ? (
+                    <span className="mt-0.5 block text-[0.65rem] font-medium text-accent-foreground">
+                      In progress
+                    </span>
+                  ) : null}
+                </span>
                 {isCurrent ? (
-                  <span className="mt-0.5 block text-[0.65rem] font-medium text-accent-foreground">
-                    In progress
-                  </span>
+                  <Sparkles aria-hidden="true" className="size-4" />
                 ) : null}
-              </span>
-              {isCurrent ? (
-                <Sparkles aria-hidden="true" className="size-4" />
-              ) : null}
-            </li>
-          );
-        })}
-      </ol>
+              </li>
+            );
+          })}
+        </ol>
+      )}
     </section>
   );
 }
@@ -244,13 +293,17 @@ function ReferencePanel() {
   );
 }
 
-function ActivityFeed() {
+function ActivityFeed({
+  availability,
+}: Readonly<{ availability: WebMCPAvailability }>) {
   const anchorRef = useInteractionAnchor(P0_INTERACTION_ANCHOR_IDS.activity);
+  const presentation = getWebMCPAvailabilityPresentation(availability);
   return (
     <section
       aria-labelledby="activity-title"
       className="rounded-2xl border p-3"
       data-interaction-anchor={P0_INTERACTION_ANCHOR_IDS.activity}
+      data-webmcp-availability={availability}
       ref={anchorRef}
     >
       <div className="mb-2.5 flex items-center justify-between gap-3 px-1">
@@ -261,38 +314,64 @@ function ActivityFeed() {
           View All
         </Button>
       </div>
-      <ol className="space-y-1.5">
-        {activityFeedMock.map((event) => {
-          const Icon = activityIcons[event.kind];
-          const isConnection = event.kind === "connection";
+      {availability === "ready" ? (
+        <ol className="space-y-1.5">
+          {activityFeedMock.map((event) => {
+            const Icon = activityIcons[event.kind];
+            const isConnection = event.kind === "connection";
 
-          return (
-            <li
-              className="grid grid-cols-[3.4rem_1rem_1fr_auto] items-center gap-1.5 text-[0.68rem]"
-              key={event.id}
-            >
-              <time
-                className="font-mono text-muted-foreground tabular-nums"
-                dateTime={event.occurredAt}
+            return (
+              <li
+                className="grid grid-cols-[3.4rem_1rem_1fr_auto] items-center gap-1.5 text-[0.68rem]"
+                key={event.id}
               >
-                {activityTimeFormatter.format(new Date(event.occurredAt))}
-              </time>
-              <Icon aria-hidden="true" className="size-3.5 text-primary" />
-              <span className="truncate text-muted-foreground">
-                {event.label}
-              </span>
-              <span
-                aria-label={isConnection ? "Connected" : "Activity recorded"}
-                className={cn(
-                  "size-1.5 rounded-full bg-primary",
-                  isConnection && "bg-success",
-                )}
-                role="img"
-              />
-            </li>
-          );
-        })}
-      </ol>
+                <time
+                  className="font-mono text-muted-foreground tabular-nums"
+                  dateTime={event.occurredAt}
+                >
+                  {activityTimeFormatter.format(new Date(event.occurredAt))}
+                </time>
+                <Icon aria-hidden="true" className="size-3.5 text-primary" />
+                <span className="truncate text-muted-foreground">
+                  {isConnection ? presentation.activityLabel : event.label}
+                </span>
+                <span
+                  aria-label={
+                    isConnection
+                      ? presentation.activityStatusLabel
+                      : "Activity recorded"
+                  }
+                  className={cn(
+                    "size-1.5 rounded-full bg-primary",
+                    isConnection && "bg-success",
+                  )}
+                  data-webmcp-status-indicator={isConnection ? "" : undefined}
+                  data-webmcp-status-tone={
+                    isConnection ? availability : undefined
+                  }
+                  role="img"
+                />
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <div className="flex items-center gap-2 rounded-xl bg-muted/45 px-3 py-3 text-[0.68rem] text-muted-foreground">
+          <RadioTower aria-hidden="true" className="size-3.5 text-primary" />
+          <span className="min-w-0 flex-1">{presentation.activityLabel}</span>
+          <span
+            aria-label={presentation.activityStatusLabel}
+            className={cn(
+              "size-2 shrink-0 rounded-full",
+              availability === "detecting" && "bg-muted-foreground/45",
+              availability === "unsupported" && "bg-warning",
+            )}
+            data-webmcp-status-indicator
+            data-webmcp-status-tone={availability}
+            role="img"
+          />
+        </div>
+      )}
     </section>
   );
 }
@@ -309,48 +388,71 @@ function useInteractionAnchor(anchorId: string) {
   return ref;
 }
 
-function WebMCPStatusCard() {
+function WebMCPStatusCard({
+  availability,
+}: Readonly<{ availability: WebMCPAvailability }>) {
+  const presentation = getWebMCPAvailabilityPresentation(availability);
+
   return (
     <section
       aria-labelledby="webmcp-status-title"
-      className="rounded-2xl border border-primary/35 bg-brand-soft/70 p-3"
+      className={cn(
+        "rounded-2xl border p-3",
+        availability === "detecting" && "bg-muted/30",
+        availability === "ready" && "border-primary/35 bg-brand-soft/70",
+        availability === "unsupported" && "border-warning/45 bg-warning/10",
+      )}
+      data-webmcp-availability={availability}
     >
       <div className="flex items-start gap-2.5">
         <span className="relative mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border border-primary bg-background">
-          <span aria-hidden="true" className="size-2 rounded-full bg-success" />
+          <span
+            aria-hidden="true"
+            className={cn(
+              "size-2 rounded-full",
+              availability === "detecting" && "bg-muted-foreground/45",
+              availability === "ready" && "bg-success",
+              availability === "unsupported" && "bg-warning",
+            )}
+            data-webmcp-status-indicator
+            data-webmcp-status-tone={availability}
+          />
         </span>
         <div>
           <h2 className="text-sm font-bold" id="webmcp-status-title">
-            WebMCP Ready
+            {presentation.statusTitle}
           </h2>
           <p className="mt-1 text-[0.68rem] leading-relaxed text-muted-foreground">
-            Classroom tools are available for this guided session.
+            {presentation.statusDetail}
           </p>
         </div>
       </div>
-      <ul className="mt-3 grid grid-cols-5 overflow-hidden rounded-xl border border-primary/20 bg-background/65">
-        {toolCapabilitiesMock.map((capability) => {
-          const Icon = toolIcons[capability.id] ?? CircleDot;
+      {availability === "ready" ? (
+        <ul className="mt-3 grid grid-cols-5 overflow-hidden rounded-xl border border-primary/20 bg-background/65">
+          {toolCapabilitiesMock.map((capability) => {
+            const Icon = toolIcons[capability.id] ?? CircleDot;
 
-          return (
-            <li
-              className="flex min-w-0 flex-col items-center gap-1 border-r px-1 py-2 last:border-r-0"
-              key={capability.id}
-              title={capability.label}
-            >
-              <Icon aria-hidden="true" className="size-4 text-primary" />
-              <span className="max-w-full truncate text-[0.56rem] text-muted-foreground">
-                {capability.label}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+            return (
+              <li
+                className="flex min-w-0 flex-col items-center gap-1 border-r px-1 py-2 last:border-r-0"
+                key={capability.id}
+                title={capability.label}
+              >
+                <Icon aria-hidden="true" className="size-4 text-primary" />
+                <span className="max-w-full truncate text-[0.56rem] text-muted-foreground">
+                  {capability.label}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     </section>
   );
 }
 
 export function AgentSidebar() {
+  const { availability } = useWebMCPRuntime();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const resizeSession = useRef<ResizeSession | null>(null);
@@ -412,6 +514,7 @@ export function AgentSidebar() {
       aria-label="Learning agent"
       className="relative order-3 flex h-full min-h-[42rem] shrink-0 flex-col overflow-visible rounded-[1.25rem] border bg-card text-card-foreground shadow-panel max-2xl:col-span-full max-2xl:!w-full max-2xl:min-h-0 2xl:order-none 2xl:col-span-1"
       data-agent-collapsed={isCollapsed}
+      data-webmcp-availability={availability}
       initial={false}
       transition={
         shouldReduceMotion
@@ -461,7 +564,14 @@ export function AgentSidebar() {
             <Bot aria-hidden="true" className="size-5" />
             <span
               aria-hidden="true"
-              className="absolute -bottom-1 -right-1 size-3 rounded-full border-2 border-card bg-success"
+              className={cn(
+                "absolute -bottom-1 -right-1 size-3 rounded-full border-2 border-card",
+                availability === "detecting" && "bg-muted-foreground/45",
+                availability === "ready" && "bg-success",
+                availability === "unsupported" && "bg-warning",
+              )}
+              data-webmcp-status-indicator
+              data-webmcp-status-tone={availability}
             />
           </span>
           <span className="h-px w-8 bg-border" />
@@ -474,12 +584,12 @@ export function AgentSidebar() {
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
           id="learning-agent-content"
         >
-          <AgentStatus />
+          <AgentStatus availability={availability} />
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3 md:grid md:grid-cols-3 2xl:flex">
-            <LearningPlan />
-            <ActivityFeed />
+            <LearningPlan availability={availability} />
+            <ActivityFeed availability={availability} />
             <ReferencePanel />
-            <WebMCPStatusCard />
+            <WebMCPStatusCard availability={availability} />
             <DevToolPanel />
           </div>
         </div>
