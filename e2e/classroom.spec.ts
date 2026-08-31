@@ -142,6 +142,105 @@ test.describe("classroom shell", () => {
     });
   });
 
+  test("runs the responsive menu setup, HTML wait, and tracked mobile CSS scene from the Dev Panel", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await expect(
+      page.getByRole("combobox", { name: "Environment profile" }),
+    ).toBeEnabled();
+
+    const panel = page.locator('[data-slot="webmcp-dev-panel"]');
+    await panel.locator("summary").first().click();
+    const challengeFixtures = panel.locator("details").filter({
+      has: page.getByText("Challenge Demo fixtures", { exact: true }),
+    });
+    const invocationResult = panel.locator('pre[role="status"]');
+    await challengeFixtures.locator("summary").click();
+    await challengeFixtures.getByRole("button", {
+      name: /Set up responsive menu/u,
+    }).click();
+    await expect(invocationResult).toContainText('"stageId": "setup"');
+    await expect(invocationResult).toContainText('"accepted": true');
+    await expect(getWorkspaceTab(page, "index.html")).toBeVisible();
+    await expect(getWorkspaceTab(page, "styles.css")).toBeVisible();
+    await expect(getWorkspaceTab(page, "script.js")).toBeVisible();
+    await expect(
+      page.locator('[data-interaction-anchor="anchor.learning-plan"]'),
+    ).toContainText("Create the navigation structure");
+
+    await challengeFixtures.getByRole("button", {
+      name: /Run HTML scene/u,
+    }).click();
+    await expect(invocationResult).toContainText('"stageId": "html"');
+    await expect(invocationResult).toContainText('"accepted": true');
+    const guide = page.getByLabel("Teaching guide");
+    await expect(guide).toContainText("Confirm the structure in context", {
+      timeout: 15_000,
+    });
+    await expect(guide).toContainText("normalized interaction");
+    const preview = page.frameLocator("[data-preview-viewport]:visible iframe");
+    await preview.getByRole("button", { name: "Explore routes" }).click();
+    await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
+      timeout: 5_000,
+    });
+
+    await challengeFixtures.getByRole("button", {
+      name: /Run CSS and mobile scene/u,
+    }).click();
+    await expect(invocationResult).toContainText('"stageId": "css"');
+    await expect(invocationResult).toContainText('"accepted": true');
+    await expect(guide).toContainText("Follow the control into the mobile preview", {
+      timeout: 15_000,
+    });
+    await expect(page.locator("[data-preview-viewport]:visible")).toHaveAttribute(
+      "data-preview-viewport",
+      "mobile",
+    );
+
+    const paused = await invokeSceneControl(
+      page,
+      "pause",
+      "scene.responsive-menu-css",
+    );
+    expect(paused).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({ sceneStatus: "paused" }),
+      }),
+    );
+    await expect
+      .poll(() => previewMenuTargetAlignmentDelta(page))
+      .toBeLessThanOrEqual(2);
+    expect((await previewMenuGuidanceTargetOverlap(page)).area).toBe(0);
+
+    await page.setViewportSize({ width: 1180, height: 820 });
+    await expect
+      .poll(() => previewMenuTargetAlignmentDelta(page))
+      .toBeLessThanOrEqual(2);
+    const guideBox = await guide.boundingBox();
+    expect(guideBox).not.toBeNull();
+    expect(guideBox!.x).toBeGreaterThanOrEqual(0);
+    expect(guideBox!.y).toBeGreaterThanOrEqual(0);
+    expect(guideBox!.x + guideBox!.width).toBeLessThanOrEqual(1180);
+    expect(guideBox!.y + guideBox!.height).toBeLessThanOrEqual(820);
+    expect((await previewMenuGuidanceTargetOverlap(page)).area).toBe(0);
+
+    const resumed = await invokeSceneControl(
+      page,
+      "resume",
+      "scene.responsive-menu-css",
+    );
+    expect(resumed).toEqual(expect.objectContaining({ ok: true }));
+    await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
+      timeout: 5_000,
+    });
+    await testInfo.attach("lessonique-responsive-menu-mobile-scene", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
+  });
+
   test("adapts the plan and replaces a reference through ChatGPT-registered tools", async ({
     page,
   }, testInfo) => {
@@ -1625,11 +1724,57 @@ async function guidanceTargetOverlap(page: import("@playwright/test").Page) {
   });
 }
 
+async function previewMenuTargetAlignmentDelta(
+  page: import("@playwright/test").Page,
+) {
+  const targetRect = await page
+    .frameLocator("[data-preview-viewport]:visible iframe")
+    .getByRole("button", { name: "Menu" })
+    .boundingBox();
+  const focusRect = await page
+    .locator('[data-guidance-effect="focus"]')
+    .boundingBox();
+  if (!targetRect || !focusRect) return Number.POSITIVE_INFINITY;
+  return Math.max(
+    Math.abs(focusRect.x + 4 - targetRect.x),
+    Math.abs(focusRect.y + 4 - targetRect.y),
+    Math.abs(focusRect.width - 8 - targetRect.width),
+    Math.abs(focusRect.height - 8 - targetRect.height),
+  );
+}
+
+async function previewMenuGuidanceTargetOverlap(
+  page: import("@playwright/test").Page,
+) {
+  const targetRect = await page
+    .frameLocator("[data-preview-viewport]:visible iframe")
+    .getByRole("button", { name: "Menu" })
+    .boundingBox();
+  const guidanceRect = await page
+    .locator('[data-slot="assistant-overlay-host"] [data-assistant-docked]')
+    .boundingBox();
+  if (!targetRect || !guidanceRect) {
+    return { area: Number.POSITIVE_INFINITY };
+  }
+  const overlapWidth = Math.max(
+    0,
+    Math.min(targetRect.x + targetRect.width, guidanceRect.x + guidanceRect.width) -
+      Math.max(targetRect.x, guidanceRect.x),
+  );
+  const overlapHeight = Math.max(
+    0,
+    Math.min(targetRect.y + targetRect.height, guidanceRect.y + guidanceRect.height) -
+      Math.max(targetRect.y, guidanceRect.y),
+  );
+  return { area: overlapWidth * overlapHeight };
+}
+
 async function invokeSceneControl(
   page: import("@playwright/test").Page,
   action: "pause" | "resume",
+  sceneId = "scene.browser-companion",
 ) {
-  return page.evaluate(async (requestedAction) => {
+  return page.evaluate(async ({ requestedAction, requestedSceneId }) => {
     const tools = (
       window as unknown as {
         __lessoniqueRegisteredTools: Array<{
@@ -1640,7 +1785,7 @@ async function invokeSceneControl(
     ).__lessoniqueRegisteredTools;
     return tools.find(({ name }) => name === "control_teaching_scene")?.execute({
       action: requestedAction,
-      sceneId: "scene.browser-companion",
+      sceneId: requestedSceneId,
     });
-  }, action);
+  }, { requestedAction: action, requestedSceneId: sceneId });
 }

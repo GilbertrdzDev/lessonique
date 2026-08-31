@@ -12,6 +12,11 @@ import {
   type DevToolFixtureRun,
   type WebMCPToolName,
 } from "@/core/webmcp";
+import {
+  RESPONSIVE_MENU_DEMO_STAGES,
+  runResponsiveMenuDemoStage,
+  type ResponsiveMenuDemoStageId,
+} from "@/features/challenge-demo";
 
 import { useWebMCPRuntime } from "./webmcp-registration-provider";
 
@@ -80,6 +85,31 @@ export function DevToolPanel() {
                 toolName,
                 error: invocation.error,
               })),
+          },
+          null,
+          2,
+        ),
+      );
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
+  async function runChallengeStage(stageId: ResponsiveMenuDemoStageId): Promise<void> {
+    setIsRunning(true);
+    try {
+      const run = await runResponsiveMenuDemoStage(registry, stageId);
+      setResult(JSON.stringify(run, null, 2));
+    } catch (error) {
+      setResult(
+        JSON.stringify(
+          {
+            accepted: false,
+            stageId,
+            error:
+              error instanceof Error
+                ? error.message
+                : "The challenge demo stage failed unexpectedly.",
           },
           null,
           2,
@@ -179,6 +209,38 @@ export function DevToolPanel() {
           <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[0.62rem] leading-relaxed text-muted-foreground">
             {JSON.stringify(getWebMCPToolJsonSchema(selectedTool), null, 2)}
           </pre>
+        </details>
+
+        <details className="rounded-xl border border-primary/25 bg-primary/5 p-2">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-[0.68rem] font-semibold marker:hidden">
+            <TestTube2 aria-hidden="true" className="size-3.5" />
+            Challenge Demo fixtures
+          </summary>
+          <p className="mt-2 text-[0.65rem] leading-relaxed text-muted-foreground">
+            Run each stage in order. Scene stages use the production inspection and
+            teaching-scene tools.
+          </p>
+          <div className="mt-2 grid gap-2">
+            {RESPONSIVE_MENU_DEMO_STAGES.map((stage) => (
+              <Button
+                className="h-auto justify-start whitespace-normal text-left"
+                disabled={isRunning}
+                key={stage.id}
+                onClick={() => void runChallengeStage(stage.id)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <Play aria-hidden="true" />
+                <span>
+                  <span className="block font-semibold">{stage.title}</span>
+                  <span className="block text-[0.62rem] font-normal text-muted-foreground">
+                    {stage.description}
+                  </span>
+                </span>
+              </Button>
+            ))}
+          </div>
         </details>
 
         {suiteResults.length > 0 ? (
