@@ -7,6 +7,9 @@ import {
 export const RESPONSIVE_MENU_SCENE_IDS = {
   html: "scene.responsive-menu-html",
   css: "scene.responsive-menu-css",
+  javascript: "scene.responsive-menu-javascript",
+  warning: "scene.responsive-menu-warning",
+  completion: "scene.responsive-menu-completion",
 } as const;
 
 export function createResponsiveMenuHtmlScene(
@@ -195,6 +198,195 @@ export function createResponsiveMenuCssScene(
           ],
         },
         caption: "The companion and guide remain inside safe bounds without covering the target.",
+      },
+    ],
+  };
+}
+
+export function createResponsiveMenuJavascriptScene(
+  javascriptHandlerTarget: TargetRefInput,
+): PlayTeachingSceneInput {
+  const mobileMenuTarget = RESPONSIVE_MENU_TARGET_CATALOG.mobileMenuToggle.target;
+  return {
+    id: RESPONSIVE_MENU_SCENE_IDS.javascript,
+    title: "Responsive menu JavaScript interaction",
+    cleanupPolicy: "replace",
+    allowManualNavigation: true,
+    beats: [
+      {
+        id: "beat.responsive-menu-javascript-source",
+        prepare: {
+          surfaceId: "editor",
+          filePath: "script.js",
+          scroll: "if-needed",
+        },
+        target: javascriptHandlerTarget,
+        assistant: {
+          stateId: "assistant.pointing",
+          placementId: "placement.near-target",
+          visible: true,
+        },
+        effects: [
+          { effectId: "effect.focus" },
+          { effectId: "effect.highlight" },
+          { effectId: "effect.pointer" },
+          {
+            effectId: "effect.callout",
+            input: {
+              text: "Trace one click from the control to both the visible and accessible menu state.",
+            },
+          },
+        ],
+        guide: {
+          title: "Connect one interaction to two states",
+          body: "The semantic JavaScript locator found the registered click listener. Its handler reads the current state once, then updates the button and navigation together.",
+          supportingItems: [
+            "The source target comes from the JavaScript provider",
+            "Accessible and visual state share one boolean",
+          ],
+        },
+        caption: "The listener is highlighted without exposing a selector or executable locator.",
+      },
+      {
+        id: "beat.responsive-menu-javascript-preview",
+        prepare: {
+          surfaceId: "preview",
+          viewportId: "mobile",
+          scroll: "if-needed",
+        },
+        target: mobileMenuTarget,
+        assistant: {
+          stateId: "assistant.pointing",
+          placementId: "placement.near-target",
+          visible: true,
+        },
+        effects: [
+          { effectId: "effect.focus" },
+          { effectId: "effect.spotlight" },
+          { effectId: "effect.pointer" },
+          {
+            effectId: "effect.callout",
+            input: {
+              text: "Activate the menu control to verify the handler through the preview bridge.",
+            },
+          },
+        ],
+        guide: {
+          title: "Run the registered interaction",
+          body: "Activate the mobile menu control. The preview bridge emits a normalized click for this semantic target, so the learner wait resolves locally.",
+          supportingItems: [
+            "The same registered target guides and observes",
+            "No follow-up agent call is required",
+          ],
+        },
+        caption: "A matching preview click triggers the assistant success reaction and completes the scene.",
+        wait: {
+          kind: "interaction",
+          eventTypeId: "interaction.preview-click",
+          target: mobileMenuTarget,
+          timeoutMs: 300_000,
+        },
+      },
+    ],
+  };
+}
+
+export function createResponsiveMenuWarningScene(): PlayTeachingSceneInput {
+  return {
+    id: RESPONSIVE_MENU_SCENE_IDS.warning,
+    title: "Responsive menu warning fixture",
+    cleanupPolicy: "replace",
+    allowManualNavigation: true,
+    beats: [
+      {
+        id: "beat.responsive-menu-warning",
+        target: RESPONSIVE_MENU_TARGET_CATALOG.learningPlan.target,
+        assistant: {
+          stateId: "assistant.warning",
+          placementId: "placement.near-target",
+          visible: true,
+        },
+        effects: [
+          { effectId: "effect.focus" },
+          {
+            effectId: "effect.callout",
+            input: {
+              text: "This safe fixture previews warning feedback without changing learner files or progress.",
+            },
+          },
+        ],
+        guide: {
+          title: "Preview bounded warning feedback",
+          body: "Warnings keep the companion visible, explain what needs attention, and leave the learner in control. This fixture is visual-only and makes no workspace mutation.",
+          supportingItems: [
+            "No learner code is changed",
+            "The next action remains explicit",
+          ],
+        },
+        caption: "The warning treatment is safe to replay from the Dev Panel.",
+      },
+    ],
+  };
+}
+
+export function createResponsiveMenuCompletionScene(): PlayTeachingSceneInput {
+  return {
+    id: RESPONSIVE_MENU_SCENE_IDS.completion,
+    title: "Responsive menu celebration and close",
+    cleanupPolicy: "replace",
+    allowManualNavigation: true,
+    beats: [
+      {
+        id: "beat.responsive-menu-celebration",
+        prepare: {
+          surfaceId: "preview",
+          viewportId: "mobile",
+          scroll: "if-needed",
+        },
+        target: RESPONSIVE_MENU_TARGET_CATALOG.mobileMenuToggle.target,
+        assistant: {
+          stateId: "assistant.success",
+          placementId: "placement.near-target",
+          visible: true,
+        },
+        effects: [
+          { effectId: "effect.focus" },
+          { effectId: "effect.spotlight" },
+          {
+            effectId: "effect.callout",
+            input: {
+              text: "The structure, breakpoint, handler, preview, and console checks all passed.",
+            },
+          },
+        ],
+        guide: {
+          title: "Celebrate verified behavior",
+          body: "The companion reacts to evidence from the registered validators, not to an assumed outcome. The responsive menu is now complete across source and preview surfaces.",
+          supportingItems: [
+            "Every declared criterion passed",
+            "The learner interaction was observed locally",
+          ],
+        },
+        caption: "Success feedback remains visual, structured, and evidence-backed.",
+      },
+      {
+        id: "beat.responsive-menu-close",
+        target: RESPONSIVE_MENU_TARGET_CATALOG.learningPlan.target,
+        assistant: {
+          stateId: "assistant.idle",
+          placementId: "placement.near-target",
+          visible: true,
+        },
+        effects: [{ effectId: "effect.focus" }],
+        guide: {
+          title: "Return to the completed plan",
+          body: "The closing beat moves the companion back to the lesson plan, preserves the completion evidence, and then clears all temporary guidance.",
+          supportingItems: [
+            "The workspace remains available",
+            "Scene overlays clean up automatically",
+          ],
+        },
+        caption: "The companion returns to idle as the completed lesson remains in place.",
       },
     ],
   };

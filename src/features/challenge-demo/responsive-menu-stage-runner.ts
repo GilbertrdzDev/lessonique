@@ -8,13 +8,17 @@ import type { WebMCPToolName } from "@/core/webmcp/tool-names";
 
 import {
   createResponsiveMenuLessonFixture,
+  RESPONSIVE_MENU_DEMO_IDS,
   RESPONSIVE_MENU_TARGET_CATALOG,
   type ResponsiveMenuDemoTopicId,
   type ResponsiveMenuTargetCatalogEntry,
 } from "./responsive-menu-fixture";
 import {
+  createResponsiveMenuCompletionScene,
   createResponsiveMenuCssScene,
   createResponsiveMenuHtmlScene,
+  createResponsiveMenuJavascriptScene,
+  createResponsiveMenuWarningScene,
 } from "./responsive-menu-scenes";
 
 export const RESPONSIVE_MENU_DEMO_STAGES = [
@@ -32,6 +36,21 @@ export const RESPONSIVE_MENU_DEMO_STAGES = [
     id: "css",
     title: "Run CSS and mobile scene",
     description: "Resolve the breakpoint and move guidance into the mobile preview.",
+  },
+  {
+    id: "javascript",
+    title: "Run JavaScript scene",
+    description: "Resolve the click handler and wait for the normalized mobile interaction.",
+  },
+  {
+    id: "warning",
+    title: "Preview warning fixture",
+    description: "Show bounded warning feedback without changing learner work or progress.",
+  },
+  {
+    id: "complete",
+    title: "Validate and close responsive menu",
+    description: "Evaluate every lesson step, celebrate success, and return to idle.",
   },
 ] as const;
 
@@ -67,9 +86,25 @@ export async function runResponsiveMenuDemoStage(
     ]);
   }
 
+  if (stageId === "warning") {
+    const result = await registry.invoke(
+      "play_teaching_scene",
+      createResponsiveMenuWarningScene(),
+    );
+    return createStageRun(stageId, [
+      { toolName: "play_teaching_scene", result },
+    ]);
+  }
+
+  if (stageId === "complete") {
+    return runResponsiveMenuCompletionStage(registry);
+  }
+
   const sourceEntry = stageId === "html"
     ? RESPONSIVE_MENU_TARGET_CATALOG.htmlNavigation
-    : RESPONSIVE_MENU_TARGET_CATALOG.cssMobileQuery;
+    : stageId === "css"
+      ? RESPONSIVE_MENU_TARGET_CATALOG.cssMobileQuery
+      : RESPONSIVE_MENU_TARGET_CATALOG.javascriptToggleHandler;
   const invocations: ResponsiveMenuDemoInvocation[] = [];
   const resolved = await resolveSourceTarget(
     registry,
@@ -83,13 +118,54 @@ export async function runResponsiveMenuDemoStage(
       `The responsive menu ${stageId.toUpperCase()} target could not be resolved.`,
     );
   }
-  const scene = await registry.invoke(
-    "play_teaching_scene",
-    stageId === "html"
-      ? createResponsiveMenuHtmlScene(resolved.target)
-      : createResponsiveMenuCssScene(resolved.target),
-  );
+  const sceneInput = stageId === "html"
+    ? createResponsiveMenuHtmlScene(resolved.target)
+    : stageId === "css"
+      ? createResponsiveMenuCssScene(resolved.target)
+      : createResponsiveMenuJavascriptScene(resolved.target);
+  const scene = await registry.invoke("play_teaching_scene", sceneInput);
   invocations.push({ toolName: "play_teaching_scene", result: scene });
+  return createStageRun(stageId, invocations);
+}
+
+const RESPONSIVE_MENU_STEP_IDS = [
+  RESPONSIVE_MENU_DEMO_IDS.htmlStep,
+  RESPONSIVE_MENU_DEMO_IDS.accessibilityStep,
+  RESPONSIVE_MENU_DEMO_IDS.cssStep,
+  RESPONSIVE_MENU_DEMO_IDS.javascriptStep,
+  RESPONSIVE_MENU_DEMO_IDS.verificationStep,
+] as const;
+
+async function runResponsiveMenuCompletionStage(
+  registry: ToolInvoker,
+): Promise<ResponsiveMenuDemoStageRun> {
+  const stageId = "complete" as const;
+  const invocations: ResponsiveMenuDemoInvocation[] = [];
+  for (const stepId of RESPONSIVE_MENU_STEP_IDS) {
+    const result = await registry.invoke("evaluate_current_step", {
+      stepId,
+      advanceOnPass: true,
+      showFeedback: true,
+    });
+    invocations.push({ toolName: "evaluate_current_step", result });
+    if (!isPassingEvaluation(result)) {
+      const warning = await registry.invoke(
+        "play_teaching_scene",
+        createResponsiveMenuWarningScene(),
+      );
+      invocations.push({ toolName: "play_teaching_scene", result: warning });
+      return createStageRun(
+        stageId,
+        invocations,
+        `Responsive menu validation did not pass for step "${stepId}".`,
+      );
+    }
+  }
+  const completion = await registry.invoke(
+    "play_teaching_scene",
+    createResponsiveMenuCompletionScene(),
+  );
+  invocations.push({ toolName: "play_teaching_scene", result: completion });
   return createStageRun(stageId, invocations);
 }
 
@@ -135,4 +211,8 @@ function createStageRun(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPassingEvaluation(result: ToolResult<unknown>): boolean {
+  return result.ok && isRecord(result.data) && result.data.passed === true;
 }

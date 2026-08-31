@@ -101,6 +101,20 @@ export const RESPONSIVE_MENU_TARGET_CATALOG = {
       },
     },
   },
+  javascriptToggleHandler: {
+    id: "target.demo.javascript-toggle-handler",
+    kind: "source",
+    representation: "editor",
+    query: {
+      resolverId: "locator.javascript.event-listener",
+      input: {
+        filePath: "script.js",
+        eventType: "click",
+        targetKind: "identifier",
+        targetName: "menuToggle",
+      },
+    },
+  },
   mobileMenuToggle: {
     id: "target.demo.mobile-menu-toggle",
     kind: "registered",

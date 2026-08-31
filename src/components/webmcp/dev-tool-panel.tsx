@@ -13,7 +13,9 @@ import {
   type WebMCPToolName,
 } from "@/core/webmcp";
 import {
+  ARRAY_MAP_DEMO_STAGE,
   RESPONSIVE_MENU_DEMO_STAGES,
+  runArrayMapDemoStage,
   runResponsiveMenuDemoStage,
   type ResponsiveMenuDemoStageId,
 } from "@/features/challenge-demo";
@@ -110,6 +112,31 @@ export function DevToolPanel() {
               error instanceof Error
                 ? error.message
                 : "The challenge demo stage failed unexpectedly.",
+          },
+          null,
+          2,
+        ),
+      );
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
+  async function runArrayMapStage(): Promise<void> {
+    setIsRunning(true);
+    try {
+      const run = await runArrayMapDemoStage(registry);
+      setResult(JSON.stringify(run, null, 2));
+    } catch (error) {
+      setResult(
+        JSON.stringify(
+          {
+            accepted: false,
+            stageId: ARRAY_MAP_DEMO_STAGE.id,
+            error:
+              error instanceof Error
+                ? error.message
+                : "The Array.map demo stage failed unexpectedly.",
           },
           null,
           2,
@@ -240,6 +267,24 @@ export function DevToolPanel() {
                 </span>
               </Button>
             ))}
+            <Button
+              className="h-auto justify-start whitespace-normal text-left"
+              disabled={isRunning}
+              onClick={() => void runArrayMapStage()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Play aria-hidden="true" />
+              <span>
+                <span className="block font-semibold">
+                  {ARRAY_MAP_DEMO_STAGE.title}
+                </span>
+                <span className="block text-[0.62rem] font-normal text-muted-foreground">
+                  {ARRAY_MAP_DEMO_STAGE.description}
+                </span>
+              </span>
+            </Button>
           </div>
         </details>
 

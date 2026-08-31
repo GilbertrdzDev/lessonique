@@ -142,9 +142,10 @@ test.describe("classroom shell", () => {
     });
   });
 
-  test("runs the responsive menu setup, HTML wait, and tracked mobile CSS scene from the Dev Panel", async ({
+  test("runs the responsive menu HTML, CSS, and JavaScript scenes from the Dev Panel", async ({
     page,
   }, testInfo) => {
+    test.setTimeout(90_000);
     test.skip(testInfo.project.name !== "desktop-chromium");
     await expect(
       page.getByRole("combobox", { name: "Environment profile" }),
@@ -176,10 +177,13 @@ test.describe("classroom shell", () => {
     await expect(invocationResult).toContainText('"accepted": true');
     const guide = page.getByLabel("Teaching guide");
     await expect(guide).toContainText("Confirm the structure in context", {
-      timeout: 15_000,
+      timeout: 30_000,
     });
     await expect(guide).toContainText("normalized interaction");
     const preview = page.frameLocator("[data-preview-viewport]:visible iframe");
+    await expect(page.locator(".sp-loading:visible")).toHaveCount(0, {
+      timeout: 30_000,
+    });
     await preview.getByRole("button", { name: "Explore routes" }).click();
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
       timeout: 5_000,
@@ -191,7 +195,7 @@ test.describe("classroom shell", () => {
     await expect(invocationResult).toContainText('"stageId": "css"');
     await expect(invocationResult).toContainText('"accepted": true');
     await expect(guide).toContainText("Follow the control into the mobile preview", {
-      timeout: 15_000,
+      timeout: 30_000,
     });
     await expect(page.locator("[data-preview-viewport]:visible")).toHaveAttribute(
       "data-preview-viewport",
@@ -235,7 +239,133 @@ test.describe("classroom shell", () => {
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
       timeout: 5_000,
     });
+
+    await challengeFixtures.getByRole("button", {
+      name: /Run JavaScript scene/u,
+    }).click();
+    await expect(invocationResult).toContainText('"stageId": "javascript"');
+    await expect(invocationResult).toContainText('"accepted": true');
+    await expect(guide).toContainText("Run the registered interaction", {
+      timeout: 30_000,
+    });
+    const menuButton = preview.getByRole("button", { name: "Menu" });
+    await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+    await menuButton.click();
+    await expect(menuButton).toHaveAttribute("aria-expanded", "true");
+    await expect(preview.getByRole("navigation")).toHaveAttribute(
+      "data-open",
+      "true",
+    );
+    await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
+      timeout: 5_000,
+    });
+
+    await challengeFixtures.getByRole("button", {
+      name: /Preview warning fixture/u,
+    }).click();
+    await expect(invocationResult).toContainText('"stageId": "warning"');
+    await expect(invocationResult).toContainText('"accepted": true');
+    await expect(
+      page.getByRole("status", { name: /Lessonique companion: warning/u }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(guide).toContainText("Preview bounded warning feedback");
+    await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
+      timeout: 10_000,
+    });
+
+    await challengeFixtures.getByRole("button", {
+      name: /Validate and close responsive menu/u,
+    }).click();
+    await expect(invocationResult).toContainText('"stageId": "complete"');
+    await expect(invocationResult).toContainText('"accepted": true');
+    await expect(
+      page.getByRole("status", { name: /Lessonique companion: success/u }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(guide).toContainText("Celebrate verified behavior");
+    await expect(guide).toContainText("Return to the completed plan", {
+      timeout: 10_000,
+    });
+    await expect(
+      page.getByRole("status", { name: /Lessonique companion: idle/u }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
+      timeout: 10_000,
+    });
     await testInfo.attach("lessonique-responsive-menu-mobile-scene", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
+  });
+
+  test("replaces the class with the Array.map JavaScript Console demo without reloading", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(60_000);
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await expect(
+      page.getByRole("combobox", { name: "Environment profile" }),
+    ).toBeEnabled();
+
+    const panel = page.locator('[data-slot="webmcp-dev-panel"]');
+    await panel.locator("summary").first().click();
+    const challengeFixtures = panel.locator("details").filter({
+      has: page.getByText("Challenge Demo fixtures", { exact: true }),
+    });
+    const invocationResult = panel.locator('pre[role="status"]');
+    await challengeFixtures.locator("summary").click();
+    await challengeFixtures.getByRole("button", {
+      name: /Set up responsive menu/u,
+    }).click();
+    await expect(invocationResult).toContainText('"accepted": true');
+    await expect(getWorkspaceTab(page, "index.html")).toBeVisible();
+    await page.evaluate(() => {
+      (window as unknown as { __lessoniqueDemoMarker?: string })
+        .__lessoniqueDemoMarker = "preserved";
+    });
+
+    await challengeFixtures.getByRole("button", {
+      name: /Run Array\.map\(\) demo/u,
+    }).click();
+    await expect(invocationResult).toContainText('"stageId": "array-map"');
+    await expect(invocationResult).toContainText('"accepted": true');
+    expect(
+      await page.evaluate(
+        () =>
+          (window as unknown as { __lessoniqueDemoMarker?: string })
+            .__lessoniqueDemoMarker,
+      ),
+    ).toBe("preserved");
+    await expect(
+      page.getByRole("combobox", { name: "Environment profile" }),
+    ).toHaveValue("profile.javascript-console");
+    await expect(getWorkspaceTab(page, "script.js")).toBeVisible();
+    await expect(getWorkspaceTab(page, "index.html")).toHaveCount(0);
+    await expect(getWorkspaceTab(page, "styles.css")).toHaveCount(0);
+
+    const guide = page.getByLabel("Teaching guide");
+    await expect(guide).toContainText("Transform every item with map", {
+      timeout: 15_000,
+    });
+    await expect(guide).toContainText("Read the validated console output", {
+      timeout: 15_000,
+    });
+    const consoleSurface = page.locator(
+      '[data-interaction-anchor="anchor.workspace-console"]',
+    );
+    await expect(consoleSurface).toBeVisible();
+    await expect(consoleSurface).toContainText("Scaled scores: 6, 10, 16", {
+      timeout: 15_000,
+    });
+    await expect(guide).toContainText("Keep the validated result", {
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByRole("status", { name: /Lessonique companion: success/u }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
+      timeout: 10_000,
+    });
+    await testInfo.attach("lessonique-array-map-console-scene", {
       body: await page.screenshot(),
       contentType: "image/png",
     });
