@@ -49,7 +49,7 @@ describe("classroom WebMCP tools", () => {
     ]);
   });
 
-  it("rejects unavailable initial scenes without creating partial state", async () => {
+  it("validates and starts an initial scene as part of guided lesson creation", async () => {
     const runtime = createP0WorkspaceRuntime();
     const registry = createRegistry(runtime);
     const input = createLessonInput("lesson.scene");
@@ -67,19 +67,20 @@ describe("classroom WebMCP tools", () => {
 
     expect(result).toEqual(
       expect.objectContaining({
-        ok: false,
-        status: "failed",
-        error: {
-          code: "scene_engine_unavailable",
-          message:
-            "Create the guided lesson without initialScene until the scene engine is available.",
-          recoverable: true,
-          supportedAlternatives: ["omit initialScene"],
-        },
+        ok: true,
+        status: "completed",
+        data: expect.objectContaining({
+          scene: expect.objectContaining({
+            sceneId: "scene.initial",
+            sceneStatus: "preparing",
+          }),
+        }),
       }),
     );
-    expect(runtime.lessonStore.getSnapshot().status).toBe("idle");
-    expect(runtime.store.getSnapshot().status).toBe("idle");
+    expect(runtime.lessonStore.getSnapshot().status).toBe("active");
+    expect(runtime.store.getSnapshot().status).toBe("ready");
+    expect(runtime.scene.store.getSnapshot().id).toBe("scene.initial");
+    await runtime.scene.runner.control("cancel", "scene.initial");
   });
 
   it("rejects invalid capability input before replacing an active lesson", async () => {
@@ -109,6 +110,37 @@ describe("classroom WebMCP tools", () => {
     );
     expect(runtime.lessonStore.getSnapshot()).toBe(previousLesson);
     expect(runtime.store.getSnapshot()).toBe(previousWorkspace);
+  });
+
+  it("rejects an invalid initial scene before creating partial classroom state", async () => {
+    const runtime = createP0WorkspaceRuntime();
+    const registry = createRegistry(runtime);
+    const input = createLessonInput("lesson.invalid-scene");
+    input.initialScene = {
+      id: "scene.invalid",
+      beats: [
+        {
+          id: "beat.invalid",
+          target: {
+            resolverId: "target.surface-anchor",
+            input: { anchorId: "anchor.learning-plan" },
+          },
+          effects: [{ effectId: "effect.unregistered" }],
+        },
+      ],
+    };
+
+    const result = await registry.invoke("create_guided_lesson", input);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: expect.objectContaining({ code: "invalid_teaching_scene" }),
+      }),
+    );
+    expect(runtime.lessonStore.getSnapshot().status).toBe("idle");
+    expect(runtime.store.getSnapshot().status).toBe("idle");
+    expect(runtime.scene.store.getSnapshot().status).toBe("idle");
   });
 
   it("resets the classroom idempotently through the real lifecycle", async () => {
@@ -150,6 +182,9 @@ function createRegistry(runtime: ReturnType<typeof createP0WorkspaceRuntime>) {
     workspaceController: runtime.controller,
     createGuidedLesson: runtime.createGuidedLesson,
     resetClassroom: runtime.resetClassroom,
+    sceneRunner: runtime.scene.runner,
+    sceneState: runtime.scene.store,
+    classroomLifecycle: runtime.classroomLifecycle,
   });
 }
 
@@ -201,7 +236,9 @@ function createLessonInput(lessonId: string) {
           id: string;
           beats: Array<{
             id: string;
-            guide: { body: string };
+            guide?: { body: string };
+            target?: { resolverId: string; input: Record<string, string> };
+            effects?: Array<{ effectId: string }>;
           }>;
         },
   };

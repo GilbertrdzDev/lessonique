@@ -9,8 +9,10 @@ import {
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
 import {
   ClassroomCleanupError,
+  ClassroomLifecycleService,
   CreateGuidedLessonUseCase,
   ResetClassroomUseCase,
+  createActiveLessonState,
   type ClassroomSnapshot,
   type CreateGuidedLessonCommand,
 } from "@/core/lesson";
@@ -31,6 +33,10 @@ import type {
   ToolExecutionResult,
 } from "./contracts";
 import { ToolInvocationError } from "./tool-invocation-service";
+import type {
+  PlayTeachingSceneData,
+  TeachingSceneToolService,
+} from "./teaching-scene-tools";
 
 export type CreateGuidedLessonData = ReturnType<typeof toClassroomData>;
 export type ResetClassroomData = ReturnType<typeof toResetData>;
@@ -41,18 +47,24 @@ export class ClassroomToolService {
   readonly #validator: CapabilityValidator;
   readonly #createLesson: CreateGuidedLessonUseCase;
   readonly #resetClassroom: ResetClassroomUseCase;
+  readonly #scenes?: TeachingSceneToolService;
+  readonly #lifecycle?: ClassroomLifecycleService;
 
   constructor(dependencies: {
     workspace: WorkspaceController;
     registries: ProviderPlatformRegistries;
     createLesson: CreateGuidedLessonUseCase;
     resetClassroom: ResetClassroomUseCase;
+    scenes?: TeachingSceneToolService;
+    lifecycle?: ClassroomLifecycleService;
   }) {
     this.#workspace = dependencies.workspace;
     this.#registries = dependencies.registries;
     this.#validator = new CapabilityValidator(dependencies.registries);
     this.#createLesson = dependencies.createLesson;
     this.#resetClassroom = dependencies.resetClassroom;
+    this.#scenes = dependencies.scenes;
+    this.#lifecycle = dependencies.lifecycle;
   }
 
   validateCreate(input: CreateGuidedLessonInput): void {
@@ -61,17 +73,33 @@ export class ClassroomToolService {
 
   async create(
     input: CreateGuidedLessonInput,
+    signal?: AbortSignal,
   ): Promise<ToolExecutionResult<CreateGuidedLessonData>> {
     const command = this.#prepareCreate(input);
+    let snapshot: ClassroomSnapshot | undefined;
     try {
-      const snapshot = await this.#createLesson.execute(command);
+      snapshot = await this.#createLesson.execute(command);
+      const initialScene = input.initialScene
+        ? await this.#scenes!.play(input.initialScene, signal)
+        : undefined;
       return {
         ok: true,
         status: "completed",
         revision: snapshot.lesson.revision,
-        data: toClassroomData(snapshot),
+        data: toClassroomData(
+          snapshot,
+          initialScene?.data,
+          this.#lifecycle?.getSnapshot().total,
+        ),
       };
     } catch (error) {
+      if (snapshot && input.initialScene) {
+        try {
+          await this.#resetClassroom.execute({ scope: "all" });
+        } catch (rollbackError) {
+          throw normalizeClassroomError(rollbackError);
+        }
+      }
       throw normalizeClassroomError(error);
     }
   }
@@ -96,7 +124,7 @@ export class ClassroomToolService {
   }
 
   #prepareCreate(input: CreateGuidedLessonInput): CreateGuidedLessonCommand {
-    if (input.initialScene) {
+    if (input.initialScene && !this.#scenes) {
       throw new ToolInvocationError({
         code: "scene_engine_unavailable",
         message:
@@ -147,7 +175,7 @@ export class ClassroomToolService {
       throw normalizeClassroomError(error);
     }
 
-    return {
+    const command: CreateGuidedLessonCommand = {
       lesson: {
         id: input.lessonId,
         title: input.title,
@@ -169,6 +197,13 @@ export class ClassroomToolService {
       })),
       environment,
     };
+    if (input.initialScene) {
+      this.#scenes!.validate(
+        input.initialScene,
+        createActiveLessonState(command.lesson, command.steps),
+      );
+    }
+    return command;
   }
 }
 
@@ -385,7 +420,11 @@ function normalizeClassroomError(error: unknown): Error {
   return error instanceof Error ? error : new Error("The classroom operation failed.");
 }
 
-function toClassroomData(snapshot: ClassroomSnapshot) {
+function toClassroomData(
+  snapshot: ClassroomSnapshot,
+  scene?: PlayTeachingSceneData,
+  lifecycleResources = snapshot.lifecycle.total,
+) {
   return {
     lesson: {
       id: snapshot.lesson.lesson?.id,
@@ -400,11 +439,12 @@ function toClassroomData(snapshot: ClassroomSnapshot) {
       activeFile: snapshot.workspace.activeFilePath,
       activeSurfaceId: snapshot.workspace.activeSurfaceId,
     },
+    scene: scene ?? null,
     evidence: {
       lessonRevision: snapshot.lesson.revision,
       environmentRevision: snapshot.workspace.environmentRevision,
       runtimeRevision: snapshot.workspace.runtime.revision,
-      lifecycleResources: snapshot.lifecycle.total,
+      lifecycleResources,
     },
   };
 }

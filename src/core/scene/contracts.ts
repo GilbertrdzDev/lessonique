@@ -76,6 +76,11 @@ export interface SceneSnapshot {
   target?: TargetRef;
   wait?: LocalWaitCondition;
   assistant: AssistantSnapshot;
+  error?: {
+    code: string;
+    message: string;
+    recoverable: boolean;
+  };
   revision: number;
 }
 

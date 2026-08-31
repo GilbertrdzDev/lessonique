@@ -6,6 +6,8 @@ import { InteractionAnchorAdapter } from "@/adapters/surface/interaction-anchor-
 import {
   ClassroomLifecycleService,
   CreateGuidedLessonUseCase,
+  AssistantIntentMapper,
+  InteractionTracker,
   LessonStore,
   ResetClassroomUseCase,
 } from "@/core/lesson";
@@ -28,12 +30,14 @@ import {
 
 import {
   createP0ProviderPlatform,
+  P0_ASSISTANT_STATE_IDS,
   P0_ENVIRONMENT_ACTION_IDS,
   P0_INTERACTION_EVENT_TYPE_IDS,
   P0_RUNTIME_PROVIDER_IDS,
   P0_SURFACE_IDS,
   P0_TARGET_RESOLVER_IDS,
 } from "./provider-platform";
+import { createP0SceneRuntime, type P0SceneRuntime } from "./scene-runtime";
 
 export interface P0WorkspaceRuntime {
   registries: ProviderPlatformRegistries;
@@ -45,6 +49,9 @@ export interface P0WorkspaceRuntime {
   resetClassroom: ResetClassroomUseCase;
   codeIntelligence: P0CodeIntelligenceRuntime;
   validation: P0ValidationRuntime;
+  interactionTracker: InteractionTracker;
+  assistantIntents: AssistantIntentMapper;
+  scene: P0SceneRuntime;
   monacoEditorAdapter: MonacoEditorAdapter;
   previewSurfaceAdapter: PreviewSurfaceAdapter;
   consoleSurfaceAdapter: ConsoleSurfaceAdapter;
@@ -66,6 +73,8 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     focusActionId: P0_ENVIRONMENT_ACTION_IDS.focusEditor,
     openFile: async (path) => controller.openFile(path),
     getActiveFilePath: () => store.getSnapshot().activeFilePath,
+    editorChangeEventTypeId: P0_INTERACTION_EVENT_TYPE_IDS.editorChange,
+    getEnvironmentRevision: () => store.getSnapshot().environmentRevision,
   });
   const previewSurfaceAdapter = new PreviewSurfaceAdapter({
     surfaceId: P0_SURFACE_IDS.preview,
@@ -132,6 +141,19 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
   };
   const createGuidedLesson = new CreateGuidedLessonUseCase(classroomDependencies);
   const resetClassroom = new ResetClassroomUseCase(classroomDependencies);
+  const assistantIntents = new AssistantIntentMapper(registries, {
+    thinking: P0_ASSISTANT_STATE_IDS.thinking,
+    success: P0_ASSISTANT_STATE_IDS.success,
+    warning: P0_ASSISTANT_STATE_IDS.warning,
+  });
+  const interactionTracker = new InteractionTracker({
+    store: lessonStore,
+    platform: registries,
+    lifecycle: classroomLifecycle,
+    assistantIntents,
+    getEnvironmentRevision: () => store.getSnapshot().environmentRevision,
+    onInteraction: (event) => controller.recordInteraction(event),
+  });
 
   let analyzedFiles = store.getSnapshot().files;
   const unsubscribeCodeAnalysis = store.subscribe(() => {
@@ -155,15 +177,24 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     });
   });
 
-  const interactionSubscription = new AbortController();
-  previewSurfaceAdapter.subscribeToInteractions(
-    (event) => controller.recordInteraction(event),
-    interactionSubscription.signal,
-  );
-  interactionAnchorAdapter.subscribeToInteractions(
-    (event) => controller.recordInteraction(event),
-    interactionSubscription.signal,
-  );
+  interactionTracker.attachSources([
+    monacoEditorAdapter,
+    previewSurfaceAdapter,
+    interactionAnchorAdapter,
+  ]);
+  const scene = createP0SceneRuntime({
+    registries,
+    store,
+    controller,
+    lessonStore,
+    classroomLifecycle,
+    interactionTracker,
+    validation,
+    monacoEditorAdapter,
+    previewSurfaceAdapter,
+    consoleSurfaceAdapter,
+    interactionAnchorAdapter,
+  });
 
   return {
     registries,
@@ -175,13 +206,17 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     resetClassroom,
     codeIntelligence,
     validation,
+    interactionTracker,
+    assistantIntents,
+    scene,
     monacoEditorAdapter,
     previewSurfaceAdapter,
     consoleSurfaceAdapter,
     interactionAnchorAdapter,
     sandpackRuntimeAdapter,
     async dispose() {
-      interactionSubscription.abort();
+      await scene.runner.dispose();
+      interactionTracker.detachSources();
       unsubscribeCodeAnalysis();
       codeIntelligence.dispose();
       await classroomLifecycle.cleanup("all", "cancellation");

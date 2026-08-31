@@ -10,6 +10,7 @@ import type {
 import { CapabilityCatalog } from "@/core/platform/capability-catalog";
 import type { TargetRef } from "@/core/platform/contracts";
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
+import type { SceneStore } from "@/core/scene";
 import type { WorkspaceStateReader } from "@/core/workspace";
 
 import type {
@@ -40,6 +41,7 @@ export interface InspectClassroomDependencies {
   diagnostics: DiagnosticSnapshotStore;
   validationResults: ValidationResultSnapshotStore;
   activity: ToolActivityLogger;
+  scene?: SceneStore;
 }
 
 export class InspectClassroomService {
@@ -147,11 +149,17 @@ export class InspectClassroomService {
     }
     if (sections.has("scene")) {
       const lifecycle = this.#dependencies.lifecycle.getSnapshot();
+      const scene = this.#dependencies.scene?.getSnapshot();
       data.scene = {
-        status: lifecycle.counts.scene > 0 ? "active" : "idle",
-        activeSceneId: null,
-        activeTarget: null,
-        activeWait: lesson.waits.find(({ status }) => status === "pending")?.id ?? null,
+        status: scene?.status ?? (lifecycle.counts.scene > 0 ? "active" : "idle"),
+        activeSceneId: scene?.id ?? null,
+        activeBeatId: scene?.activeBeatId ?? null,
+        activeTarget: scene?.target ? structuredClone(scene.target) : null,
+        activeWait:
+          (scene?.wait ? structuredClone(scene.wait) : undefined) ??
+          lesson.waits.find(({ status }) => status === "pending")?.id ??
+          null,
+        error: scene?.error ? structuredClone(scene.error) : null,
         resources: {
           scenes: lifecycle.counts.scene,
           waits: lifecycle.counts.wait,
@@ -160,11 +168,18 @@ export class InspectClassroomService {
       };
     }
     if (sections.has("assistant")) {
+      const sceneSnapshot = this.#dependencies.scene?.getSnapshot();
+      const sceneAssistant =
+        sceneSnapshot?.status !== "idle" ? sceneSnapshot?.assistant : undefined;
       data.assistant = {
-        status: lesson.agent.status,
-        stateId: lesson.agent.assistantIntent?.stateId ?? null,
+        status: sceneAssistant?.status ?? lesson.agent.status,
+        stateId:
+          sceneAssistant?.stateId ?? lesson.agent.assistantIntent?.stateId ?? null,
+        sceneId: sceneAssistant?.sceneId ?? null,
+        beatId: sceneAssistant?.beatId ?? null,
         lessonStepId: lesson.agent.assistantIntent?.lessonStepId ?? null,
-        visible: Boolean(lesson.agent.assistantIntent),
+        visible:
+          sceneAssistant?.visible ?? Boolean(lesson.agent.assistantIntent),
       };
     }
     if (sections.has("interaction_targets")) {

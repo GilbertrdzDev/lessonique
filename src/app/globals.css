@@ -223,6 +223,76 @@
   color: #7ca0b4 !important;
 }
 
+.monaco-editor .lessonique-guided-code-range {
+  border-radius: 0.25rem;
+  background: color-mix(in oklch, var(--primary) 18%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in oklch, var(--primary) 75%, white);
+}
+
+.lessonique-companion .companion-body {
+  animation: lessonique-companion-float 2.8s ease-in-out infinite;
+  transform-origin: 60px 75px;
+}
+
+.lessonique-companion .companion-eye {
+  animation: lessonique-companion-blink 4.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.lessonique-companion[data-assistant-state="assistant.pointing"]
+  .companion-arm-point {
+  transform: translate(8px, -7px) rotate(-18deg);
+  transform-origin: 96px 74px;
+}
+
+.lessonique-companion[data-assistant-state="assistant.success"]
+  .companion-mouth {
+  d: path("M50 80q10 14 20 0");
+}
+
+.lessonique-companion[data-assistant-state="assistant.warning"]
+  .companion-mouth {
+  d: path("M52 87q8-7 16 0");
+}
+
+.lessonique-companion[data-assistant-state="assistant.thinking"]
+  .companion-eye-right {
+  transform: scaleY(0.35);
+}
+
+.lessonique-companion[data-assistant-state="assistant.success"]
+  .companion-rings {
+  stroke: var(--success);
+}
+
+.lessonique-companion[data-assistant-state="assistant.warning"]
+  .companion-rings {
+  stroke: var(--warning);
+}
+
+@keyframes lessonique-companion-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes lessonique-companion-blink {
+  0%,
+  44%,
+  50%,
+  100% {
+    transform: scaleY(1);
+  }
+  47% {
+    transform: scaleY(0.12);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -231,5 +301,10 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .lessonique-companion .companion-body,
+  .lessonique-companion .companion-eye {
+    animation: none !important;
   }
 }

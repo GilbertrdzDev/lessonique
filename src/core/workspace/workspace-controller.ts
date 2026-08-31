@@ -245,6 +245,26 @@ export class WorkspaceController {
     });
   }
 
+  activateSurface(surfaceId: SurfaceId): void {
+    const state = this.#store.getSnapshot();
+    const surface = state.surfaces.find(
+      ({ id, visible }) => id === surfaceId && visible,
+    );
+    if (!surface) {
+      throw new WorkspaceValidationError(
+        `Surface "${surfaceId}" must be visible before it can be activated.`,
+      );
+    }
+    if (state.activeSurfaceId !== surfaceId) {
+      this.#store.commit({
+        ...state,
+        activeSurfaceId: surfaceId,
+        environmentRevision: state.environmentRevision + 1,
+      });
+    }
+    this.#surfaceAdapters.require(surfaceId).activate?.();
+  }
+
   async configureSurfaces(
     configurations: readonly SurfaceConfiguration[],
   ): Promise<void> {

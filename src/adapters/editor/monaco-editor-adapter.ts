@@ -3,6 +3,7 @@ import type { editor, IDisposable, IPosition, IRange } from "monaco-editor";
 import type { TargetRef } from "@/core/platform/contracts";
 import type {
   EnvironmentActionId,
+  InteractionEventTypeId,
   SurfaceId,
   TargetResolverId,
 } from "@/core/platform/identifiers";
@@ -15,6 +16,8 @@ import type { SurfaceAdapter } from "@/core/workspace/surface-adapter";
 import {
   ObservableTargetHandle,
   type GuidanceTargetAdapter,
+  type InteractionEventListener,
+  type InteractionSourceAdapter,
   type ResolvedTargetHandle,
   type ResolvedTargetSnapshot,
   type TargetGeometry,
@@ -35,6 +38,7 @@ export interface MonacoEditorLike {
   onDidScrollChange(listener: () => void): IDisposable;
   onDidLayoutChange(listener: () => void): IDisposable;
   onDidChangeModel(listener: () => void): IDisposable;
+  onDidChangeModelContent?(listener: () => void): IDisposable;
 }
 
 export interface CodeTargetInput {
@@ -51,17 +55,26 @@ export interface MonacoEditorAdapterOptions {
   focusActionId: EnvironmentActionId;
   openFile(path: string): Promise<void>;
   getActiveFilePath(): string | undefined;
+  editorChangeEventTypeId?: InteractionEventTypeId;
+  getEnvironmentRevision?(): number;
+  now?(): string;
 }
 
 export class MonacoEditorAdapter
-  implements SurfaceAdapter, GuidanceTargetAdapter
+  implements SurfaceAdapter, GuidanceTargetAdapter, InteractionSourceAdapter
 {
   readonly surfaceId: SurfaceId;
   readonly #codeTargetResolverId: TargetResolverId;
   readonly #focusActionId: EnvironmentActionId;
   readonly #openFile: (path: string) => Promise<void>;
   readonly #getActiveFilePath: () => string | undefined;
+  readonly #editorChangeEventTypeId?: InteractionEventTypeId;
+  readonly #getEnvironmentRevision: () => number;
+  readonly #now: () => string;
+  readonly #interactionListeners = new Set<InteractionEventListener>();
   #editor?: MonacoEditorLike;
+  #contentSubscription?: IDisposable;
+  #eventSequence = 0;
   #configuration?: SurfaceState;
   #focusRequested = false;
 
@@ -71,10 +84,17 @@ export class MonacoEditorAdapter
     this.#focusActionId = options.focusActionId;
     this.#openFile = options.openFile;
     this.#getActiveFilePath = options.getActiveFilePath;
+    this.#editorChangeEventTypeId = options.editorChangeEventTypeId;
+    this.#getEnvironmentRevision = options.getEnvironmentRevision ?? (() => 0);
+    this.#now = options.now ?? (() => new Date().toISOString());
   }
 
   attach(editorInstance: MonacoEditorLike): () => void {
     this.#editor = editorInstance;
+    this.#contentSubscription?.dispose();
+    this.#contentSubscription = editorInstance.onDidChangeModelContent?.(() =>
+      this.#emitEditorChange(),
+    );
     this.#applyEditorOptions();
     if (this.#focusRequested) {
       this.#focusRequested = false;
@@ -82,9 +102,23 @@ export class MonacoEditorAdapter
     }
     return () => {
       if (this.#editor === editorInstance) {
+        this.#contentSubscription?.dispose();
+        this.#contentSubscription = undefined;
         this.#editor = undefined;
       }
     };
+  }
+
+  subscribeToInteractions(
+    listener: InteractionEventListener,
+    signal: AbortSignal,
+  ): void {
+    this.#interactionListeners.add(listener);
+    signal.addEventListener(
+      "abort",
+      () => this.#interactionListeners.delete(listener),
+      { once: true },
+    );
   }
 
   async configure(configuration: SurfaceState): Promise<void> {
@@ -240,6 +274,22 @@ export class MonacoEditorAdapter
       height: Math.max(start.height, end.top + end.height - start.top),
     };
     return { status: "resolved", geometry };
+  }
+
+  #emitEditorChange(): void {
+    if (!this.#editorChangeEventTypeId) return;
+    const activeFilePath = this.#getActiveFilePath();
+    const event: import("@/core/platform/contracts").InteractionEvent = {
+      id: `editor-interaction-${++this.#eventSequence}`,
+      typeId: this.#editorChangeEventTypeId,
+      surfaceId: this.surfaceId,
+      environmentRevision: this.#getEnvironmentRevision(),
+      occurredAt: this.#now(),
+      ...(activeFilePath
+        ? { summary: `Workspace file "${activeFilePath}" changed.` }
+        : {}),
+    };
+    this.#interactionListeners.forEach((listener) => listener(event));
   }
 }
 

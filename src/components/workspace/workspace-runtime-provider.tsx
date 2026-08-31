@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { AssistantOverlayHost } from "@/components/scene/assistant-overlay-host";
+
 import {
   createP0WorkspaceRuntime,
   type P0WorkspaceRuntime,
@@ -19,6 +21,7 @@ export function WorkspaceRuntimeProvider({ children }: Readonly<{ children: Reac
   return (
     <WorkspaceRuntimeContext.Provider value={workspace}>
       {children}
+      <AssistantOverlayHost presentationStore={workspace.scene.presentation} />
     </WorkspaceRuntimeContext.Provider>
   );
 }

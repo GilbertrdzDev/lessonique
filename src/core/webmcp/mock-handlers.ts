@@ -2,15 +2,19 @@ import { CapabilityCatalog } from "@/core/platform/capability-catalog";
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
 import type {
   DiagnosticSnapshotStore,
+  ValidationEngine,
   ValidationResultSnapshotStore,
   CodeIntelligenceService,
 } from "@/core/code-intelligence";
 import type {
   ClassroomLifecycleService,
+  AssistantIntentMapper,
   CreateGuidedLessonUseCase,
   LessonStateReader,
+  LessonStoreAdapter,
   ResetClassroomUseCase,
 } from "@/core/lesson";
+import type { SceneRunner, SceneStore } from "@/core/scene";
 import type { WorkspaceStateReader } from "@/core/workspace";
 import type { WorkspaceController } from "@/core/workspace/workspace-controller";
 import type { z } from "zod";
@@ -19,9 +23,13 @@ import {
   CapabilityValidator,
   GetSystemCapabilitiesService,
 } from "./capabilities";
+import { ApplyWorkspaceChangesService } from "./apply-workspace-changes";
 import { ConfigureLearningEnvironmentService } from "./configure-learning-environment";
 import { ClassroomToolService } from "./classroom-tools";
+import { ExecuteEnvironmentActionService } from "./execute-environment-action";
+import { EvaluateCurrentStepService } from "./evaluate-current-step";
 import { InspectClassroomService } from "./inspect-classroom";
+import { TeachingSceneToolService } from "./teaching-scene-tools";
 import type { ToolHandler, ToolExecutionResult, WebMCPToolInputMap } from "./contracts";
 import { WEBMCP_TOOL_INPUT_SCHEMAS } from "./schemas";
 import { ToolRegistry, type ToolDefinition } from "./tool-registry";
@@ -83,11 +91,16 @@ export type EarlyWebMCPIntegrations = {
   createGuidedLesson?: CreateGuidedLessonUseCase;
   resetClassroom?: ResetClassroomUseCase;
   lessonState?: LessonStateReader;
+  lessonStore?: LessonStoreAdapter;
   workspaceState?: WorkspaceStateReader;
   classroomLifecycle?: ClassroomLifecycleService;
   codeIntelligence?: CodeIntelligenceService;
   diagnostics?: DiagnosticSnapshotStore;
   validationResults?: ValidationResultSnapshotStore;
+  sceneRunner?: SceneRunner;
+  sceneState?: SceneStore;
+  validationEngine?: ValidationEngine;
+  assistantIntents?: AssistantIntentMapper;
 };
 
 export function createEarlyWebMCPToolRegistry(
@@ -116,6 +129,32 @@ export function createEarlyWebMCPToolRegistry(
         registries,
       )
     : undefined;
+  const workspaceChanges = integrations.workspaceController
+    ? new ApplyWorkspaceChangesService(
+        integrations.workspaceController,
+        registries,
+      )
+    : undefined;
+  const environmentActions = integrations.workspaceController
+    ? new ExecuteEnvironmentActionService(
+        integrations.workspaceController,
+        registries,
+      )
+    : undefined;
+  const scenes = integrations.sceneRunner
+    ? new TeachingSceneToolService(integrations.sceneRunner)
+    : undefined;
+  const evaluation =
+    integrations.lessonStore &&
+    integrations.validationEngine &&
+    integrations.assistantIntents
+      ? new EvaluateCurrentStepService({
+          lesson: integrations.lessonStore,
+          validation: integrations.validationEngine,
+          registries,
+          assistantIntents: integrations.assistantIntents,
+        })
+      : undefined;
   const classroom =
     integrations.workspaceController &&
     integrations.createGuidedLesson &&
@@ -125,6 +164,8 @@ export function createEarlyWebMCPToolRegistry(
           registries,
           createLesson: integrations.createGuidedLesson,
           resetClassroom: integrations.resetClassroom,
+          scenes,
+          lifecycle: integrations.classroomLifecycle,
         })
       : undefined;
   const inspection =
@@ -142,6 +183,7 @@ export function createEarlyWebMCPToolRegistry(
           intelligence: integrations.codeIntelligence,
           diagnostics: integrations.diagnostics,
           validationResults: integrations.validationResults,
+          scene: integrations.sceneState,
           activity: registry.activityLogger,
         })
       : undefined;
@@ -154,7 +196,7 @@ export function createEarlyWebMCPToolRegistry(
         ...TOOL_METADATA.create_guided_lesson,
         inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.create_guided_lesson,
         capabilityCheck: (input) => classroom.validateCreate(input),
-        handler: (input) => classroom.create(input),
+        handler: (input, context) => classroom.create(input, context.signal),
       });
       continue;
     }
@@ -183,6 +225,60 @@ export function createEarlyWebMCPToolRegistry(
         inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.configure_learning_environment,
         capabilityCheck: (input) => configuration.validate(input),
         handler: (input) => configuration.execute(input),
+      });
+      continue;
+    }
+    if (name === "apply_workspace_changes" && workspaceChanges) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.apply_workspace_changes,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.apply_workspace_changes,
+        capabilityCheck: (input) => workspaceChanges.validate(input),
+        handler: (input) => workspaceChanges.execute(input),
+      });
+      continue;
+    }
+    if (name === "execute_environment_action" && environmentActions) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.execute_environment_action,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.execute_environment_action,
+        capabilityCheck: (input) => environmentActions.validate(input),
+        handler: (input) => environmentActions.execute(input),
+      });
+      continue;
+    }
+    if (name === "play_teaching_scene" && scenes) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.play_teaching_scene,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.play_teaching_scene,
+        capabilityCheck: (input) => {
+          scenes.validate(input);
+        },
+        handler: (input, context) => scenes.play(input, context.signal),
+      });
+      continue;
+    }
+    if (name === "control_teaching_scene" && scenes) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.control_teaching_scene,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.control_teaching_scene,
+        handler: (input, context) => scenes.control(input, context.signal),
+      });
+      continue;
+    }
+    if (name === "evaluate_current_step" && evaluation) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.evaluate_current_step,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.evaluate_current_step,
+        capabilityCheck: (input) => {
+          evaluation.validate(input);
+        },
+        handler: (input, context) =>
+          evaluation.execute(input, context.signal),
       });
       continue;
     }

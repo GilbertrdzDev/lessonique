@@ -64,7 +64,11 @@ export const P0_TARGET_RESOLVER_IDS = {
 export const P0_GUIDANCE_EFFECT_IDS = {
   focus: "effect.focus",
   spotlight: "effect.spotlight",
+  highlight: "effect.highlight",
   point: "effect.point",
+  pointer: "effect.pointer",
+  callout: "effect.callout",
+  clear: "effect.clear",
 } as const;
 
 export const P0_ASSISTANT_STATE_IDS = {
@@ -827,6 +831,33 @@ const GUIDANCE_EFFECTS = [
     displayName: "Point",
     inputSchema: EMPTY_INPUT_SCHEMA,
   },
+  {
+    id: P0_GUIDANCE_EFFECT_IDS.highlight,
+    displayName: "Highlight",
+    inputSchema: EMPTY_INPUT_SCHEMA,
+  },
+  {
+    id: P0_GUIDANCE_EFFECT_IDS.pointer,
+    displayName: "Pointer",
+    inputSchema: EMPTY_INPUT_SCHEMA,
+  },
+  {
+    id: P0_GUIDANCE_EFFECT_IDS.callout,
+    displayName: "Callout",
+    inputSchema: {
+      type: "object",
+      properties: {
+        text: { type: "string", minLength: 1, maxLength: 300 },
+      },
+      required: ["text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    id: P0_GUIDANCE_EFFECT_IDS.clear,
+    displayName: "Clear guidance",
+    inputSchema: EMPTY_INPUT_SCHEMA,
+  },
 ] satisfies readonly GuidanceEffectDefinition[];
 
 const INTERACTION_EVENT_TYPES = [
@@ -884,7 +915,11 @@ const TARGET_RESOLVERS: readonly TargetResolverDefinition[] = [
     supportedEffectIds: [
       P0_GUIDANCE_EFFECT_IDS.focus,
       P0_GUIDANCE_EFFECT_IDS.spotlight,
+      P0_GUIDANCE_EFFECT_IDS.highlight,
       P0_GUIDANCE_EFFECT_IDS.point,
+      P0_GUIDANCE_EFFECT_IDS.pointer,
+      P0_GUIDANCE_EFFECT_IDS.callout,
+      P0_GUIDANCE_EFFECT_IDS.clear,
     ],
     supportedInteractionEventTypeIds: [
       P0_INTERACTION_EVENT_TYPE_IDS.editorChange,
@@ -902,7 +937,11 @@ const TARGET_RESOLVERS: readonly TargetResolverDefinition[] = [
     supportedEffectIds: [
       P0_GUIDANCE_EFFECT_IDS.focus,
       P0_GUIDANCE_EFFECT_IDS.spotlight,
+      P0_GUIDANCE_EFFECT_IDS.highlight,
       P0_GUIDANCE_EFFECT_IDS.point,
+      P0_GUIDANCE_EFFECT_IDS.pointer,
+      P0_GUIDANCE_EFFECT_IDS.callout,
+      P0_GUIDANCE_EFFECT_IDS.clear,
     ],
     supportedInteractionEventTypeIds: [
       P0_INTERACTION_EVENT_TYPE_IDS.previewClick,
@@ -922,7 +961,11 @@ const TARGET_RESOLVERS: readonly TargetResolverDefinition[] = [
     supportedEffectIds: [
       P0_GUIDANCE_EFFECT_IDS.focus,
       P0_GUIDANCE_EFFECT_IDS.spotlight,
+      P0_GUIDANCE_EFFECT_IDS.highlight,
       P0_GUIDANCE_EFFECT_IDS.point,
+      P0_GUIDANCE_EFFECT_IDS.pointer,
+      P0_GUIDANCE_EFFECT_IDS.callout,
+      P0_GUIDANCE_EFFECT_IDS.clear,
     ],
     supportedInteractionEventTypeIds: [],
   },
@@ -938,7 +981,11 @@ const TARGET_RESOLVERS: readonly TargetResolverDefinition[] = [
     supportedEffectIds: [
       P0_GUIDANCE_EFFECT_IDS.focus,
       P0_GUIDANCE_EFFECT_IDS.spotlight,
+      P0_GUIDANCE_EFFECT_IDS.highlight,
       P0_GUIDANCE_EFFECT_IDS.point,
+      P0_GUIDANCE_EFFECT_IDS.pointer,
+      P0_GUIDANCE_EFFECT_IDS.callout,
+      P0_GUIDANCE_EFFECT_IDS.clear,
     ],
     supportedInteractionEventTypeIds: [
       P0_INTERACTION_EVENT_TYPE_IDS.surfaceActivate,

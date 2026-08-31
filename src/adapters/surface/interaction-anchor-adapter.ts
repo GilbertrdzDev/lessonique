@@ -95,7 +95,13 @@ export class InteractionAnchorAdapter
       };
     };
     const handle = new ObservableTargetHandle(measure());
-    const update = () => handle.update(measure());
+    const update = () => {
+      const element = this.#elements.get(anchorId);
+      if (element?.isConnected && isOutsideViewport(element.getBoundingClientRect())) {
+        element.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+      handle.update(measure());
+    };
     globalThis.addEventListener?.("resize", update);
     globalThis.addEventListener?.("scroll", update, true);
     const observer =
@@ -157,4 +163,11 @@ export class InteractionAnchorAdapter
     };
     this.#listeners.forEach((listener) => listener(event));
   }
+}
+
+function isOutsideViewport(rect: DOMRect): boolean {
+  const width = globalThis.innerWidth;
+  const height = globalThis.innerHeight;
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return false;
+  return rect.right < 0 || rect.bottom < 0 || rect.left > width || rect.top > height;
 }

@@ -186,6 +186,191 @@ test.describe("classroom shell", () => {
     );
   });
 
+  test("runs the complete reduced-motion companion scene through real WebMCP tools", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect(
+      page.locator('[data-interaction-anchor="anchor.learning-plan"]'),
+    ).toBeVisible();
+
+    const started = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      return tools.find(({ name }) => name === "play_teaching_scene")?.execute({
+        id: "scene.browser-companion",
+        allowManualNavigation: true,
+        beats: [
+          {
+            id: "beat.browser-guide",
+            target: {
+              resolverId: "target.surface-anchor",
+              input: { anchorId: "anchor.learning-plan" },
+            },
+            assistant: {
+              stateId: "assistant.pointing",
+              placementId: "placement.near-target",
+              visible: true,
+            },
+            effects: [
+              { effectId: "effect.focus" },
+              { effectId: "effect.spotlight" },
+              { effectId: "effect.highlight" },
+              { effectId: "effect.pointer" },
+              {
+                effectId: "effect.callout",
+                input: { text: "Inspect this registered learning target." },
+              },
+            ],
+            guide: {
+              title: "Responsive semantic guidance",
+              body: "Keep this first line.\nKeep this second line.",
+              supportingItems: ["First supporting item", "Second supporting item"],
+            },
+            caption: "Visual meaning remains complete without motion or audio.",
+            wait: {
+              kind: "interaction",
+              eventTypeId: "interaction.surface-activate",
+              target: {
+                resolverId: "target.surface-anchor",
+                input: { anchorId: "anchor.learning-plan" },
+              },
+              timeoutMs: 300_000,
+            },
+          },
+        ],
+      });
+    });
+
+    expect(started).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: "started",
+        data: expect.objectContaining({
+          sceneId: "scene.browser-companion",
+          structuredGuideBeatIds: ["beat.browser-guide"],
+        }),
+      }),
+    );
+
+    const overlay = page.getByLabel("Lessonique visual guidance");
+    const companion = page.getByRole("status", {
+      name: /Lessonique companion:/,
+    });
+    const guide = page.getByLabel("Teaching guide");
+    await expect(overlay).toHaveAttribute("data-reduced-motion", "true");
+    await expect(companion).toHaveAttribute(
+      "data-assistant-state",
+      "assistant.thinking",
+    );
+    await expect(guide).toContainText("Responsive semantic guidance");
+    await expect(guide).toContainText("Keep this first line.");
+    await expect(guide).toContainText("Keep this second line.");
+    await expect(guide).toContainText("Inspect this registered learning target.");
+    await expect(guide).toContainText(
+      "Visual meaning remains complete without motion or audio.",
+    );
+    const guideText = await guide.textContent();
+    expect(guideText?.indexOf("First supporting item")).toBeLessThan(
+      guideText?.indexOf("Second supporting item") ?? -1,
+    );
+    await expect(overlay).toHaveCSS("pointer-events", "none");
+    for (const effect of ["focus", "spotlight", "highlight", "point"]) {
+      await expect(
+        page.locator(`[data-guidance-effect="${effect}"]`),
+      ).toBeVisible();
+    }
+
+    await expect
+      .poll(() => targetAlignmentDelta(page))
+      .toBeLessThanOrEqual(2);
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await expect(
+      page.locator('[data-interaction-anchor="anchor.learning-plan"]'),
+    ).toBeInViewport();
+    await expect
+      .poll(() => targetAlignmentDelta(page))
+      .toBeLessThanOrEqual(2);
+    const guideBox = await guide.boundingBox();
+    expect(guideBox).not.toBeNull();
+    expect(guideBox!.x).toBeGreaterThanOrEqual(0);
+    expect(guideBox!.y).toBeGreaterThanOrEqual(0);
+    expect(guideBox!.x + guideBox!.width).toBeLessThanOrEqual(1366);
+    expect(guideBox!.y + guideBox!.height).toBeLessThanOrEqual(900);
+    const overlap = await guidanceTargetOverlap(page);
+    expect(overlap.area, JSON.stringify(overlap)).toBe(0);
+
+    const accessibility = await new AxeBuilder({ page })
+      .include('[data-slot="assistant-overlay-host"]')
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    expect(
+      accessibility.violations,
+      JSON.stringify(accessibility.violations, null, 2),
+    ).toEqual([]);
+    await testInfo.attach("lessonique-companion-scene", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
+
+    const pause = await invokeSceneControl(page, "pause");
+    expect(pause).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({ sceneStatus: "paused" }),
+      }),
+    );
+    await expect(guide).toContainText("Paused");
+    const resume = await invokeSceneControl(page, "resume");
+    expect(resume).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({ sceneStatus: "waiting" }),
+      }),
+    );
+
+    await page
+      .locator('[data-interaction-anchor="anchor.learning-plan"]')
+      .click();
+    await expect(overlay).toHaveCount(0);
+    const inspected = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      return tools.find(({ name }) => name === "inspect_classroom")?.execute({
+        include: ["scene", "assistant"],
+      });
+    });
+    expect(inspected).toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          scene: expect.objectContaining({
+            status: "completed",
+            activeSceneId: "scene.browser-companion",
+            activeTarget: null,
+          }),
+          assistant: expect.objectContaining({
+            stateId: "assistant.idle",
+            visible: false,
+          }),
+        }),
+      }),
+    );
+    expect(JSON.stringify(inspected)).not.toMatch(/geometry|selector|domnode/iu);
+  });
+
   test("creates and resets the rendered classroom through the real WebMCP lifecycle", async ({
     page,
   }, testInfo) => {
@@ -720,3 +905,83 @@ test.describe("classroom shell", () => {
     );
   });
 });
+
+async function targetAlignmentDelta(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    const target = document.querySelector<HTMLElement>(
+      '[data-interaction-anchor="anchor.learning-plan"]',
+    );
+    const focus = document.querySelector<HTMLElement>(
+      '[data-guidance-effect="focus"]',
+    );
+    if (!target || !focus) return Number.POSITIVE_INFINITY;
+    const targetRect = target.getBoundingClientRect();
+    const focusRect = focus.getBoundingClientRect();
+    return Math.max(
+      Math.abs(focusRect.left + 4 - targetRect.left),
+      Math.abs(focusRect.top + 4 - targetRect.top),
+      Math.abs(focusRect.width - 8 - targetRect.width),
+      Math.abs(focusRect.height - 8 - targetRect.height),
+    );
+  });
+}
+
+async function guidanceTargetOverlap(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    const target = document.querySelector<HTMLElement>(
+      '[data-interaction-anchor="anchor.learning-plan"]',
+    );
+    const guide = document.querySelector<HTMLElement>('[data-slot="visual-guide"]');
+    const wrapper = guide?.parentElement;
+    if (!target || !wrapper) {
+      return { area: Number.POSITIVE_INFINITY, guidance: null, target: null };
+    }
+    const targetRect = target.getBoundingClientRect();
+    const guidanceRect = wrapper.getBoundingClientRect();
+    const overlapWidth = Math.max(
+      0,
+      Math.min(targetRect.right, guidanceRect.right) -
+        Math.max(targetRect.left, guidanceRect.left),
+    );
+    const overlapHeight = Math.max(
+      0,
+      Math.min(targetRect.bottom, guidanceRect.bottom) -
+        Math.max(targetRect.top, guidanceRect.top),
+    );
+    return {
+      area: overlapWidth * overlapHeight,
+      guidance: {
+        left: guidanceRect.left,
+        top: guidanceRect.top,
+        right: guidanceRect.right,
+        bottom: guidanceRect.bottom,
+      },
+      target: {
+        left: targetRect.left,
+        top: targetRect.top,
+        right: targetRect.right,
+        bottom: targetRect.bottom,
+      },
+    };
+  });
+}
+
+async function invokeSceneControl(
+  page: import("@playwright/test").Page,
+  action: "pause" | "resume",
+) {
+  return page.evaluate(async (requestedAction) => {
+    const tools = (
+      window as unknown as {
+        __lessoniqueRegisteredTools: Array<{
+          name: string;
+          execute: (input: unknown) => Promise<unknown>;
+        }>;
+      }
+    ).__lessoniqueRegisteredTools;
+    return tools.find(({ name }) => name === "control_teaching_scene")?.execute({
+      action: requestedAction,
+      sceneId: "scene.browser-companion",
+    });
+  }, action);
+}

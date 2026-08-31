@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import {
+  useEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -28,6 +29,7 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import {
   activityFeedMock,
   learningPlanMock,
@@ -35,6 +37,7 @@ import {
   type ActivityKind,
 } from "@/features/classroom/classroom-mocks";
 import { cn } from "@/lib/utils";
+import { P0_INTERACTION_ANCHOR_IDS } from "@/providers/p0";
 
 const MINIMUM_PANEL_WIDTH = 320;
 const MAXIMUM_PANEL_WIDTH = 520;
@@ -98,6 +101,7 @@ function AgentStatus() {
 }
 
 function LearningPlan() {
+  const anchorRef = useInteractionAnchor(P0_INTERACTION_ANCHOR_IDS.plan);
   const currentStepIndex = learningPlanMock.findIndex(
     (step) => step.state === "current",
   );
@@ -106,6 +110,8 @@ function LearningPlan() {
     <section
       aria-labelledby="learning-plan-title"
       className="rounded-2xl border p-3"
+      data-interaction-anchor={P0_INTERACTION_ANCHOR_IDS.plan}
+      ref={anchorRef}
     >
       <div className="mb-2.5 flex items-center justify-between gap-3 px-1">
         <h2 className="text-sm font-bold" id="learning-plan-title">
@@ -164,10 +170,13 @@ function LearningPlan() {
 }
 
 function ActivityFeed() {
+  const anchorRef = useInteractionAnchor(P0_INTERACTION_ANCHOR_IDS.activity);
   return (
     <section
       aria-labelledby="activity-title"
       className="rounded-2xl border p-3"
+      data-interaction-anchor={P0_INTERACTION_ANCHOR_IDS.activity}
+      ref={anchorRef}
     >
       <div className="mb-2.5 flex items-center justify-between gap-3 px-1">
         <h2 className="text-sm font-bold" id="activity-title">
@@ -211,6 +220,18 @@ function ActivityFeed() {
       </ol>
     </section>
   );
+}
+
+function useInteractionAnchor(anchorId: string) {
+  const { interactionAnchorAdapter } = useWorkspaceRuntime();
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const element = ref.current;
+    return element
+      ? interactionAnchorAdapter.registerElement(anchorId, element)
+      : undefined;
+  }, [anchorId, interactionAnchorAdapter]);
+  return ref;
 }
 
 function WebMCPStatusCard() {
