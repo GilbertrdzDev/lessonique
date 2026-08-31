@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PreviewBridge } from "./preview-bridge";
 import {
@@ -8,6 +8,8 @@ import {
 } from "./preview-bridge-script";
 
 describe("PreviewBridge", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("resolves typed preview anchors into host geometry", () => {
     const host = createHostWindow();
     const frameWindow = { postMessage: vi.fn() };
@@ -218,6 +220,99 @@ describe("PreviewBridge", () => {
     });
     expect(frameWindow.postMessage).toHaveBeenCalledTimes(validPostCount);
   });
+
+  it("replays active target requests when a newly loaded preview reports readiness", () => {
+    const host = createHostWindow();
+    const frameWindow = { postMessage: vi.fn() };
+    const frame = {
+      contentWindow: frameWindow,
+      getBoundingClientRect: () => ({ left: 0, top: 0 }),
+    } as unknown as HTMLIFrameElement;
+    const bridge = new PreviewBridge(host.window);
+    bridge.attach(frame);
+    bridge.resolveAnchor("hero.button", new AbortController().signal);
+    frameWindow.postMessage.mockClear();
+
+    host.emitMessage(frameWindow, {
+      channel: "lessonique.preview.v1",
+      direction: "preview-to-host",
+      type: "ready",
+    });
+
+    expect(frameWindow.postMessage).toHaveBeenCalledOnce();
+    expect(frameWindow.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "resolve",
+        requestId: "preview-target-1",
+        anchorId: "hero.button",
+      }),
+      "*",
+    );
+  });
+
+  it("releases preview tracking when handles and the bridge are disposed", () => {
+    const host = createHostWindow();
+    const frameWindow = { postMessage: vi.fn() };
+    const bridge = new PreviewBridge(host.window);
+    bridge.attach({
+      contentWindow: frameWindow,
+      getBoundingClientRect: () => ({ left: 0, top: 0 }),
+    } as unknown as HTMLIFrameElement);
+    const first = bridge.resolveAnchor(
+      "hero.first",
+      new AbortController().signal,
+    );
+    bridge.resolveAnchor("hero.second", new AbortController().signal);
+
+    first.dispose();
+    expect(frameWindow.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "release", requestId: "preview-target-1" }),
+      "*",
+    );
+
+    bridge.dispose();
+    expect(frameWindow.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "release", requestId: "preview-target-2" }),
+      "*",
+    );
+    expect(host.listenerCount()).toBe(0);
+  });
+
+  it("keeps one frame observer attached and disconnects replacements", () => {
+    const observers: Array<{
+      disconnect: ReturnType<typeof vi.fn>;
+      observe: ReturnType<typeof vi.fn>;
+    }> = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        disconnect = vi.fn();
+        observe = vi.fn();
+
+        constructor() {
+          observers.push(this);
+        }
+      },
+    );
+    const host = createHostWindow();
+    const bridge = new PreviewBridge(host.window);
+    const firstFrame = {
+      contentWindow: { postMessage: vi.fn() },
+    } as unknown as HTMLIFrameElement;
+    const secondFrame = {
+      contentWindow: { postMessage: vi.fn() },
+    } as unknown as HTMLIFrameElement;
+
+    bridge.attach(firstFrame);
+    const detachSecond = bridge.attach(secondFrame);
+
+    expect(observers).toHaveLength(2);
+    expect(observers[0]?.observe).toHaveBeenCalledOnce();
+    expect(observers[0]?.disconnect).toHaveBeenCalledOnce();
+    expect(observers[1]?.observe).toHaveBeenCalledOnce();
+    detachSecond();
+    expect(observers[1]?.disconnect).toHaveBeenCalledOnce();
+  });
 });
 
 describe("createSandpackPreviewFiles", () => {
@@ -263,6 +358,9 @@ function createHostWindow() {
   } as unknown as Window;
   return {
     window,
+    listenerCount() {
+      return [...listeners.values()].reduce((total, entries) => total + entries.size, 0);
+    },
     emit(type: string) {
       listeners.get(type)?.forEach((listener) => {
         if (typeof listener === "function") {

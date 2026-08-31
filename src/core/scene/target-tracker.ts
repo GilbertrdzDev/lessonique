@@ -23,6 +23,7 @@ export class TargetTracker {
   readonly #requestFrame: (callback: FrameRequestCallback) => number;
   #snapshot: TrackedTargetSnapshot;
   #frame?: number;
+  #pendingSnapshot?: ResolvedTargetSnapshot;
   #disposed = false;
 
   constructor(
@@ -96,6 +97,8 @@ export class TargetTracker {
     if (this.#disposed) return;
     this.#disposed = true;
     if (this.#frame !== undefined) this.#cancelFrame(this.#frame);
+    this.#frame = undefined;
+    this.#pendingSnapshot = undefined;
     this.#unsubscribe();
     this.#handle.dispose();
     this.#listeners.clear();
@@ -103,19 +106,23 @@ export class TargetTracker {
 
   #schedule(snapshot: ResolvedTargetSnapshot): void {
     if (this.#disposed) return;
-    if (this.#frame !== undefined) this.#cancelFrame(this.#frame);
+    this.#pendingSnapshot = structuredClone(snapshot);
+    if (this.#frame !== undefined) return;
     this.#frame = this.#requestFrame(() => {
       this.#frame = undefined;
+      const next = this.#pendingSnapshot;
+      this.#pendingSnapshot = undefined;
+      if (this.#disposed || !next) return;
       const wasLost = this.#snapshot.resolved.status === "lost";
       this.#snapshot = {
         target: structuredClone(this.#target),
         status:
-          snapshot.status === "lost"
+          next.status === "lost"
             ? "lost"
             : wasLost
               ? "recovered"
               : "resolved",
-        resolved: structuredClone(snapshot),
+        resolved: structuredClone(next),
       };
       this.#listeners.forEach((listener) => listener(this.getSnapshot()));
     });

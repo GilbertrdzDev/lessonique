@@ -109,6 +109,10 @@ export const PREVIEW_BRIDGE_SCRIPT = String.raw`(() => {
     if (!message || message.channel !== channel || message.direction !== "host-to-preview") {
       return;
     }
+    if (message.type === "release" && typeof message.requestId === "string") {
+      tracked.delete(message.requestId);
+      return;
+    }
     const query = parseQuery(message.query);
     if (message.type === "resolve" && typeof message.requestId === "string" && isAnchorId(message.anchorId) && query) {
       tracked.set(message.requestId, { anchorId: message.anchorId, query });
@@ -159,6 +163,11 @@ export const PREVIEW_BRIDGE_SCRIPT = String.raw`(() => {
   }
   addEventListener("resize", scheduleUpdate);
   addEventListener("scroll", scheduleUpdate, true);
+  parent.postMessage({
+    channel,
+    direction: "preview-to-host",
+    type: "ready",
+  }, "*");
 })();`;
 
 export type SandpackPreviewFiles = Record<

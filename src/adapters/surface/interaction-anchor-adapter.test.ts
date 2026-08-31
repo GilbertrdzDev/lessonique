@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createP0ProviderPlatform } from "@/providers/p0";
 
 import { InteractionAnchorAdapter } from "./interaction-anchor-adapter";
 
 describe("InteractionAnchorAdapter", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("resolves registered semantic anchors and reports loss without selectors", async () => {
     const registries = createP0ProviderPlatform();
     const adapter = new InteractionAnchorAdapter({
@@ -31,6 +33,45 @@ describe("InteractionAnchorAdapter", () => {
     expect(() =>
       adapter.registerElement("anchor.unknown", element),
     ).toThrow(/does not contain/u);
+  });
+
+  it("bounds geometry observers to the active target handle", async () => {
+    const addEventListener = vi.fn();
+    const removeEventListener = vi.fn();
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal("addEventListener", addEventListener);
+    vi.stubGlobal("removeEventListener", removeEventListener);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe = observe;
+        disconnect = disconnect;
+      },
+    );
+    const registries = createP0ProviderPlatform();
+    const adapter = new InteractionAnchorAdapter({
+      resolverId: "target.surface-anchor",
+      activationEventTypeId: "interaction.surface-activate",
+      definitions: registries.interactionAnchors,
+      getEnvironmentRevision: () => 1,
+    });
+    const element = createElement();
+    adapter.registerElement("anchor.workspace-editor", element);
+
+    const handle = await adapter.resolveTarget(
+      {
+        resolverId: "target.surface-anchor",
+        input: { anchorId: "anchor.workspace-editor" },
+      },
+      new AbortController().signal,
+    );
+
+    expect(addEventListener).toHaveBeenCalledTimes(2);
+    expect(observe).toHaveBeenCalledOnce();
+    handle.dispose();
+    expect(removeEventListener).toHaveBeenCalledTimes(2);
+    expect(disconnect).toHaveBeenCalledOnce();
   });
 });
 

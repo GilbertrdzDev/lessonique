@@ -16,6 +16,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test:e2e": "pnpm build && playwright test",
+    "verify:release-boundaries": "node scripts/verify-release-boundaries.mjs",
+    "verify:release-performance": "node scripts/verify-release-performance.mjs",
     "typecheck": "node node_modules/@typescript/native/bin/tsc --noEmit",
     "test": "vitest run"
   },

@@ -7,6 +7,8 @@ import {
 import type { WorkspaceFile } from "@/core/workspace/contracts";
 import { cn } from "@/lib/utils";
 
+export const WORKSPACE_EDITOR_PANEL_ID = "workspace-editor-panel";
+
 export type WorkspaceTabsProps = Readonly<{
   activeFilePath?: string;
   files: readonly WorkspaceFile[];
@@ -108,7 +110,7 @@ export function WorkspaceTabs({
             }}
           >
             <button
-              aria-controls="workspace-editor-panel"
+              aria-controls={WORKSPACE_EDITOR_PANEL_ID}
               aria-pressed={isActive}
               className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
               data-workspace-tab-path={file.path}

@@ -42,6 +42,52 @@ describe("PreviewSurfaceAdapter", () => {
       "must-not-be-forwarded",
     );
   });
+
+  it("returns bounded fallbacks when the preview bridge and runtime are unavailable", async () => {
+    const adapter = createAdapter();
+
+    await expect(
+      adapter.resolveTarget(
+        {
+          resolverId: "target.preview-anchor",
+          input: { anchorId: "run.button" },
+        },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("The typed Preview Bridge is not attached.");
+    await expect(
+      adapter.executeAction("surface.preview.reload"),
+    ).resolves.toEqual({
+      actionId: "surface.preview.reload",
+      accepted: false,
+      message: "The preview runtime is not mounted.",
+    });
+  });
+
+  it("stops forwarding interactions after the preview bridge detaches", () => {
+    const host = createHostWindow();
+    const frameWindow = { postMessage: vi.fn() };
+    const bridge = new PreviewBridge(host.window);
+    bridge.attach({
+      contentWindow: frameWindow,
+      getBoundingClientRect: () => ({ left: 0, top: 0 }),
+    } as unknown as HTMLIFrameElement);
+    const adapter = createAdapter();
+    const detach = adapter.attachBridge(bridge);
+    const listener = vi.fn();
+    adapter.subscribeToInteractions(listener, new AbortController().signal);
+
+    detach();
+    host.emitMessage(frameWindow, {
+      channel: "lessonique.preview.v1",
+      direction: "preview-to-host",
+      type: "interaction",
+      eventType: "click",
+      anchorId: "run.button",
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+  });
 });
 
 function createAdapter(): PreviewSurfaceAdapter {

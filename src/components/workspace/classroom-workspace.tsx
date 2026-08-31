@@ -24,14 +24,15 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import dynamic from "next/dynamic";
 
-import { MonacoEditorSurface } from "@/components/workspace/monaco-editor-surface";
 import { ProjectFilesPanel } from "@/components/workspace/project-files-panel";
-import { SandpackRuntimeView, type PreviewViewport } from "@/components/workspace/sandpack-runtime-view";
+import type { PreviewViewport } from "@/components/workspace/sandpack-runtime-view";
 import { WorkspaceConsole } from "@/components/workspace/workspace-console";
 import {
   reorderWorkspaceTabPaths,
   type WorkspaceTabDropPosition,
+  WORKSPACE_EDITOR_PANEL_ID,
   WorkspaceTabs,
 } from "@/components/workspace/workspace-tabs";
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
@@ -52,6 +53,30 @@ import {
 const MINIMUM_PROJECT_FILES_WIDTH = 208;
 const MAXIMUM_PROJECT_FILES_WIDTH = 360;
 const DEFAULT_PROJECT_FILES_WIDTH = 256;
+
+const MonacoEditorSurface = dynamic(
+  () =>
+    import("@/components/workspace/monaco-editor-surface").then(
+      ({ MonacoEditorSurface: EditorSurface }) => EditorSurface,
+    ),
+  {
+    loading: () => (
+      <WorkspaceRuntimeLoading
+        id={WORKSPACE_EDITOR_PANEL_ID}
+        label="Loading code editor"
+      />
+    ),
+    ssr: false,
+  },
+);
+
+const SandpackRuntimeView = dynamic(
+  () =>
+    import("@/components/workspace/sandpack-runtime-view").then(
+      ({ SandpackRuntimeView: RuntimeView }) => RuntimeView,
+    ),
+  { ssr: false },
+);
 
 type ProjectFilesResizeSession = Readonly<{
   pointerId: number;
@@ -683,6 +708,22 @@ function WorkspaceAction({
     >
       <Icon aria-hidden="true" className="size-3.5" />
     </button>
+  );
+}
+
+function WorkspaceRuntimeLoading({
+  id,
+  label,
+}: Readonly<{ id?: string; label: string }>) {
+  return (
+    <div
+      aria-label={label}
+      className="grid min-h-52 flex-1 place-items-center text-sm text-muted-foreground"
+      id={id}
+      role="status"
+    >
+      {label}…
+    </div>
   );
 }
 

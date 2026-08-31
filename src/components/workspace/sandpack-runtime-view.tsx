@@ -56,18 +56,33 @@ export function SandpackRuntimeView({
     const bridge = new PreviewBridge(window);
     const detachAdapter = previewAdapter.attachBridge(bridge);
     let detachFrame: (() => void) | undefined;
-    let frameRequest = 0;
-    const attachFrame = () => {
+    let attachedFrame: HTMLIFrameElement | undefined;
+    let detachFrameLoad: (() => void) | undefined;
+    const attachCurrentFrame = () => {
       const frame = previewContainerRef.current?.querySelector("iframe");
-      if (frame) {
-        detachFrame = bridge.attach(frame);
-      } else {
-        frameRequest = window.requestAnimationFrame(attachFrame);
-      }
+      if (!frame || frame === attachedFrame) return;
+      detachFrame?.();
+      detachFrameLoad?.();
+      attachedFrame = frame;
+      const handleLoad = () => {
+        if (attachedFrame === frame) {
+          detachFrame?.();
+          detachFrame = bridge.attach(frame);
+        }
+      };
+      frame.addEventListener("load", handleLoad);
+      detachFrameLoad = () => frame.removeEventListener("load", handleLoad);
+      detachFrame = bridge.attach(frame);
     };
-    frameRequest = window.requestAnimationFrame(attachFrame);
+    const frameObserver = new MutationObserver(attachCurrentFrame);
+    const container = previewContainerRef.current;
+    if (container) {
+      frameObserver.observe(container, { childList: true, subtree: true });
+    }
+    attachCurrentFrame();
     return () => {
-      window.cancelAnimationFrame(frameRequest);
+      frameObserver.disconnect();
+      detachFrameLoad?.();
       detachFrame?.();
       detachAdapter();
       bridge.dispose();

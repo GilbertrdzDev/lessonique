@@ -2,7 +2,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { reorderWorkspaceTabPaths, WorkspaceTabs } from "./workspace-tabs";
+import {
+  reorderWorkspaceTabPaths,
+  WORKSPACE_EDITOR_PANEL_ID,
+  WorkspaceTabs,
+} from "./workspace-tabs";
 
 describe("WorkspaceTabs", () => {
   it("renders visible custom tabs and marks the active file", () => {
@@ -40,6 +44,7 @@ describe("WorkspaceTabs", () => {
     expect(markup).toContain("styles.css");
     expect(markup).not.toContain("hidden.js");
     expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain(`aria-controls="${WORKSPACE_EDITOR_PANEL_ID}"`);
     expect(markup).toContain('data-workspace-tab-path="index.html"');
     expect(markup).toContain('aria-label="Close file tab styles.css"');
     expect(markup).toContain('draggable="true"');

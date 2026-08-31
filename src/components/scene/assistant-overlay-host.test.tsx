@@ -152,4 +152,43 @@ describe("AssistantOverlayHost", () => {
     expect(html).toContain("Focus remains available.");
     expect(html).toContain("Motion is optional; meaning is not.");
   });
+
+  it("keeps structured guidance visible when the target and assistant renderer are unavailable", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      targetSnapshot: { status: "lost" },
+      assistant: {
+        ...current.assistant,
+        visible: false,
+        reducedMotion: true,
+      },
+      effects: [
+        { effectId: "effect.focus" },
+        { effectId: "effect.pointer" },
+        { effectId: "effect.callout", input: { text: "Fallback callout" } },
+      ],
+      guide: {
+        title: "Fallback guide",
+        body: "The lesson remains readable without a rendered companion.",
+        supportingItems: ["Structured support remains available."],
+      },
+      caption: "Visible fallback caption",
+      hint: "Visible fallback hint",
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('aria-label="Teaching guide"');
+    expect(html).toContain("Fallback guide");
+    expect(html).toContain("Structured support remains available.");
+    expect(html).toContain("Fallback callout");
+    expect(html).toContain("Visible fallback caption");
+    expect(html).toContain("Visible fallback hint");
+    expect(html).not.toContain("Lessonique companion:");
+    expect(html).not.toContain("data-guidance-effect=");
+  });
 });

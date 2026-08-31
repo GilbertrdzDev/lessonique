@@ -18,6 +18,7 @@ import {
   LESSONIQUE_DEEP_OCEAN_THEME_ID,
   lessoniqueDeepOceanTheme,
 } from "@/components/workspace/monaco-deep-ocean-theme";
+import { WORKSPACE_EDITOR_PANEL_ID } from "@/components/workspace/workspace-tabs";
 
 loader.config({ paths: { vs: "/vendor/monaco/vs" } });
 
@@ -144,7 +145,7 @@ export function MonacoEditorSurface({
       aria-label="Workspace editor"
       className="min-h-0 flex-1 overflow-hidden"
       data-editor-theme={editorTheme}
-      id="workspace-editor-panel"
+      id={WORKSPACE_EDITOR_PANEL_ID}
       role="region"
     >
       <MonacoEditor

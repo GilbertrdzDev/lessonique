@@ -25,6 +25,12 @@ type PreviewBridgeRequest =
       type: "scroll";
       anchorId: string;
       query: PreviewTargetQuery;
+    }
+  | {
+      channel: typeof PREVIEW_BRIDGE_CHANNEL;
+      direction: "host-to-preview";
+      type: "release";
+      requestId: string;
     };
 
 type PreviewTargetMessage = {
@@ -43,6 +49,12 @@ type PreviewInteractionMessage = {
   type: "interaction";
   anchorId: string;
   eventType: "click" | "change" | "submit";
+};
+
+type PreviewReadyMessage = {
+  channel: typeof PREVIEW_BRIDGE_CHANNEL;
+  direction: "preview-to-host";
+  type: "ready";
 };
 
 export type PreviewInteraction = Readonly<{
@@ -126,7 +138,13 @@ export class PreviewBridge {
       handle,
     });
     const abort = () => {
-      this.#targets.delete(requestId);
+      if (!this.#targets.delete(requestId)) return;
+      this.#post({
+        channel: PREVIEW_BRIDGE_CHANNEL,
+        direction: "host-to-preview",
+        type: "release",
+        requestId,
+      });
       handle.dispose();
     };
     signal.addEventListener("abort", abort, { once: true });
@@ -186,7 +204,15 @@ export class PreviewBridge {
       true,
     );
     this.#frameObserver?.disconnect();
-    this.#targets.forEach(({ handle }) => handle.dispose());
+    this.#targets.forEach(({ handle }, requestId) => {
+      this.#post({
+        channel: PREVIEW_BRIDGE_CHANNEL,
+        direction: "host-to-preview",
+        type: "release",
+        requestId,
+      });
+      handle.dispose();
+    });
     this.#targets.clear();
     this.#interactionListeners.clear();
     this.#frame = undefined;
@@ -198,6 +224,19 @@ export class PreviewBridge {
     }
     const message = parsePreviewMessage(event.data);
     if (!message) {
+      return;
+    }
+    if (message.type === "ready") {
+      this.#targets.forEach((target, requestId) => {
+        this.#post({
+          channel: PREVIEW_BRIDGE_CHANNEL,
+          direction: "host-to-preview",
+          type: "resolve",
+          requestId,
+          anchorId: target.anchorId,
+          query: target.query,
+        });
+      });
       return;
     }
     if (message.type === "interaction") {
@@ -253,15 +292,20 @@ export class PreviewBridge {
 
 function parsePreviewMessage(
   value: unknown,
-): PreviewTargetMessage | PreviewInteractionMessage | undefined {
+): PreviewTargetMessage | PreviewInteractionMessage | PreviewReadyMessage | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
   if (
     value.channel !== PREVIEW_BRIDGE_CHANNEL ||
-    value.direction !== "preview-to-host" ||
-    typeof value.anchorId !== "string"
+    value.direction !== "preview-to-host"
   ) {
+    return undefined;
+  }
+  if (value.type === "ready") {
+    return value as PreviewReadyMessage;
+  }
+  if (typeof value.anchorId !== "string") {
     return undefined;
   }
   try {
