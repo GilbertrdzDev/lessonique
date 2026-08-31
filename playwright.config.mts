@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL?.trim();
+
 export default defineConfig({
   expect: {
     timeout: 10_000,
@@ -31,15 +33,17 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   testDir: "./e2e",
   use: {
-    baseURL: "http://127.0.0.1:3100",
+    baseURL: externalBaseUrl || "http://127.0.0.1:3100",
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
-  webServer: {
-    command: "node node_modules/next/dist/bin/next start -p 3100",
-    reuseExistingServer: false,
-    timeout: 120_000,
-    url: "http://127.0.0.1:3100/classroom",
-  },
+  webServer: externalBaseUrl
+    ? undefined
+    : {
+        command: "node node_modules/next/dist/bin/next start -p 3100",
+        reuseExistingServer: false,
+        timeout: 120_000,
+        url: "http://127.0.0.1:3100/classroom",
+      },
   workers: process.env.CI ? 1 : 4,
 });
