@@ -10,8 +10,15 @@ describe("PlacementEngine", () => {
       viewport: { width: 1200, height: 800 },
     });
 
-    expect(placement.docked).toBe(false);
-    expect(placement.left).toBeGreaterThanOrEqual(316);
+    expect(placement).toEqual({
+      left: 316,
+      top: 104,
+      docked: false,
+      side: "right",
+      facing: "left",
+      companionOffsetLeft: 0,
+      companionOffsetTop: 34,
+    });
   });
 
   it("uses a clamped dock when target-relative space is unavailable", () => {
@@ -21,7 +28,15 @@ describe("PlacementEngine", () => {
       viewport: { width: 360, height: 320 },
     });
 
-    expect(placement).toEqual({ left: 16, top: 124, docked: true });
+    expect(placement).toEqual({
+      left: 16,
+      top: 124,
+      docked: true,
+      side: "docked",
+      facing: "left",
+      companionOffsetLeft: 0,
+      companionOffsetTop: 68,
+    });
   });
 
   it("clamps a side placement for a tall guide without covering the target", () => {
@@ -32,7 +47,15 @@ describe("PlacementEngine", () => {
       guideSize: { width: 300, height: 360 },
     });
 
-    expect(placement).toEqual({ left: 664, top: 524, docked: false });
+    expect(placement).toEqual({
+      left: 656,
+      top: 524,
+      docked: false,
+      side: "left",
+      facing: "right",
+      companionOffsetLeft: 316,
+      companionOffsetTop: 124,
+    });
   });
 
   it("clamps a tall guide beside a responsive target", () => {
@@ -43,6 +66,33 @@ describe("PlacementEngine", () => {
       guideSize: { width: 300, height: 360 },
     });
 
-    expect(placement).toEqual({ left: 479, top: 524, docked: false });
+    expect(placement).toEqual({
+      left: 479,
+      top: 524,
+      docked: false,
+      side: "right",
+      facing: "left",
+      companionOffsetLeft: 0,
+      companionOffsetTop: 124,
+    });
+  });
+
+  it("keeps a guide-less companion next to the target without a phantom gap", () => {
+    const placement = new PlacementEngine().calculate({
+      placementId: "placement.near-target",
+      target: { left: 40, top: 160, width: 120, height: 40 },
+      viewport: { width: 480, height: 360 },
+      guideSize: { width: 0, height: 0 },
+    });
+
+    expect(placement).toEqual({
+      left: 176,
+      top: 124,
+      docked: false,
+      side: "right",
+      facing: "left",
+      companionOffsetLeft: 0,
+      companionOffsetTop: 0,
+    });
   });
 });

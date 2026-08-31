@@ -65,7 +65,8 @@ describe("teaching scene WebMCP tools", () => {
     );
     expect(started.data).not.toEqual(expect.objectContaining({ mock: true }));
 
-    await vi.advanceTimersByTimeAsync(321);
+    expect(runtime.scene.presentation.getSnapshot().assistant.status).toBe("moving");
+    await vi.advanceTimersByTimeAsync(521);
     expect(runtime.scene.presentation.getSnapshot().guide).toEqual({
       title: "Understand the structure",
       body: "Keep this line.\nKeep the next line.",

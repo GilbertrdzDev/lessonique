@@ -1116,6 +1116,14 @@ test.describe("classroom shell", () => {
     });
     const guide = page.getByLabel("Teaching guide");
     await expect(overlay).toHaveAttribute("data-reduced-motion", "true");
+    await expect(companion.locator(".companion-body")).toHaveCSS(
+      "animation-name",
+      "none",
+    );
+    await expect(companion.locator(".companion-eye-look")).toHaveCSS(
+      "animation-name",
+      "none",
+    );
     await expect(companion).toHaveAttribute(
       "data-assistant-state",
       "assistant.thinking",
@@ -1219,6 +1227,169 @@ test.describe("classroom shell", () => {
       }),
     );
     expect(JSON.stringify(inspected)).not.toMatch(/geometry|selector|domnode/iu);
+  });
+
+  test("moves and reorients the companion between opposite target sides", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    const created = await invokeRegisteredTool(page, "create_guided_lesson", {
+      lessonId: "lesson.directional-companion",
+      title: "Directional companion lesson",
+      objective: "Verify target-aware companion movement and guidance.",
+      environment: {
+        profileId: "profile.vanilla-web",
+        languageIds: [
+          "language.html",
+          "language.css",
+          "language.javascript",
+        ],
+        activeFile: "direction.html",
+        activeSurfaceId: "editor",
+      },
+      files: [
+        {
+          path: "direction.html",
+          languageId: "language.html",
+          content: '<main class="lesson-card">Directional guidance</main>',
+        },
+        {
+          path: "direction.css",
+          languageId: "language.css",
+          content: ".lesson-card { padding: 2rem; }",
+        },
+        {
+          path: "direction.js",
+          languageId: "language.javascript",
+          content: "console.log('directional companion ready');",
+        },
+      ],
+      steps: [
+        {
+          id: "step.directional-companion",
+          title: "Follow the companion",
+          objective: "Observe directional visual guidance.",
+        },
+      ],
+    });
+    expect(created).toEqual(expect.objectContaining({ ok: true }));
+    await expect(getWorkspaceTab(page, "direction.html")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    const codeTarget = {
+      resolverId: "target.code-range",
+      input: {
+        filePath: "direction.html",
+        startLine: 1,
+        startColumn: 1,
+        endLine: 1,
+        endColumn: 7,
+      },
+    };
+    const consoleTarget = {
+      resolverId: "target.surface-anchor",
+      input: { anchorId: "anchor.workspace-console" },
+    };
+    const started = await invokeRegisteredTool(page, "play_teaching_scene", {
+      id: "scene.directional-companion",
+      allowManualNavigation: true,
+      cleanupPolicy: "replace",
+      beats: [
+        {
+          id: "beat.directional-code",
+          prepare: {
+            surfaceId: "editor",
+            filePath: "direction.html",
+            scroll: "if-needed",
+          },
+          target: codeTarget,
+          assistant: {
+            stateId: "assistant.pointing",
+            placementId: "placement.near-target",
+            visible: true,
+          },
+          effects: [
+            { effectId: "effect.focus" },
+            { effectId: "effect.pointer" },
+          ],
+          guide: {
+            title: "Point toward the code",
+            body: "The companion stays closest to the active code target.",
+          },
+        },
+        {
+          id: "beat.directional-console",
+          target: consoleTarget,
+          assistant: {
+            stateId: "assistant.pointing",
+            placementId: "placement.near-target",
+            visible: true,
+          },
+          effects: [
+            { effectId: "effect.focus" },
+            { effectId: "effect.pointer" },
+          ],
+          guide: {
+            title: "Cross to the runtime console",
+            body: "The companion changes sides and keeps facing the explanation target.",
+          },
+        },
+      ],
+    });
+    expect(started).toEqual(expect.objectContaining({ ok: true, status: "started" }));
+
+    const presentation = page.locator("[data-assistant-side]");
+    const companion = page.getByRole("status", {
+      name: /Lessonique companion:/,
+    });
+    const guide = page.getByLabel("Teaching guide");
+    await expect(guide).toContainText("Point toward the code");
+    await expect(presentation).toHaveAttribute("data-assistant-side", "right");
+    await expect(presentation).toHaveAttribute("data-assistant-facing", "left");
+    await expect(companion).toHaveAttribute("data-assistant-facing", "left");
+    await expect(companion).toHaveAttribute("data-pointing-arm", "left");
+    await expect(companion.locator(".companion-arm-left")).toHaveCSS(
+      "animation-name",
+      "lessonique-companion-point-left",
+    );
+    await expect(companion.locator(".companion-body")).toHaveCSS(
+      "animation-name",
+      "lessonique-companion-float",
+    );
+    await expect(companion.locator(".companion-eye").first()).toHaveCSS(
+      "animation-name",
+      "lessonique-companion-blink",
+    );
+    const firstTransform = await presentation.getAttribute("style");
+    await testInfo.attach("lessonique-directional-companion-code", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
+
+    await invokeSceneControl(page, "next", "scene.directional-companion");
+    await expect(guide).toContainText("Cross to the runtime console");
+    await expect(presentation).toHaveAttribute("data-assistant-side", "left");
+    await expect(presentation).toHaveAttribute("data-assistant-facing", "right");
+    await expect(companion).toHaveAttribute("data-assistant-facing", "right");
+    await expect(companion).toHaveAttribute("data-pointing-arm", "right");
+    await expect(companion.locator(".companion-arm-right")).toHaveCSS(
+      "animation-name",
+      "lessonique-companion-point-right",
+    );
+    await expect(presentation).toHaveClass(/flex-row-reverse/u);
+    expect(await presentation.getAttribute("style")).not.toBe(firstTransform);
+    expect((await guidanceTargetOverlap(page)).area).toBe(0);
+
+    await testInfo.attach("lessonique-directional-companion-console", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
+    await invokeSceneControl(page, "cancel", "scene.directional-companion");
+    await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0);
   });
 
   test("creates and resets the rendered classroom through the real WebMCP lifecycle", async ({
@@ -1769,6 +1940,26 @@ function getWorkspaceTabItem(page: Page, path: string) {
   );
 }
 
+async function invokeRegisteredTool(
+  page: Page,
+  name: string,
+  input: unknown,
+) {
+  return page.evaluate(async ({ requestedName, requestedInput }) => {
+    const tools = (
+      window as unknown as {
+        __lessoniqueRegisteredTools: Array<{
+          name: string;
+          execute: (toolInput: unknown) => Promise<unknown>;
+        }>;
+      }
+    ).__lessoniqueRegisteredTools;
+    return tools.find(({ name: toolName }) => toolName === requestedName)?.execute(
+      requestedInput,
+    );
+  }, { requestedName: name, requestedInput: input });
+}
+
 async function getWorkspaceTabOrder(page: Page): Promise<string[]> {
   return page.locator("[data-workspace-tab-path]").evaluateAll((tabs) =>
     tabs.map((tab) => tab.getAttribute("data-workspace-tab-path") ?? ""),
@@ -1901,7 +2092,7 @@ async function previewMenuGuidanceTargetOverlap(
 
 async function invokeSceneControl(
   page: import("@playwright/test").Page,
-  action: "pause" | "resume",
+  action: "pause" | "resume" | "next" | "previous" | "restart" | "cancel",
   sceneId = "scene.browser-companion",
 ) {
   return page.evaluate(async ({ requestedAction, requestedSceneId }) => {

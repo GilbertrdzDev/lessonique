@@ -56,24 +56,31 @@ export function AssistantOverlayHost({
       (effectIds.has("effect.point") || effectIds.has("effect.pointer")) &&
       assistant.visible ? (
         <TargetPointer
-          assistantLeft={assistant.position.left}
-          assistantTop={assistant.position.top}
+          companionLeft={
+            assistant.position.left + assistant.position.companionOffsetLeft
+          }
+          companionTop={assistant.position.top + assistant.position.companionOffsetTop}
+          facing={assistant.position.facing}
           geometry={target}
         />
       ) : null}
 
       <div
         className={cn(
-          "absolute flex items-center gap-3 transition-transform duration-300 ease-out motion-reduce:transition-none",
+          "lessonique-companion-presentation absolute flex items-center gap-4",
+          assistant.position.companionOffsetLeft > 0 && "flex-row-reverse",
           assistant.position.docked && "items-end",
         )}
         data-assistant-docked={assistant.position.docked}
+        data-assistant-facing={assistant.position.facing}
+        data-assistant-side={assistant.position.side}
         style={{
           transform: `translate3d(${assistant.position.left}px, ${assistant.position.top}px, 0)`,
         }}
       >
         {assistant.visible ? (
           <LessoniqueCompanion
+            facing={assistant.position.facing}
             paused={presentation.paused}
             stateId={assistant.stateId}
             status={assistant.status}
@@ -97,10 +104,12 @@ export function AssistantOverlayHost({
 }
 
 function LessoniqueCompanion({
+  facing,
   paused,
   stateId,
   status,
 }: Readonly<{
+  facing: "left" | "right";
   paused: boolean;
   stateId: string;
   status: string;
@@ -111,6 +120,8 @@ function LessoniqueCompanion({
       aria-live="polite"
       aria-label={`Lessonique companion: ${stateLabel}${paused ? ", paused" : ""}`}
       className="lessonique-companion relative size-28 shrink-0"
+      data-assistant-facing={facing}
+      data-pointing-arm={stateId === "assistant.pointing" ? facing : "none"}
       data-assistant-state={stateId}
       data-assistant-status={status}
       role="status"
@@ -123,28 +134,39 @@ function LessoniqueCompanion({
         <defs>
           <linearGradient id="companion-shell" x1="0" x2="1" y1="0" y2="1">
             <stop offset="0" stopColor="#ffffff" />
-            <stop offset="0.58" stopColor="#eeeaff" />
-            <stop offset="1" stopColor="#b9adff" />
+            <stop offset="0.42" stopColor="#f7f5ff" />
+            <stop offset="0.72" stopColor="#e2dcff" />
+            <stop offset="1" stopColor="#a898fa" />
           </linearGradient>
-          <linearGradient id="companion-face" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0" stopColor="#2d285c" />
-            <stop offset="1" stopColor="#11172f" />
-          </linearGradient>
+          <radialGradient id="companion-face" cx="0.38" cy="0.28" r="0.9">
+            <stop offset="0" stopColor="#51488a" />
+            <stop offset="0.38" stopColor="#282653" />
+            <stop offset="1" stopColor="#0c132c" />
+          </radialGradient>
           <linearGradient id="companion-leaf" x1="0" x2="1">
             <stop stopColor="#7c4dff" />
             <stop offset="1" stopColor="#c778ff" />
           </linearGradient>
+          <radialGradient id="companion-core" cx="0.42" cy="0.35" r="0.75">
+            <stop offset="0" stopColor="#bff9ff" />
+            <stop offset="0.42" stopColor="#7364ff" />
+            <stop offset="1" stopColor="#5034b8" />
+          </radialGradient>
         </defs>
         <ellipse className="companion-shadow" cx="60" cy="124" fill="#7664f4" opacity=".2" rx="33" ry="5" />
         <g className="companion-body">
-          <ellipse cx="60" cy="76" fill="url(#companion-shell)" rx="43" ry="39" stroke="#ffffff" strokeWidth="2" />
-          <path d="M18 67c-12 7-14 22-4 30 8 6 14-4 18-13" fill="url(#companion-shell)" stroke="#c9c0ff" strokeWidth="2" />
-          <path className="companion-arm companion-arm-point" d="M102 67c12 7 14 22 4 30-8 6-14-4-18-13" fill="url(#companion-shell)" stroke="#c9c0ff" strokeWidth="2" />
-          <rect x="25" y="43" width="70" height="55" rx="28" fill="url(#companion-face)" stroke="#8f7cf6" strokeWidth="2" />
-          <ellipse className="companion-eye companion-eye-left" cx="46" cy="68" fill="#78f1ff" rx="5" ry="10" />
-          <ellipse className="companion-eye companion-eye-right" cx="74" cy="68" fill="#78f1ff" rx="5" ry="10" />
+          <ellipse cx="60" cy="77" fill="url(#companion-shell)" rx="44" ry="39" stroke="#ffffff" strokeWidth="2.4" />
+          <ellipse cx="52" cy="67" fill="none" opacity=".5" rx="33" ry="28" stroke="#ffffff" strokeLinecap="round" strokeWidth="1.4" />
+          <path className="companion-arm companion-arm-left" d="M18 67c-12 7-14 22-4 30 8 6 14-4 18-13" fill="url(#companion-shell)" stroke="#c9c0ff" strokeWidth="2" />
+          <path className="companion-arm companion-arm-right" d="M102 67c12 7 14 22 4 30-8 6-14-4-18-13" fill="url(#companion-shell)" stroke="#c9c0ff" strokeWidth="2" />
+          <rect x="24" y="42" width="72" height="56" rx="29" fill="url(#companion-face)" stroke="#8f7cf6" strokeWidth="2" />
+          <path d="M33 51c11-10 35-12 50-3" fill="none" opacity=".26" stroke="#ffffff" strokeLinecap="round" strokeWidth="2" />
+          <g className="companion-eye-look">
+            <ellipse className="companion-eye companion-eye-left" cx="46" cy="68" fill="#78f1ff" rx="5" ry="10" />
+            <ellipse className="companion-eye companion-eye-right" cx="74" cy="68" fill="#78f1ff" rx="5" ry="10" />
+          </g>
           <path className="companion-mouth" d="M53 82q7 8 14 0" fill="none" stroke="#9befff" strokeLinecap="round" strokeWidth="3" />
-          <circle cx="60" cy="105" fill="#7c5cff" r="10" stroke="#bdf7ff" strokeWidth="2" />
+          <circle cx="60" cy="106" fill="url(#companion-core)" r="10" stroke="#bdf7ff" strokeWidth="2" />
           <path d="m55 105 4-4 2 4 5-1-4 7-2-4z" fill="#d9fbff" />
           <path d="M57 39c-8-13-3-22 7-25 5 9 2 18-7 25Z" fill="url(#companion-leaf)" />
           <path d="M63 39c1-12 9-18 18-14-1 10-7 15-18 14Z" fill="#8f78ff" />
@@ -253,15 +275,20 @@ function TargetHighlight({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
 }
 
 function TargetPointer({
-  assistantLeft,
-  assistantTop,
+  companionLeft,
+  companionTop,
+  facing,
   geometry,
 }: Readonly<{
-  assistantLeft: number;
-  assistantTop: number;
+  companionLeft: number;
+  companionTop: number;
+  facing: "left" | "right";
   geometry: TargetGeometry;
 }>) {
-  const start = { x: assistantLeft + 86, y: assistantTop + 62 };
+  const start = {
+    x: companionLeft + (facing === "left" ? 17 : 95),
+    y: companionTop + 62,
+  };
   const end = {
     x: geometry.left + geometry.width / 2,
     y: geometry.top + geometry.height / 2,

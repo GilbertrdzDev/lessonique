@@ -13,7 +13,15 @@ describe("GuidanceMotionEngine", () => {
   it("keeps the final position while skipping travel for reduced motion", async () => {
     const store = new ScenePresentationStore();
     const motion = new GuidanceMotionEngine(new AssistantActor(store), 320);
-    const position = { left: 120, top: 80, docked: false };
+    const position = {
+      left: 120,
+      top: 80,
+      docked: false,
+      side: "right" as const,
+      facing: "left" as const,
+      companionOffsetLeft: 0,
+      companionOffsetTop: 34,
+    };
 
     await motion.moveTo(position, true, new AbortController().signal);
 
@@ -28,7 +36,15 @@ describe("GuidanceMotionEngine", () => {
     const motion = new GuidanceMotionEngine(new AssistantActor(store), 320);
     const controller = new AbortController();
     const movement = motion.moveTo(
-      { left: 120, top: 80, docked: false },
+      {
+        left: 120,
+        top: 80,
+        docked: false,
+        side: "left",
+        facing: "right",
+        companionOffsetLeft: 316,
+        companionOffsetTop: 34,
+      },
       false,
       controller.signal,
     );

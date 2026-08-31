@@ -70,7 +70,7 @@ export class GuidanceMotionEngine {
   readonly #actor: AssistantActor;
   readonly #durationMs: number;
 
-  constructor(actor: AssistantActor, durationMs = 320) {
+  constructor(actor: AssistantActor, durationMs = 520) {
     this.#actor = actor;
     this.#durationMs = durationMs;
   }

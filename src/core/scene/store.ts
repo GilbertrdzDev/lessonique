@@ -8,10 +8,17 @@ import type { ResolvedTargetSnapshot, TargetGeometry } from "@/core/workspace/ta
 
 import type { AssistantActorStatus, SceneSnapshot } from "./contracts";
 
+export type ScenePresentationSide = "left" | "right" | "above" | "below" | "docked";
+export type ScenePresentationFacing = "left" | "right";
+
 export type ScenePresentationPosition = {
   left: number;
   top: number;
   docked: boolean;
+  side: ScenePresentationSide;
+  facing: ScenePresentationFacing;
+  companionOffsetLeft: number;
+  companionOffsetTop: number;
 };
 
 export interface ScenePresentationSnapshot {
@@ -104,7 +111,15 @@ export function createIdlePresentationSnapshot(
       stateId: IDLE_ASSISTANT_STATE_ID,
       visible: false,
       status: "idle",
-      position: { left: 24, top: 24, docked: true },
+      position: {
+        left: 24,
+        top: 24,
+        docked: true,
+        side: "docked",
+        facing: "left",
+        companionOffsetLeft: 0,
+        companionOffsetTop: 0,
+      },
       reducedMotion,
     },
     effects: [],

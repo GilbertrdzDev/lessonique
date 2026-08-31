@@ -229,21 +229,49 @@
   box-shadow: inset 3px 0 0 color-mix(in oklch, var(--primary) 75%, white);
 }
 
+.lessonique-companion-presentation {
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .lessonique-companion .companion-body {
-  animation: lessonique-companion-float 2.8s ease-in-out infinite;
+  animation: lessonique-companion-float 4.8s ease-in-out infinite;
   transform-origin: 60px 75px;
 }
 
 .lessonique-companion .companion-eye {
-  animation: lessonique-companion-blink 4.2s ease-in-out infinite;
+  animation: lessonique-companion-blink 3.9s ease-in-out infinite;
   transform-box: fill-box;
   transform-origin: center;
 }
 
-.lessonique-companion[data-assistant-state="assistant.pointing"]
-  .companion-arm-point {
-  transform: translate(8px, -7px) rotate(-18deg);
-  transform-origin: 96px 74px;
+.lessonique-companion .companion-eye-look {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.lessonique-companion[data-assistant-facing="left"] .companion-eye-look {
+  animation: lessonique-companion-look-left 5.6s ease-in-out infinite;
+}
+
+.lessonique-companion[data-assistant-facing="right"] .companion-eye-look {
+  animation: lessonique-companion-look-right 5.6s ease-in-out infinite;
+}
+
+.lessonique-companion .companion-arm {
+  transform-box: fill-box;
+  transition: transform 220ms ease-out;
+}
+
+.lessonique-companion[data-assistant-state="assistant.pointing"][data-assistant-facing="right"]
+  .companion-arm-right {
+  animation: lessonique-companion-point-right 1.65s ease-in-out infinite;
+  transform-origin: left center;
+}
+
+.lessonique-companion[data-assistant-state="assistant.pointing"][data-assistant-facing="left"]
+  .companion-arm-left {
+  animation: lessonique-companion-point-left 1.65s ease-in-out infinite;
+  transform-origin: right center;
 }
 
 .lessonique-companion[data-assistant-state="assistant.success"]
@@ -277,7 +305,7 @@
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-5px);
+    transform: translateY(-2.5px);
   }
 }
 
@@ -293,6 +321,48 @@
   }
 }
 
+@keyframes lessonique-companion-look-left {
+  0%,
+  68%,
+  100% {
+    transform: translateX(-1px);
+  }
+  80% {
+    transform: translateX(-2.25px);
+  }
+}
+
+@keyframes lessonique-companion-look-right {
+  0%,
+  68%,
+  100% {
+    transform: translateX(1px);
+  }
+  80% {
+    transform: translateX(2.25px);
+  }
+}
+
+@keyframes lessonique-companion-point-left {
+  0%,
+  100% {
+    transform: translate(-5px, -5px) rotate(13deg);
+  }
+  50% {
+    transform: translate(-8px, -7px) rotate(18deg);
+  }
+}
+
+@keyframes lessonique-companion-point-right {
+  0%,
+  100% {
+    transform: translate(5px, -5px) rotate(-13deg);
+  }
+  50% {
+    transform: translate(8px, -7px) rotate(-18deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -303,8 +373,30 @@
     transition-duration: 0.01ms !important;
   }
 
+  .lessonique-companion-presentation,
   .lessonique-companion .companion-body,
-  .lessonique-companion .companion-eye {
+  .lessonique-companion .companion-eye,
+  .lessonique-companion .companion-eye-look,
+  .lessonique-companion .companion-arm {
     animation: none !important;
+    transition: none !important;
+  }
+
+  .lessonique-companion[data-assistant-facing="left"] .companion-eye-look {
+    transform: translateX(-1px);
+  }
+
+  .lessonique-companion[data-assistant-facing="right"] .companion-eye-look {
+    transform: translateX(1px);
+  }
+
+  .lessonique-companion[data-assistant-state="assistant.pointing"][data-assistant-facing="left"]
+    .companion-arm-left {
+    transform: translate(-7px, -6px) rotate(16deg);
+  }
+
+  .lessonique-companion[data-assistant-state="assistant.pointing"][data-assistant-facing="right"]
+    .companion-arm-right {
+    transform: translate(7px, -6px) rotate(-16deg);
   }
 }

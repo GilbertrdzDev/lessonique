@@ -24,7 +24,15 @@ describe("AssistantOverlayHost", () => {
         placementId: "placement.near-target",
         visible: true,
         status: "presenting",
-        position: { left: 350, top: 90, docked: false },
+        position: {
+          left: 350,
+          top: 90,
+          docked: false,
+          side: "right",
+          facing: "left",
+          companionOffsetLeft: 0,
+          companionOffsetTop: 34,
+        },
         reducedMotion: false,
       },
       effects: [
@@ -50,6 +58,8 @@ describe("AssistantOverlayHost", () => {
 
     expect(html).toContain("Lessonique companion: success");
     expect(html).toContain('data-assistant-state="assistant.success"');
+    expect(html).toContain('data-assistant-side="right"');
+    expect(html).toContain('data-assistant-facing="left"');
     expect(html).toContain("Responsive navigation");
     expect(html).toContain("Keep this line.\nKeep the next line.");
     expect(html.indexOf("First supporting item")).toBeLessThan(
@@ -63,6 +73,45 @@ describe("AssistantOverlayHost", () => {
     expect(html).toContain('data-guidance-effect="point"');
     expect(html).toContain("Inspect this target.");
     expect(html).not.toMatch(/audio|speech|voice/iu);
+  });
+
+  it("reflows the guide and points with the target-facing arm on the left side", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      targetSnapshot: {
+        status: "resolved",
+        geometry: { left: 960, top: 180, width: 160, height: 48 },
+      },
+      assistant: {
+        ...current.assistant,
+        stateId: "assistant.pointing",
+        visible: true,
+        position: {
+          left: 516,
+          top: 148,
+          docked: false,
+          side: "left",
+          facing: "right",
+          companionOffsetLeft: 316,
+          companionOffsetTop: 34,
+        },
+      },
+      effects: [{ effectId: "effect.pointer" }],
+      guide: { body: "The guide stays outside the active target." },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-assistant-side="left"');
+    expect(html).toContain('data-assistant-facing="right"');
+    expect(html).toContain('data-pointing-arm="right"');
+    expect(html).toContain("flex-row-reverse");
+    expect(html).toContain("companion-arm-left");
+    expect(html).toContain("companion-arm-right");
   });
 
   it("renders untrusted guidance as inert text instead of HTML", () => {
