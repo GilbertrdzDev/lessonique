@@ -468,7 +468,7 @@ test.describe("classroom shell", () => {
     });
   });
 
-  test("resizes, collapses, and manages basic Project Files entries", async ({
+  test("manages Project Files inline and preserves draggable tab order", async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium");
@@ -551,46 +551,139 @@ test.describe("classroom shell", () => {
     panel = page.getByRole("complementary", { name: "Project Files" });
     await expect(panel).toBeVisible();
 
+    await expect(getWorkspaceTabOrder(page)).resolves.toEqual([
+      "index.html",
+      "script.js",
+      "styles.css",
+    ]);
+    await getWorkspaceTabItem(page, "styles.css").dragTo(
+      getWorkspaceTabItem(page, "index.html"),
+      { targetPosition: { x: 4, y: 12 } },
+    );
+    const stableTabOrder = ["styles.css", "index.html", "script.js"];
+    await expect(getWorkspaceTabOrder(page)).resolves.toEqual(stableTabOrder);
+
+    await getWorkspaceTab(page, "index.html").click();
+    const editor = page.getByRole("textbox", { name: "Workspace code editor" });
+    await editor.press("Control+A");
+    await page.keyboard.insertText(
+      '<!doctype html><html lang="en"><body><main id="app">Stable tabs</main><script src="./script.js"></script></body></html>',
+    );
+    await page.waitForTimeout(350);
+    await expect(getWorkspaceTabOrder(page)).resolves.toEqual(stableTabOrder);
+
+    await panel.getByRole("button", { name: "Create file" }).click();
+    let inlineInput = panel.getByRole("textbox", {
+      name: "New file name in lessonique-workspace",
+    });
+    await expect(inlineInput).toBeFocused();
+    await inlineInput.fill("temporary.js");
+    await inlineInput.press("Escape");
+    await expect(panel.locator('[data-file-path="temporary.js"]')).toHaveCount(0);
+
     await panel.getByRole("button", { name: "Create folder" }).click();
-    let operation = panel.getByRole("dialog", { name: "Create folder" });
-    await operation.getByRole("textbox", { name: "Folder path" }).fill("lessons/empty");
-    await operation.getByRole("button", { name: "Create", exact: true }).click();
+    inlineInput = panel.getByRole("textbox", {
+      name: "New folder name in lessonique-workspace",
+    });
+    await expect(
+      panel.locator('[data-inline-create-parent="lessonique-workspace"]'),
+    ).toBeVisible();
+    await inlineInput.fill("lessons");
+    await inlineInput.press("Enter");
     const lessonsFolder = panel.locator('[data-folder-path="lessons"]');
     await expect(lessonsFolder).toBeVisible();
     if ((await lessonsFolder.getAttribute("aria-expanded")) === "false") {
       await lessonsFolder.click();
     }
+
+    await lessonsFolder.click({ button: "right" });
+    let contextMenu = page.getByRole("menu", {
+      name: "Folder actions for lessons",
+    });
+    await expect(contextMenu.getByRole("menuitem")).toHaveText([
+      "New File",
+      "New Folder",
+      "Rename",
+      "Delete",
+    ]);
+    await contextMenu.getByRole("menuitem", { name: "New Folder" }).click();
+    inlineInput = panel.getByRole("textbox", {
+      name: "New folder name in lessons",
+    });
+    await expect(panel.locator('[data-inline-create-parent="lessons"]')).toBeVisible();
+    await inlineInput.fill("empty");
+    await inlineInput.press("Enter");
     await expect(panel.locator('[data-folder-path="lessons/empty"]')).toBeVisible();
 
     await panel.getByRole("button", { name: "Create file" }).click();
-    operation = panel.getByRole("dialog", { name: "Create file" });
-    await operation.getByRole("textbox", { name: "File path" }).fill("notes.txt");
-    await operation.getByRole("button", { name: "Create", exact: true }).click();
-    await expect(operation.getByRole("alert")).toContainText("must use one of");
-    await operation.getByRole("button", { name: "Cancel", exact: true }).click();
+    inlineInput = panel.getByRole("textbox", {
+      name: "New file name in lessonique-workspace",
+    });
+    await inlineInput.fill("notes.txt");
+    await inlineInput.press("Enter");
+    await expect(panel.getByRole("alert")).toContainText("must use one of");
+    await inlineInput.press("Escape");
 
-    await panel.getByRole("button", { name: "Create file" }).click();
-    operation = panel.getByRole("dialog", { name: "Create file" });
-    await operation.getByRole("textbox", { name: "File path" }).fill("lessons/intro.js");
-    await operation.getByRole("button", { name: "Create", exact: true }).click();
+    await lessonsFolder.click({ button: "right" });
+    contextMenu = page.getByRole("menu", {
+      name: "Folder actions for lessons",
+    });
+    await contextMenu.getByRole("menuitem", { name: "New File" }).click();
+    inlineInput = panel.getByRole("textbox", {
+      name: "New file name in lessons",
+    });
+    await inlineInput.fill("intro.js");
+    await inlineInput.press("Enter");
     await expect(getWorkspaceTab(page, "lessons/intro.js")).toHaveAttribute(
       "aria-pressed",
       "true",
     );
+    const orderWithNestedFile = [...stableTabOrder, "lessons/intro.js"];
+    await expect(getWorkspaceTabOrder(page)).resolves.toEqual(orderWithNestedFile);
 
-    await panel.getByRole("button", { name: "Rename file lessons/intro.js" }).click();
-    operation = panel.getByRole("dialog", { name: "Rename file" });
-    await operation.getByRole("textbox", { name: "New name" }).fill("lesson.js");
-    await operation.getByRole("button", { name: "Rename", exact: true }).click();
+    const introFile = panel.locator('[data-file-path="lessons/intro.js"]');
+    await introFile.click({ button: "right" });
+    contextMenu = page.getByRole("menu", {
+      name: "File actions for lessons/intro.js",
+    });
+    await expect(contextMenu.getByRole("menuitem")).toHaveText([
+      "Rename",
+      "Delete",
+    ]);
+    await contextMenu.getByRole("menuitem", { name: "Rename" }).click();
+    inlineInput = panel.getByRole("textbox", {
+      name: "Rename file lessons/intro.js",
+    });
+    await expect(inlineInput).toHaveValue("intro.js");
+    await inlineInput.fill("cancelled.js");
+    await inlineInput.press("Escape");
+    await expect(introFile).toBeVisible();
+
+    await introFile.click({ button: "right" });
+    contextMenu = page.getByRole("menu", {
+      name: "File actions for lessons/intro.js",
+    });
+    await contextMenu.getByRole("menuitem", { name: "Rename" }).click();
+    inlineInput = panel.getByRole("textbox", {
+      name: "Rename file lessons/intro.js",
+    });
+    await inlineInput.fill("lesson.js");
+    await inlineInput.press("Enter");
     await expect(panel.locator('[data-file-path="lessons/lesson.js"]')).toBeVisible();
     await expect(panel.locator('[data-file-path="lessons/intro.js"]')).toHaveCount(0);
+    await expect(getWorkspaceTabOrder(page)).resolves.toEqual([
+      ...stableTabOrder,
+      "lessons/lesson.js",
+    ]);
 
-    await panel
-      .getByRole("button", { name: "Rename folder lessons", exact: true })
-      .click();
-    operation = panel.getByRole("dialog", { name: "Rename folder" });
-    await operation.getByRole("textbox", { name: "New name" }).fill("examples");
-    await operation.getByRole("button", { name: "Rename", exact: true }).click();
+    await lessonsFolder.click({ button: "right" });
+    contextMenu = page.getByRole("menu", {
+      name: "Folder actions for lessons",
+    });
+    await contextMenu.getByRole("menuitem", { name: "Rename" }).click();
+    inlineInput = panel.getByRole("textbox", { name: "Rename folder lessons" });
+    await inlineInput.fill("examples");
+    await panel.getByText("Project Files", { exact: true }).click();
     const examplesFolder = panel.locator('[data-folder-path="examples"]');
     await expect(examplesFolder).toBeVisible();
     if ((await examplesFolder.getAttribute("aria-expanded")) === "false") {
@@ -602,6 +695,10 @@ test.describe("classroom shell", () => {
       "aria-pressed",
       "true",
     );
+    await expect(getWorkspaceTabOrder(page)).resolves.toEqual([
+      ...stableTabOrder,
+      "examples/lesson.js",
+    ]);
 
     const inspected = await page.evaluate(async () => {
       const tools = (
@@ -639,23 +736,68 @@ test.describe("classroom shell", () => {
     await expect(panel.locator('[data-folder-path="examples/empty"]')).toBeVisible();
     await expect(panel.locator('[data-file-path="examples/lesson.js"]')).toBeVisible();
 
-    await panel.getByRole("button", { name: "Delete file examples/lesson.js" }).click();
-    operation = panel.getByRole("dialog", { name: "Delete file?" });
-    await operation.getByRole("button", { name: "Delete", exact: true }).click();
+    const restoredLessonFile = panel.locator('[data-file-path="examples/lesson.js"]');
+    await restoredLessonFile.click({ button: "right" });
+    contextMenu = page.getByRole("menu", {
+      name: "File actions for examples/lesson.js",
+    });
+    await contextMenu.getByRole("menuitem", { name: "Delete" }).click();
+    let deleteDialog = page.getByRole("dialog", { name: "Delete file?" });
+    await expect(deleteDialog).toContainText("examples/lesson.js");
+    await expect(deleteDialog.getByRole("button")).toHaveText([
+      "Cancel",
+      "Delete",
+    ]);
+    const [deleteDialogBounds, viewportSize] = await Promise.all([
+      deleteDialog.boundingBox(),
+      Promise.resolve(page.viewportSize()),
+    ]);
+    if (!deleteDialogBounds || !viewportSize) {
+      throw new Error("Delete confirmation geometry is unavailable.");
+    }
+    expect(deleteDialogBounds.width).toBeLessThanOrEqual(400);
+    expect(
+      Math.abs(
+        deleteDialogBounds.x + deleteDialogBounds.width / 2 -
+          viewportSize.width / 2,
+      ),
+    ).toBeLessThanOrEqual(2);
+    expect(
+      Math.abs(
+        deleteDialogBounds.y + deleteDialogBounds.height / 2 -
+          viewportSize.height / 2,
+      ),
+    ).toBeLessThanOrEqual(2);
+    await deleteDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(restoredLessonFile).toBeVisible();
+    await restoredLessonFile.click({ button: "right" });
+    contextMenu = page.getByRole("menu", {
+      name: "File actions for examples/lesson.js",
+    });
+    await contextMenu.getByRole("menuitem", { name: "Delete" }).click();
+    deleteDialog = page.getByRole("dialog", { name: "Delete file?" });
+    await deleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(panel.locator('[data-file-path="examples/lesson.js"]')).toHaveCount(0);
 
-    await panel.getByRole("button", { name: "Create file" }).click();
-    operation = panel.getByRole("dialog", { name: "Create file" });
-    await operation.getByRole("textbox", { name: "File path" }).fill("examples/nested.js");
-    await operation.getByRole("button", { name: "Create", exact: true }).click();
+    await restoredExamplesFolder.click({ button: "right" });
+    contextMenu = page.getByRole("menu", {
+      name: "Folder actions for examples",
+    });
+    await contextMenu.getByRole("menuitem", { name: "New File" }).click();
+    inlineInput = panel.getByRole("textbox", { name: "New file name in examples" });
+    await inlineInput.fill("nested.js");
+    await inlineInput.press("Enter");
     await expect(panel.locator('[data-file-path="examples/nested.js"]')).toBeVisible();
 
-    await panel
-      .getByRole("button", { name: "Delete folder examples", exact: true })
-      .click();
-    operation = panel.getByRole("dialog", { name: "Delete folder?" });
-    await expect(operation).toContainText("every file and folder inside it");
-    await operation.getByRole("button", { name: "Delete", exact: true }).click();
+    await restoredExamplesFolder.click({ button: "right" });
+    contextMenu = page.getByRole("menu", {
+      name: "Folder actions for examples",
+    });
+    await contextMenu.getByRole("menuitem", { name: "Delete" }).click();
+    deleteDialog = page.getByRole("dialog", { name: "Delete folder?" });
+    await expect(deleteDialog).toContainText("examples");
+    await expect(deleteDialog).toContainText("every file and folder inside it");
+    await deleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(panel.locator('[data-folder-path="examples"]')).toHaveCount(0);
     await expect(getWorkspaceTab(page, "examples/nested.js")).toHaveCount(0);
 
@@ -1390,6 +1532,18 @@ test.describe("classroom shell", () => {
 
 function getWorkspaceTab(page: Page, path: string) {
   return page.locator(`[data-workspace-tab-path=${JSON.stringify(path)}]`);
+}
+
+function getWorkspaceTabItem(page: Page, path: string) {
+  return page.locator(
+    `[data-workspace-tab-item-path=${JSON.stringify(path)}]`,
+  );
+}
+
+async function getWorkspaceTabOrder(page: Page): Promise<string[]> {
+  return page.locator("[data-workspace-tab-path]").evaluateAll((tabs) =>
+    tabs.map((tab) => tab.getAttribute("data-workspace-tab-path") ?? ""),
+  );
 }
 
 async function measureWorkspaceReflow(page: Page) {

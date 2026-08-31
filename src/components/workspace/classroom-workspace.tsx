@@ -29,7 +29,11 @@ import { MonacoEditorSurface } from "@/components/workspace/monaco-editor-surfac
 import { ProjectFilesPanel } from "@/components/workspace/project-files-panel";
 import { SandpackRuntimeView, type PreviewViewport } from "@/components/workspace/sandpack-runtime-view";
 import { WorkspaceConsole } from "@/components/workspace/workspace-console";
-import { WorkspaceTabs } from "@/components/workspace/workspace-tabs";
+import {
+  reorderWorkspaceTabPaths,
+  type WorkspaceTabDropPosition,
+  WorkspaceTabs,
+} from "@/components/workspace/workspace-tabs";
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import type { SurfaceConfiguration } from "@/core/platform/contracts";
 import type { SurfaceState } from "@/core/workspace/contracts";
@@ -55,6 +59,11 @@ type ProjectFilesResizeSession = Readonly<{
   startX: number;
 }>;
 
+type PendingTabPathRemap = Readonly<{
+  apply(paths: readonly string[]): string[];
+  isReady(filePaths: readonly string[], directoryPaths: readonly string[]): boolean;
+}>;
+
 export function ClassroomWorkspace() {
   const workspace = useWorkspaceRuntime();
   const registries = workspace.registries;
@@ -76,6 +85,9 @@ export function ClassroomWorkspace() {
   const openTabsProfileIdRef = useRef<string | undefined>(undefined);
   const availableFilePathsRef = useRef<string[]>([]);
   const previousActiveFilePathRef = useRef<string | undefined>(undefined);
+  const pendingTabPathRemapRef = useRef<PendingTabPathRemap | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     let active = true;
@@ -128,23 +140,37 @@ export function ClassroomWorkspace() {
       !availableFilePathsRef.current.some((path) =>
         availableFilePaths.includes(path),
       );
+    const pendingTabPathRemap = pendingTabPathRemapRef.current;
+    const shouldApplyPendingRemap = Boolean(
+      pendingTabPathRemap?.isReady(availableFilePaths, state.directories),
+    );
+    const shouldResetOpenTabs =
+      profileChanged || (fileCollectionReplaced && !shouldApplyPendingRemap);
 
     openTabsProfileIdRef.current = state.profileId;
     availableFilePathsRef.current = availableFilePaths;
     previousActiveFilePathRef.current = state.activeFilePath;
 
+    if (shouldResetOpenTabs) {
+      pendingTabPathRemapRef.current = undefined;
+    }
+
     setOpenFilePaths((current) => {
       if (!state.profileId) {
         return current.length === 0 ? current : [];
       }
-      if (profileChanged || fileCollectionReplaced) {
+      if (shouldResetOpenTabs) {
         return availableFilePaths;
       }
-      const next = current.filter((path) =>
+      const remapped = shouldApplyPendingRemap && pendingTabPathRemap
+        ? pendingTabPathRemap.apply(current)
+        : current;
+      const next = remapped.filter((path) =>
         availableFilePaths.includes(path),
       );
       if (
         activeFileChanged &&
+        !shouldApplyPendingRemap &&
         state.activeFilePath &&
         availableFilePaths.includes(state.activeFilePath) &&
         !next.includes(state.activeFilePath)
@@ -153,7 +179,10 @@ export function ClassroomWorkspace() {
       }
       return stringArraysEqual(current, next) ? current : next;
     });
-  }, [state.activeFilePath, state.files, state.profileId]);
+    if (shouldApplyPendingRemap) {
+      pendingTabPathRemapRef.current = undefined;
+    }
+  }, [state.activeFilePath, state.directories, state.files, state.profileId]);
 
   const changeProfile = async (profileId: string) => {
     setIsTransitioning(true);
@@ -232,22 +261,62 @@ export function ClassroomWorkspace() {
     }
   };
 
+  const reorderOpenWorkspaceTabs = (
+    sourcePath: string,
+    targetPath: string,
+    position: WorkspaceTabDropPosition,
+  ) => {
+    setOpenFilePaths((current) => {
+      const next = reorderWorkspaceTabPaths(
+        current,
+        sourcePath,
+        targetPath,
+        position,
+      );
+      return stringArraysEqual(current, next) ? current : next;
+    });
+  };
+
   const renameWorkspaceFile = async (path: string, nextPath: string) => {
-    await workspace.controller.renameFile(path, nextPath);
-    setOpenFilePaths((current) =>
-      current.map((candidate) => (candidate === path ? nextPath : candidate)),
-    );
+    if (path === nextPath) return;
+    const remap: PendingTabPathRemap = {
+      apply: (paths) =>
+        paths.map((candidate) => (candidate === path ? nextPath : candidate)),
+      isReady: (filePaths) =>
+        filePaths.includes(nextPath) && !filePaths.includes(path),
+    };
+    pendingTabPathRemapRef.current = remap;
+    try {
+      await workspace.controller.renameFile(path, nextPath);
+    } catch (error) {
+      if (pendingTabPathRemapRef.current === remap) {
+        pendingTabPathRemapRef.current = undefined;
+      }
+      throw error;
+    }
   };
 
   const renameWorkspaceDirectory = async (path: string, nextPath: string) => {
-    await workspace.controller.renameDirectory(path, nextPath);
-    setOpenFilePaths((current) =>
-      current.map((candidate) =>
-        isSameOrDescendantPath(candidate, path)
-          ? replaceWorkspacePathPrefix(candidate, path, nextPath)
-          : candidate,
-      ),
-    );
+    if (path === nextPath) return;
+    const remap: PendingTabPathRemap = {
+      apply: (paths) =>
+        paths.map((candidate) =>
+          isSameOrDescendantPath(candidate, path)
+            ? replaceWorkspacePathPrefix(candidate, path, nextPath)
+            : candidate,
+        ),
+      isReady: (_filePaths, directoryPaths) =>
+        directoryPaths.includes(nextPath) && !directoryPaths.includes(path),
+    };
+    pendingTabPathRemapRef.current = remap;
+    try {
+      await workspace.controller.renameDirectory(path, nextPath);
+    } catch (error) {
+      if (pendingTabPathRemapRef.current === remap) {
+        pendingTabPathRemapRef.current = undefined;
+      }
+      throw error;
+    }
   };
 
   const changeViewport = async (viewport: PreviewViewport) => {
@@ -483,6 +552,7 @@ export function ClassroomWorkspace() {
                     activeFilePath={activeOpenFilePath}
                     files={openFiles}
                     onClose={closeWorkspaceTab}
+                    onReorder={reorderOpenWorkspaceTabs}
                     onSelect={(path) => void openWorkspaceFile(path)}
                   />
                   <MonacoEditorSurface

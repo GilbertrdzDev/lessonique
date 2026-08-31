@@ -78,11 +78,12 @@ describe("ProjectFilesPanel", () => {
     expect(markup).toContain('data-folder-path="src/components"');
     expect(markup).toContain('data-folder-path="assets/icons"');
     expect(markup).toContain('data-file-path="src/components/header.html"');
+    expect(markup).toContain('data-project-entry-row="src/components/header.html"');
     expect(markup).toContain('aria-label="Create file"');
     expect(markup).toContain('aria-label="Create folder"');
-    expect(markup).toContain('aria-label="Rename folder assets"');
-    expect(markup).toContain('aria-label="Delete file src/components/header.html"');
     expect(markup).toContain('aria-selected="true"');
+    expect(markup).not.toContain('id="project-file-operation-title"');
+    expect(markup).not.toContain('aria-label="Rename folder assets"');
     expect(markup).not.toContain("hidden.js");
   });
 });
