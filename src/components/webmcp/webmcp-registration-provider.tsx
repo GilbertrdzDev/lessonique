@@ -1,45 +1,54 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
-import { createEarlyWebMCPToolRegistry } from "@/core/webmcp/mock-handlers";
+import type { ToolRegistry } from "@/core/webmcp";
 import { WebMCPProvider } from "@/core/webmcp/webmcp-provider";
+import { createP0WebMCPToolRegistry } from "@/providers/p0";
 
 type WebMCPRegistrationProviderProps = Readonly<{
   children: ReactNode;
 }>;
 
+type WebMCPRuntime = Readonly<{
+  provider: WebMCPProvider;
+  registry: ToolRegistry;
+}>;
+
+const WebMCPRuntimeContext = createContext<WebMCPRuntime | null>(null);
+
 export function WebMCPRegistrationProvider({ children }: WebMCPRegistrationProviderProps) {
   const workspace = useWorkspaceRuntime();
-  const [provider] = useState(
-    () =>
-      new WebMCPProvider(
-        createEarlyWebMCPToolRegistry(workspace.registries, {
-          workspaceController: workspace.controller,
-          createGuidedLesson: workspace.createGuidedLesson,
-          resetClassroom: workspace.resetClassroom,
-          lessonState: workspace.lessonStore,
-          lessonStore: workspace.lessonStore,
-          workspaceState: workspace.store,
-          classroomLifecycle: workspace.classroomLifecycle,
-          codeIntelligence: workspace.codeIntelligence.service,
-          diagnostics: workspace.codeIntelligence.diagnostics,
-          validationResults: workspace.validation.results,
-          sceneRunner: workspace.scene.runner,
-          sceneState: workspace.scene.store,
-          validationEngine: workspace.validation.engine,
-          assistantIntents: workspace.assistantIntents,
-        }),
-      ),
-  );
+  const [runtime] = useState<WebMCPRuntime>(() => {
+    const registry = createP0WebMCPToolRegistry(workspace);
+    return { registry, provider: new WebMCPProvider(registry) };
+  });
 
   useEffect(() => {
-    void provider.start().catch((error: unknown) => {
+    void runtime.provider.start().catch((error: unknown) => {
       console.error("WebMCP tool registration failed.", error);
     });
-    return () => provider.stop();
-  }, [provider]);
+    return () => runtime.provider.stop();
+  }, [runtime]);
 
-  return children;
+  return (
+    <WebMCPRuntimeContext.Provider value={runtime}>
+      {children}
+    </WebMCPRuntimeContext.Provider>
+  );
+}
+
+export function useWebMCPRuntime(): WebMCPRuntime {
+  const runtime = useContext(WebMCPRuntimeContext);
+  if (!runtime) {
+    throw new Error("WebMCPRegistrationProvider is required.");
+  }
+  return runtime;
 }

@@ -19,6 +19,7 @@ import {
   WorkspaceStore,
 } from "@/core/workspace";
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
+import { ReferencePanelStore } from "@/core/reference";
 import type {
   P0CodeIntelligenceRuntime,
   P0ValidationRuntime,
@@ -33,6 +34,7 @@ import {
   P0_ASSISTANT_STATE_IDS,
   P0_ENVIRONMENT_ACTION_IDS,
   P0_INTERACTION_EVENT_TYPE_IDS,
+  P0_REFERENCE_SURFACE_MODE_ID,
   P0_RUNTIME_PROVIDER_IDS,
   P0_SURFACE_IDS,
   P0_TARGET_RESOLVER_IDS,
@@ -52,6 +54,8 @@ export interface P0WorkspaceRuntime {
   interactionTracker: InteractionTracker;
   assistantIntents: AssistantIntentMapper;
   scene: P0SceneRuntime;
+  referencePanels: ReferencePanelStore;
+  referenceSurfaceModeId: string;
   monacoEditorAdapter: MonacoEditorAdapter;
   previewSurfaceAdapter: PreviewSurfaceAdapter;
   consoleSurfaceAdapter: ConsoleSurfaceAdapter;
@@ -109,7 +113,12 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
   surfaceAdapters.register(monacoEditorAdapter);
   surfaceAdapters.register(previewSurfaceAdapter);
   surfaceAdapters.register(consoleSurfaceAdapter);
-  [P0_SURFACE_IDS.values, P0_SURFACE_IDS.plan, P0_SURFACE_IDS.activity].forEach(
+  [
+    P0_SURFACE_IDS.values,
+    P0_SURFACE_IDS.plan,
+    P0_SURFACE_IDS.activity,
+    P0_SURFACE_IDS.reference,
+  ].forEach(
     (surfaceId) => surfaceAdapters.register(new InMemorySurfaceAdapter(surfaceId)),
   );
 
@@ -133,6 +142,7 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     runtimeAdapters,
   });
   const lessonStore = new LessonStore();
+  const referencePanels = new ReferencePanelStore();
   const classroomLifecycle = new ClassroomLifecycleService();
   const classroomDependencies = {
     lessonStore,
@@ -209,6 +219,8 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     interactionTracker,
     assistantIntents,
     scene,
+    referencePanels,
+    referenceSurfaceModeId: P0_REFERENCE_SURFACE_MODE_ID,
     monacoEditorAdapter,
     previewSurfaceAdapter,
     consoleSurfaceAdapter,

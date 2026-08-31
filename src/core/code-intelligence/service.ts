@@ -36,6 +36,7 @@ export interface CodeIntelligenceServiceOptions {
   providers: LanguageIntelligenceProviderRegistry;
   mappers: SemanticTargetMapperRegistry;
   scheduler?: ParsingScheduler;
+  analysisScheduler?: ParsingScheduler;
   diagnostics?: DiagnosticSnapshotStore;
 }
 
@@ -43,14 +44,17 @@ export class CodeIntelligenceService {
   readonly #platform: ProviderPlatformRegistries;
   readonly #providers: LanguageIntelligenceProviderRegistry;
   readonly #mappers: SemanticTargetMapperRegistry;
-  readonly #scheduler: ParsingScheduler;
+  readonly #queryScheduler: ParsingScheduler;
+  readonly #analysisScheduler: ParsingScheduler;
   readonly #diagnostics?: DiagnosticSnapshotStore;
 
   constructor(options: CodeIntelligenceServiceOptions) {
     this.#platform = options.platform;
     this.#providers = options.providers;
     this.#mappers = options.mappers;
-    this.#scheduler = options.scheduler ?? new ParsingScheduler();
+    this.#queryScheduler = options.scheduler ?? new ParsingScheduler();
+    this.#analysisScheduler =
+      options.analysisScheduler ?? new ParsingScheduler();
     this.#diagnostics = options.diagnostics;
   }
 
@@ -88,7 +92,7 @@ export class CodeIntelligenceService {
         `Provider "${provider.languageId}" does not implement locator "${request.locator.locatorId}".`,
       );
     }
-    const parsed = await this.#scheduler.schedule(
+    const parsed = await this.#queryScheduler.schedule(
       request.document,
       provider,
       signal,
@@ -138,7 +142,11 @@ export class CodeIntelligenceService {
     signal?: AbortSignal,
   ): Promise<ParsedSourceDocument<unknown>> {
     const provider = this.#providers.require(document.languageId);
-    const parsed = await this.#scheduler.schedule(document, provider, signal);
+    const parsed = await this.#analysisScheduler.schedule(
+      document,
+      provider,
+      signal,
+    );
     this.#diagnostics?.replace(
       parsed.current.document,
       parsed.current.diagnostics,
@@ -147,7 +155,12 @@ export class CodeIntelligenceService {
   }
 
   cancel(path?: string): void {
-    if (path) this.#scheduler.cancel(path);
-    else this.#scheduler.cancelAll();
+    if (path) {
+      this.#queryScheduler.cancel(path);
+      this.#analysisScheduler.cancel(path);
+    } else {
+      this.#queryScheduler.cancelAll();
+      this.#analysisScheduler.cancelAll();
+    }
   }
 }

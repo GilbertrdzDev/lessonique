@@ -115,7 +115,7 @@ describe("WorkspaceController", () => {
     const preview = createTransactionalSurfaceAdapter("preview");
     surfaceAdapters.register(editor.adapter);
     surfaceAdapters.register(preview.adapter);
-    ["console", "values", "plan", "activity"].forEach((id) =>
+    ["console", "values", "plan", "activity", "reference"].forEach((id) =>
       surfaceAdapters.register(new InMemorySurfaceAdapter(id)),
     );
     const runtime = createRuntimeAdapter();
@@ -160,7 +160,7 @@ describe("WorkspaceController", () => {
     const preview = createTransactionalSurfaceAdapter("preview");
     surfaceAdapters.register(editor.adapter);
     surfaceAdapters.register(preview.adapter);
-    ["console", "values", "plan", "activity"].forEach((id) =>
+    ["console", "values", "plan", "activity", "reference"].forEach((id) =>
       surfaceAdapters.register(new InMemorySurfaceAdapter(id)),
     );
     const runtime = createRuntimeAdapter();

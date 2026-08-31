@@ -46,11 +46,15 @@ export function createP0CodeIntelligenceRuntime(
   mappers.register(new P0HtmlPreviewTargetMapper(previewQueries));
 
   const scheduler = new ParsingScheduler({ debounceMs: options.debounceMs });
+  const analysisScheduler = new ParsingScheduler({
+    debounceMs: options.debounceMs,
+  });
   const service = new CodeIntelligenceService({
     platform,
     providers,
     mappers,
     scheduler,
+    analysisScheduler,
     diagnostics,
   });
   return {
@@ -61,6 +65,7 @@ export function createP0CodeIntelligenceRuntime(
     diagnostics,
     dispose() {
       scheduler.cancelAll();
+      analysisScheduler.cancelAll();
       previewQueries.clear();
       diagnostics.clear();
     },

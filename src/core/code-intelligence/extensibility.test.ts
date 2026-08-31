@@ -69,6 +69,41 @@ describe("code intelligence extensibility", () => {
     ).resolves.toEqual(expect.objectContaining({ status: "passed" }));
   });
 
+  it("keeps interactive queries independent from background analysis for the same file", async () => {
+    const platform = createFakePlatform();
+    const providers = new LanguageIntelligenceProviderRegistry();
+    providers.register(new FakeLanguageIntelligenceProvider());
+    const mappers = new SemanticTargetMapperRegistry();
+    mappers.register(new FakeSemanticTargetMapper());
+    const service = new CodeIntelligenceService({
+      platform,
+      providers,
+      mappers,
+      scheduler: new ParsingScheduler({ debounceMs: 0 }),
+      analysisScheduler: new ParsingScheduler({ debounceMs: 0 }),
+    });
+    const document = {
+      path: "lesson.fake",
+      languageId: "language.fake",
+      content: "start finish",
+      revision: 1,
+    };
+
+    const [analysis, query] = await Promise.all([
+      service.analyze(document),
+      service.query({
+        document,
+        locator: {
+          locatorId: "locator.fake-symbol",
+          input: { name: "finish" },
+        },
+      }),
+    ]);
+
+    expect(analysis.valid).toBe(true);
+    expect(query.anchors).toHaveLength(1);
+  });
+
   it("rejects mappings that change anchor, representation, or resolver identity", () => {
     const registry = new SemanticTargetMapperRegistry();
     const anchor = {

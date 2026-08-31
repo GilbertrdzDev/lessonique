@@ -14,6 +14,7 @@ import type {
   LessonStoreAdapter,
   ResetClassroomUseCase,
 } from "@/core/lesson";
+import type { ReferencePanelStore } from "@/core/reference";
 import type { SceneRunner, SceneStore } from "@/core/scene";
 import type { WorkspaceStateReader } from "@/core/workspace";
 import type { WorkspaceController } from "@/core/workspace/workspace-controller";
@@ -29,7 +30,9 @@ import { ClassroomToolService } from "./classroom-tools";
 import { ExecuteEnvironmentActionService } from "./execute-environment-action";
 import { EvaluateCurrentStepService } from "./evaluate-current-step";
 import { InspectClassroomService } from "./inspect-classroom";
+import { ShowReferencePanelService } from "./show-reference-panel";
 import { TeachingSceneToolService } from "./teaching-scene-tools";
+import { UpdateLessonPlanService } from "./update-lesson-plan";
 import type { ToolHandler, ToolExecutionResult, WebMCPToolInputMap } from "./contracts";
 import { WEBMCP_TOOL_INPUT_SCHEMAS } from "./schemas";
 import { ToolRegistry, type ToolDefinition } from "./tool-registry";
@@ -101,6 +104,8 @@ export type EarlyWebMCPIntegrations = {
   sceneState?: SceneStore;
   validationEngine?: ValidationEngine;
   assistantIntents?: AssistantIntentMapper;
+  referencePanels?: ReferencePanelStore;
+  referenceSurfaceModeId?: string;
 };
 
 export function createEarlyWebMCPToolRegistry(
@@ -153,6 +158,27 @@ export function createEarlyWebMCPToolRegistry(
           validation: integrations.validationEngine,
           registries,
           assistantIntents: integrations.assistantIntents,
+        })
+      : undefined;
+  const planUpdates =
+    integrations.lessonStore && integrations.workspaceState
+      ? new UpdateLessonPlanService({
+          lesson: integrations.lessonStore,
+          workspace: integrations.workspaceState,
+          registries,
+        })
+      : undefined;
+  const references =
+    integrations.workspaceController &&
+    integrations.classroomLifecycle &&
+    integrations.referencePanels &&
+    integrations.referenceSurfaceModeId
+      ? new ShowReferencePanelService({
+          workspace: integrations.workspaceController,
+          registries,
+          lifecycle: integrations.classroomLifecycle,
+          references: integrations.referencePanels,
+          compatibleModeId: integrations.referenceSurfaceModeId,
         })
       : undefined;
   const classroom =
@@ -279,6 +305,26 @@ export function createEarlyWebMCPToolRegistry(
         },
         handler: (input, context) =>
           evaluation.execute(input, context.signal),
+      });
+      continue;
+    }
+    if (name === "update_lesson_plan" && planUpdates) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.update_lesson_plan,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.update_lesson_plan,
+        capabilityCheck: (input) => planUpdates.validate(input),
+        handler: (input) => planUpdates.execute(input),
+      });
+      continue;
+    }
+    if (name === "show_reference_panel" && references) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.show_reference_panel,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.show_reference_panel,
+        capabilityCheck: (input) => references.validate(input),
+        handler: (input) => references.execute(input),
       });
       continue;
     }

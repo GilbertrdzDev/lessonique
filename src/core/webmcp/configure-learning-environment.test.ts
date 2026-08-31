@@ -68,7 +68,7 @@ describe("ConfigureLearningEnvironmentService", () => {
       }),
     );
     expect(state.consoleEntries).toEqual([]);
-    expect(state.surfaces).toHaveLength(5);
+    expect(state.surfaces).toHaveLength(6);
     expect(state.surfaces.find(({ id }) => id === "editor")?.options).toEqual(
       expect.objectContaining({ "editor.font-size": 18 }),
     );

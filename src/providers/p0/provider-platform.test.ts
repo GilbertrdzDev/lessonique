@@ -66,6 +66,7 @@ describe("P0 provider platform", () => {
       P0_SURFACE_IDS.values,
       P0_SURFACE_IDS.plan,
       P0_SURFACE_IDS.activity,
+      P0_SURFACE_IDS.reference,
     ]);
     expect(
       capabilities.surfaces.find(({ id }) => id === P0_SURFACE_IDS.editor),
@@ -127,6 +128,7 @@ describe("P0 provider platform", () => {
           P0_SURFACE_IDS.console,
           P0_SURFACE_IDS.plan,
           P0_SURFACE_IDS.activity,
+          P0_SURFACE_IDS.reference,
         ],
       }),
     ]);
@@ -147,6 +149,7 @@ describe("P0 provider platform", () => {
           P0_SURFACE_IDS.values,
           P0_SURFACE_IDS.plan,
           P0_SURFACE_IDS.activity,
+          P0_SURFACE_IDS.reference,
         ],
       }),
     ]);

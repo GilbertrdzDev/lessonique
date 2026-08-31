@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { WorkspaceRuntimeProvider } from "@/components/workspace/workspace-runtime-provider";
+import { WebMCPRegistrationProvider } from "@/components/webmcp/webmcp-registration-provider";
 
 import { AgentSidebar } from "./agent-sidebar";
 
@@ -12,7 +13,11 @@ describe("AgentSidebar", () => {
       createElement(
         WorkspaceRuntimeProvider,
         null,
-        createElement(AgentSidebar),
+        createElement(
+          WebMCPRegistrationProvider,
+          null,
+          createElement(AgentSidebar),
+        ),
       ),
     );
 
@@ -22,6 +27,8 @@ describe("AgentSidebar", () => {
     expect(markup).toContain("Learning Plan");
     expect(markup).toContain("Live Activity");
     expect(markup).toContain("WebMCP Ready");
+    expect(markup).toContain("WebMCP Dev Panel");
+    expect(markup).toContain("12 tools");
     expect(markup).toContain('data-interaction-anchor="anchor.learning-plan"');
     expect(markup).toContain('data-interaction-anchor="anchor.live-activity"');
   });

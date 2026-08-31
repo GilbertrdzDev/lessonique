@@ -86,6 +86,189 @@ test.describe("classroom shell", () => {
     );
   });
 
+  test("executes every production tool through the in-page Dev Panel fixtures", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await expect(
+      page.getByRole("combobox", { name: "Environment profile" }),
+    ).toBeEnabled();
+
+    const panel = page.locator('[data-slot="webmcp-dev-panel"]');
+    await panel.locator("summary").first().click();
+    const toolSelector = page.getByRole("combobox", { name: "WebMCP tool" });
+    await expect(toolSelector.locator("option")).toHaveCount(12);
+    await toolSelector.selectOption("play_teaching_scene");
+    await expect(page.getByLabel("Tool input JSON")).toHaveValue(
+      /target\.surface-anchor/u,
+    );
+    await expect(page.getByLabel("Tool input JSON")).toHaveValue(
+      /assistant\.pointing/u,
+    );
+
+    await page.getByRole("button", { name: "Run all fixtures" }).click();
+    const results = page.getByRole("list", { name: "Dev fixture results" });
+    await expect(results.locator("li")).toHaveCount(12, { timeout: 30_000 });
+    await expect(results.locator('[data-status="failed"]')).toHaveCount(0);
+    await expect(
+      results.locator(
+        '[data-tool-name="control_teaching_scene"][data-status="cancelled"]',
+      ),
+    ).toHaveCount(1);
+    await expect(
+      page.getByRole("status").filter({ hasText: '"accepted": 12' }),
+    ).toBeVisible();
+
+    const reference = page.locator(
+      '[data-interaction-anchor="anchor.reference-panel"]',
+    );
+    await expect(reference).toBeVisible();
+    await expect(reference).toContainText("Dev Panel reference");
+    await expect(reference).toContainText("const lessonReady = true;");
+    await expect(
+      page.locator('[data-interaction-anchor="anchor.learning-plan"]'),
+    ).toContainText("Verify the fixture");
+    const accessibility = await new AxeBuilder({ page })
+      .include('[data-slot="webmcp-dev-panel"]')
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    expect(
+      accessibility.violations,
+      JSON.stringify(accessibility.violations, null, 2),
+    ).toEqual([]);
+    await testInfo.attach("lessonique-webmcp-dev-panel", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
+  });
+
+  test("adapts the plan and replaces a reference through ChatGPT-registered tools", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await expect(
+      page.getByRole("combobox", { name: "Environment profile" }),
+    ).toBeEnabled();
+
+    const results = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      const invoke = (name: string, input: unknown) =>
+        tools.find((tool) => tool.name === name)?.execute(input);
+      const created = await invoke("create_guided_lesson", {
+        lessonId: "lesson.chatgpt-adaptation",
+        title: "ChatGPT adaptation fixture",
+        objective: "Adapt a plan and present one structured reference.",
+        environment: {
+          profileId: "profile.vanilla-web",
+          languageIds: ["language.javascript"],
+          activeFile: "script.js",
+          activeSurfaceId: "editor",
+        },
+        files: [
+          {
+            path: "script.js",
+            languageId: "language.javascript",
+            content: "const adaptationReady = true;",
+          },
+        ],
+        steps: [
+          {
+            id: "step.chatgpt-initial",
+            title: "Create the value",
+            objective: "Define the requested JavaScript value.",
+          },
+        ],
+      });
+      const updated = await invoke("update_lesson_plan", {
+        operations: [
+          {
+            type: "insert_step",
+            afterStepId: "step.chatgpt-initial",
+            step: {
+              id: "step.chatgpt-review",
+              title: "Review the adaptation",
+              objective: "Confirm the new plan step is visible.",
+            },
+          },
+          {
+            type: "set_active_step",
+            stepId: "step.chatgpt-review",
+          },
+          {
+            type: "set_agent_message",
+            message: "ChatGPT adapted the plan without recreating the lesson.",
+          },
+        ],
+      });
+      const firstReference = await invoke("show_reference_panel", {
+        referenceId: "reference.chatgpt",
+        title: "Initial reference",
+        content: "This content will be replaced.",
+        focus: true,
+      });
+      const replacedReference = await invoke("show_reference_panel", {
+        referenceId: "reference.chatgpt",
+        title: "Updated reference",
+        content: "The same reference ID now contains the updated explanation.",
+        snippets: [
+          {
+            languageId: "language.javascript",
+            code: "const adaptationReady = true;",
+          },
+        ],
+      });
+      return { created, updated, firstReference, replacedReference };
+    });
+
+    expect(results).toEqual({
+      created: expect.objectContaining({ ok: true }),
+      updated: expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          activeStepId: "step.chatgpt-review",
+        }),
+      }),
+      firstReference: expect.objectContaining({ ok: true }),
+      replacedReference: expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({ replaced: true }),
+      }),
+    });
+    await expect(
+      page.locator('[data-interaction-anchor="anchor.learning-plan"]'),
+    ).toContainText("Review the adaptation");
+    const reference = page.locator('[data-reference-id="reference.chatgpt"]');
+    await expect(reference).toHaveCount(1);
+    await expect(reference).toContainText("Updated reference");
+    await expect(reference).toContainText(
+      "The same reference ID now contains the updated explanation.",
+    );
+    await expect(reference).not.toContainText("This content will be replaced.");
+
+    const hidden = await page.evaluate(async () => {
+      const tools = (
+        window as unknown as {
+          __lessoniqueRegisteredTools: Array<{
+            name: string;
+            execute: (input: unknown) => Promise<unknown>;
+          }>;
+        }
+      ).__lessoniqueRegisteredTools;
+      return tools
+        .find(({ name }) => name === "configure_learning_environment")
+        ?.execute({ surfaces: [{ id: "reference", visible: false }] });
+    });
+    expect(hidden).toEqual(expect.objectContaining({ ok: true }));
+    await expect(reference).toHaveCount(0);
+  });
+
   test("reconfigures the rendered workspace transactionally through WebMCP", async ({
     page,
   }, testInfo) => {

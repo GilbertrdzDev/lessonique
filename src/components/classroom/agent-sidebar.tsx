@@ -24,11 +24,13 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
 import { Button } from "@/components/ui/button";
+import { DevToolPanel } from "@/components/webmcp/dev-tool-panel";
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import {
   activityFeedMock,
@@ -101,8 +103,27 @@ function AgentStatus() {
 }
 
 function LearningPlan() {
+  const workspace = useWorkspaceRuntime();
   const anchorRef = useInteractionAnchor(P0_INTERACTION_ANCHOR_IDS.plan);
-  const currentStepIndex = learningPlanMock.findIndex(
+  const lesson = useSyncExternalStore(
+    workspace.lessonStore.subscribe,
+    workspace.lessonStore.getSnapshot,
+    workspace.lessonStore.getSnapshot,
+  );
+  const planSteps =
+    lesson.plan.steps.length > 0
+      ? lesson.plan.steps.map((step) => ({
+          id: step.id,
+          label: step.title,
+          state:
+            step.status === "completed"
+              ? ("complete" as const)
+              : step.status === "active"
+                ? ("current" as const)
+                : ("pending" as const),
+        }))
+      : learningPlanMock;
+  const currentStepIndex = planSteps.findIndex(
     (step) => step.state === "current",
   );
 
@@ -118,11 +139,11 @@ function LearningPlan() {
           Learning Plan
         </h2>
         <span className="rounded-lg bg-secondary px-2 py-1 text-[0.68rem] font-medium text-muted-foreground">
-          Step {currentStepIndex + 1} of {learningPlanMock.length}
+          Step {Math.max(1, currentStepIndex + 1)} of {planSteps.length}
         </span>
       </div>
       <ol className="space-y-1">
-        {learningPlanMock.map((step, index) => {
+        {planSteps.map((step, index) => {
           const isCurrent = step.state === "current";
           const isComplete = step.state === "complete";
 
@@ -165,6 +186,60 @@ function LearningPlan() {
           );
         })}
       </ol>
+    </section>
+  );
+}
+
+function ReferencePanel() {
+  const workspace = useWorkspaceRuntime();
+  const anchorRef = useInteractionAnchor(P0_INTERACTION_ANCHOR_IDS.reference);
+  const referenceState = useSyncExternalStore(
+    workspace.referencePanels.subscribe,
+    workspace.referencePanels.getSnapshot,
+    workspace.referencePanels.getSnapshot,
+  );
+  const workspaceState = useSyncExternalStore(
+    workspace.store.subscribe,
+    workspace.store.getSnapshot,
+    workspace.store.getSnapshot,
+  );
+  const reference = referenceState.active;
+  const isVisible = workspaceState.surfaces.some(
+    ({ id, visible }) => id === reference?.surfaceId && visible,
+  );
+  if (!reference || !isVisible) return null;
+
+  return (
+    <section
+      aria-labelledby="reference-panel-title"
+      className="rounded-2xl border border-primary/25 bg-brand-soft/35 p-3"
+      data-interaction-anchor={P0_INTERACTION_ANCHOR_IDS.reference}
+      data-reference-id={reference.referenceId}
+      ref={anchorRef}
+    >
+      <p className="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-primary">
+        Reference
+      </p>
+      <h2 className="mt-1 text-sm font-bold" id="reference-panel-title">
+        {reference.title}
+      </h2>
+      <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+        {reference.content}
+      </p>
+      {reference.snippets.length > 0 ? (
+        <ol className="mt-3 space-y-2">
+          {reference.snippets.map((snippet, index) => (
+            <li key={`${snippet.languageId}:${index}`}>
+              <span className="text-[0.62rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                {snippet.languageId}
+              </span>
+              <pre className="mt-1 max-h-40 overflow-auto rounded-xl bg-background/80 p-2 text-[0.68rem] leading-relaxed">
+                <code>{snippet.code}</code>
+              </pre>
+            </li>
+          ))}
+        </ol>
+      ) : null}
     </section>
   );
 }
@@ -403,7 +478,9 @@ export function AgentSidebar() {
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3 md:grid md:grid-cols-3 2xl:flex">
             <LearningPlan />
             <ActivityFeed />
+            <ReferencePanel />
             <WebMCPStatusCard />
+            <DevToolPanel />
           </div>
         </div>
       )}

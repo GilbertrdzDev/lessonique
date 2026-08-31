@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { WorkspaceRuntimeProvider } from "@/components/workspace/workspace-runtime-provider";
+import { WebMCPRegistrationProvider } from "@/components/webmcp/webmcp-registration-provider";
 
 import ClassroomPage from "./page";
 
@@ -12,7 +13,11 @@ describe("ClassroomPage", () => {
       createElement(
         WorkspaceRuntimeProvider,
         null,
-        createElement(ClassroomPage),
+        createElement(
+          WebMCPRegistrationProvider,
+          null,
+          createElement(ClassroomPage),
+        ),
       ),
     );
 

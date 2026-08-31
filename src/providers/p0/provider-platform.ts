@@ -43,7 +43,10 @@ export const P0_SURFACE_IDS = {
   values: "values",
   plan: "plan",
   activity: "activity",
+  reference: "reference",
 } as const;
+
+export const P0_REFERENCE_SURFACE_MODE_ID = "reference";
 
 export const P0_ENVIRONMENT_ACTION_IDS = {
   run: "runtime.run",
@@ -99,6 +102,7 @@ export const P0_INTERACTION_ANCHOR_IDS = {
   console: "anchor.workspace-console",
   plan: "anchor.learning-plan",
   activity: "anchor.live-activity",
+  reference: "anchor.reference-panel",
 } as const;
 
 const EMPTY_INPUT_SCHEMA = {
@@ -645,6 +649,14 @@ const SURFACES = [
     configurationOptions: [],
     actionIds: [],
   },
+  {
+    id: P0_SURFACE_IDS.reference,
+    displayName: "Reference Panel",
+    supportedModeIds: [P0_REFERENCE_SURFACE_MODE_ID],
+    supportedPlacementIds: ["right"],
+    configurationOptions: [],
+    actionIds: [],
+  },
 ] as const satisfies readonly SurfaceDefinition[];
 
 const ENVIRONMENT_PROFILES = [
@@ -719,6 +731,13 @@ const ENVIRONMENT_PROFILES = [
         placementId: "right",
         modeId: "feed",
       },
+      {
+        id: P0_SURFACE_IDS.reference,
+        visible: false,
+        order: 5,
+        placementId: "right",
+        modeId: P0_REFERENCE_SURFACE_MODE_ID,
+      },
     ],
     allowedSurfaceIds: [
       P0_SURFACE_IDS.editor,
@@ -726,6 +745,7 @@ const ENVIRONMENT_PROFILES = [
       P0_SURFACE_IDS.console,
       P0_SURFACE_IDS.plan,
       P0_SURFACE_IDS.activity,
+      P0_SURFACE_IDS.reference,
     ],
     allowedActionIds: [
       ...SHARED_PROFILE_ACTION_IDS,
@@ -782,6 +802,13 @@ const ENVIRONMENT_PROFILES = [
         placementId: "right",
         modeId: "feed",
       },
+      {
+        id: P0_SURFACE_IDS.reference,
+        visible: false,
+        order: 5,
+        placementId: "right",
+        modeId: P0_REFERENCE_SURFACE_MODE_ID,
+      },
     ],
     allowedSurfaceIds: [
       P0_SURFACE_IDS.editor,
@@ -789,6 +816,7 @@ const ENVIRONMENT_PROFILES = [
       P0_SURFACE_IDS.values,
       P0_SURFACE_IDS.plan,
       P0_SURFACE_IDS.activity,
+      P0_SURFACE_IDS.reference,
     ],
     allowedActionIds: SHARED_PROFILE_ACTION_IDS,
   },
@@ -1018,6 +1046,11 @@ const INTERACTION_ANCHORS = [
     id: P0_INTERACTION_ANCHOR_IDS.activity,
     displayName: "Live activity",
     surfaceId: P0_SURFACE_IDS.activity,
+  },
+  {
+    id: P0_INTERACTION_ANCHOR_IDS.reference,
+    displayName: "Reference panel",
+    surfaceId: P0_SURFACE_IDS.reference,
   },
 ] satisfies readonly InteractionAnchorDefinition[];
 
