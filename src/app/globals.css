@@ -238,16 +238,40 @@
 }
 
 .experience-companion {
+  --experience-companion-offset-x: 0px;
+  --experience-companion-offset-y: 0px;
   top: clamp(7.5rem, 13vh, 10rem);
   left: 50%;
   opacity: 1;
-  transform: translateX(-50%) scale(1);
+  transform: translate(
+      calc(-50% + var(--experience-companion-offset-x)),
+      var(--experience-companion-offset-y)
+    )
+    scale(1);
   transition:
     top 850ms cubic-bezier(0.22, 1, 0.36, 1),
     left 850ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 300ms ease,
     transform 850ms cubic-bezier(0.22, 1, 0.36, 1),
     filter 300ms ease;
+}
+
+.experience-companion-content {
+  transition: filter 180ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.experience-companion-interactive {
+  transition: opacity 300ms ease, filter 180ms ease;
+}
+
+.experience-companion-interactive:hover .experience-companion-content {
+  filter: drop-shadow(0 0.7rem 0.9rem rgb(64 45 140 / 0.22));
+  transform: translateY(-0.3rem) scale(1.025);
+}
+
+.experience-companion-dragging .experience-companion-content {
+  filter: drop-shadow(0 0.9rem 1rem rgb(64 45 140 / 0.3));
+  transform: translateY(-0.45rem) scale(1.04);
 }
 
 .experience-companion-hidden {
@@ -257,12 +281,20 @@
 [data-experience-state="classroom"] .experience-companion {
   top: 9.25rem;
   left: min(64vw, calc(100vw - 32rem));
-  transform: translateX(-50%) scale(0.74);
+  transform: translate(
+      calc(-50% + var(--experience-companion-offset-x)),
+      var(--experience-companion-offset-y)
+    )
+    scale(0.74);
 }
 
 [data-experience-state="starting-session"] .experience-companion {
   top: clamp(7rem, 11vh, 8.5rem);
-  transform: translateX(-50%) scale(1.04);
+  transform: translate(
+      calc(-50% + var(--experience-companion-offset-x)),
+      var(--experience-companion-offset-y)
+    )
+    scale(1.04);
 }
 
 [data-companion-experience-state="unsupported"] {
@@ -1349,7 +1381,11 @@
   [data-experience-state="classroom"] .experience-companion {
     top: 9.5rem;
     left: 70%;
-    transform: translateX(-50%) scale(0.62);
+    transform: translate(
+        calc(-50% + var(--experience-companion-offset-x)),
+        var(--experience-companion-offset-y)
+      )
+      scale(0.62);
   }
 }
 
@@ -1357,7 +1393,11 @@
   [data-experience-state="classroom"] .experience-companion {
     top: 11rem;
     left: 76%;
-    transform: translateX(-50%) scale(0.48);
+    transform: translate(
+        calc(-50% + var(--experience-companion-offset-x)),
+        var(--experience-companion-offset-y)
+      )
+      scale(0.48);
   }
 }
 
@@ -1374,6 +1414,7 @@
   .lessonique-companion-presentation,
   .lessonique-guide-presentation,
   .experience-companion,
+  .experience-companion-content,
   .experience-companion-orbit,
   .experience-companion-particle,
   .lessonique-companion .companion-aura,

@@ -44,8 +44,8 @@ export function createArrayMapScene(
           },
         ],
         guide: {
-          title: "Transform every item with map",
-          body: "The JavaScript provider resolved the scores.map() call as a semantic source target. The callback returns a new value while leaving the source array unchanged.",
+          title: "Transform every item with `map()`",
+          body: "The JavaScript provider resolved the `scores.map()` call as a semantic source target. The callback returns a new value while leaving the source array unchanged.",
           supportingItems: [
             "One input produces one output",
             "The source order is preserved",
@@ -75,7 +75,7 @@ export function createArrayMapScene(
           title: "Read the validated console output",
           body: "The console validator waits locally for the expected transformed values. Runtime evidence, not an additional agent request, decides when this beat succeeds.",
           supportingItems: [
-            "Expected output: 6, 10, 16",
+            "Expected output: `6, 10, 16`",
             "Runtime errors must remain absent",
           ],
         },

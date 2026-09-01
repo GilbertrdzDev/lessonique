@@ -1,7 +1,13 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+} from "react";
 
 import { AgentSidebar } from "@/components/classroom/agent-sidebar";
 import {
@@ -11,7 +17,10 @@ import {
 import { ClassroomHeader } from "@/components/classroom/classroom-header";
 import { ExperienceHeader } from "@/components/classroom/experience-header";
 import { ExperienceLobby } from "@/components/classroom/experience-lobby";
-import { LessoniqueCompanion } from "@/components/scene/assistant-overlay-host";
+import {
+  LessoniqueCompanion,
+  useBoundedPointerDrag,
+} from "@/components/scene/assistant-overlay-host";
 import { useWebMCPRuntime } from "@/components/webmcp/webmcp-registration-provider";
 import { ClassroomWorkspace } from "@/components/workspace/classroom-workspace";
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
@@ -43,6 +52,11 @@ export function LessoniqueExperience() {
     workspace.scene.presentation.subscribe,
     workspace.scene.presentation.getSnapshot,
     workspace.scene.presentation.getSnapshot,
+  );
+  const scene = useSyncExternalStore(
+    workspace.scene.store.subscribe,
+    workspace.scene.store.getSnapshot,
+    workspace.scene.store.getSnapshot,
   );
   const hasSession = Boolean(lesson.lesson && workspaceState.profileId);
   const [classroomHasOpened, setClassroomHasOpened] = useState(false);
@@ -133,8 +147,11 @@ export function LessoniqueExperience() {
       {experienceState === "classroom" ? <ClassroomSkipLink /> : null}
       <ExperienceHeader experienceState={experienceState} />
       <PersistentCompanion
+        canResumeGuide={workspace.scene.runner.canReplayLast()}
         experienceState={experienceState}
         hidden={sceneOwnsCompanion}
+        onResumeGuide={() => workspace.scene.runner.replayLast()}
+        resetKey={`${lesson.lesson?.id ?? "idle"}:${scene.revision}`}
       />
       <AnimatePresence initial={false} mode="wait">
         {experienceState === "classroom" ? (
@@ -166,12 +183,27 @@ export function LessoniqueExperience() {
 }
 
 function PersistentCompanion({
+  canResumeGuide,
   experienceState,
   hidden,
+  onResumeGuide,
+  resetKey,
 }: Readonly<{
+  canResumeGuide: boolean;
   experienceState: LessoniqueExperienceState;
   hidden: boolean;
+  onResumeGuide(): Promise<unknown>;
+  resetKey: string;
 }>) {
+  const companionRef = useRef<HTMLDivElement>(null);
+  const {
+    bindings: dragBindings,
+    dragging,
+    offset,
+    reset: resetDrag,
+  } = useBoundedPointerDrag(companionRef, resetKey);
+  const [resuming, setResuming] = useState(false);
+  const interactive = experienceState === "classroom";
   const assistantState =
     experienceState === "unsupported"
       ? "assistant.warning"
@@ -182,38 +214,93 @@ function PersistentCompanion({
           ? "assistant.success"
           : "assistant.idle";
 
+  useEffect(() => {
+    if (hidden) resetDrag();
+  }, [hidden, resetDrag]);
+
+  const resumeGuide = async () => {
+    if (resuming) return;
+    setResuming(true);
+    resetDrag();
+    try {
+      await onResumeGuide();
+    } finally {
+      setResuming(false);
+    }
+  };
+
   return (
-    <div
-      aria-label={`Lessonique AI companion, ${experienceState}`}
-      className={cn(
-        "experience-companion pointer-events-none fixed z-20",
-        hidden && "experience-companion-hidden",
-      )}
-      data-companion-experience-state={experienceState}
-      role="img"
-    >
-      <span aria-hidden="true" className="experience-companion-orbit" />
-      <LessoniqueCompanion
-        className="size-48 sm:size-64"
-        decorative
-        facing={experienceState === "classroom" ? "left" : "right"}
-        paused={false}
-        stateId={assistantState}
-        status={experienceState}
-        visualState={
-          experienceState === "unsupported"
-            ? "incompatible"
-            : experienceState === "connected" ||
-                experienceState === "starting-session"
-              ? "connected"
-              : experienceState === "supported-disconnected"
-                ? "thinking"
-                : "idle"
+    <>
+      <div
+        {...(interactive ? dragBindings : {})}
+        aria-hidden={hidden || undefined}
+        aria-label={
+          interactive
+            ? "Move Lessonique companion"
+            : `Lessonique AI companion, ${experienceState}`
         }
-      />
-      <span aria-hidden="true" className="experience-companion-particle particle-one" />
-      <span aria-hidden="true" className="experience-companion-particle particle-two" />
-      <span aria-hidden="true" className="experience-companion-particle particle-three" />
-    </div>
+        className={cn(
+          "experience-companion fixed z-20",
+          interactive
+            ? "experience-companion-interactive pointer-events-auto touch-none select-none cursor-grab"
+            : "pointer-events-none",
+          dragging && "experience-companion-dragging cursor-grabbing",
+          hidden && "experience-companion-hidden pointer-events-none",
+        )}
+        data-companion-experience-state={experienceState}
+        data-dragging={dragging}
+        data-manual-offset-x={offset.x}
+        data-manual-offset-y={offset.y}
+        data-slot="persistent-companion"
+        ref={companionRef}
+        role={interactive ? "group" : "img"}
+        style={
+          {
+            "--experience-companion-offset-x": `${offset.x}px`,
+            "--experience-companion-offset-y": `${offset.y}px`,
+          } as CSSProperties
+        }
+      >
+        <div className="experience-companion-content" data-slot="persistent-companion-content">
+          <span aria-hidden="true" className="experience-companion-orbit" />
+          <LessoniqueCompanion
+            className={
+              experienceState === "classroom"
+                ? "size-36 sm:size-40"
+                : "size-48 sm:size-64"
+            }
+            decorative
+            facing={experienceState === "classroom" ? "left" : "right"}
+            paused={false}
+            stateId={assistantState}
+            status={experienceState}
+            visualState={
+              experienceState === "unsupported"
+                ? "incompatible"
+                : experienceState === "connected" ||
+                    experienceState === "starting-session"
+                  ? "connected"
+                  : experienceState === "supported-disconnected"
+                    ? "thinking"
+                    : "idle"
+            }
+          />
+          <span aria-hidden="true" className="experience-companion-particle particle-one" />
+          <span aria-hidden="true" className="experience-companion-particle particle-two" />
+          <span aria-hidden="true" className="experience-companion-particle particle-three" />
+        </div>
+      </div>
+      {interactive && !hidden && canResumeGuide ? (
+        <button
+          aria-label="Resume guide"
+          className="fixed bottom-4 left-4 z-30 rounded-full border border-primary/30 bg-card px-4 py-2 text-xs font-semibold text-primary shadow-floating transition-colors hover:bg-brand-soft disabled:cursor-wait disabled:opacity-60"
+          disabled={resuming}
+          onClick={() => void resumeGuide()}
+          type="button"
+        >
+          {resuming ? "Resuming guide..." : "Resume guide"}
+        </button>
+      ) : null}
+    </>
   );
 }

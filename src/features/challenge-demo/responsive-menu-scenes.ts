@@ -255,7 +255,7 @@ export function createResponsiveMenuJavascriptScene(
           body: "The semantic JavaScript locator found the registered click listener. Its handler reads the current state once, then updates the button and navigation together.",
           supportingItems: [
             "The source target comes from the JavaScript provider",
-            "Accessible and visual state share one boolean",
+            "Accessible and visual state share one `boolean`",
           ],
         },
         caption: "The listener is highlighted without exposing a selector or executable locator.",

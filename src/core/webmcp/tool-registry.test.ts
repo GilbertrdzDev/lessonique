@@ -15,8 +15,14 @@ describe("ToolRegistry", () => {
     expect(registry.require("create_guided_lesson").description).toContain(
       "not a workspace full of TODOs",
     );
+    expect(registry.require("create_guided_lesson").description).toContain(
+      "single backticks",
+    );
     expect(registry.require("play_teaching_scene").description).toContain(
       "one small concept per explanation beat",
+    );
+    expect(registry.require("play_teaching_scene").description).toContain(
+      "single backticks",
     );
     await expect(registry.invoke("get_system_capabilities", {})).resolves.toEqual(
       expect.objectContaining({

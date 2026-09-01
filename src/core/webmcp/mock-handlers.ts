@@ -1,5 +1,6 @@
 import { CapabilityCatalog } from "@/core/platform/capability-catalog";
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
+import { GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION } from "@/core/platform/visual-guide";
 import type {
   DiagnosticSnapshotStore,
   ValidationEngine,
@@ -45,7 +46,7 @@ const TOOL_METADATA = {
   },
   create_guided_lesson: {
     title: "Create guided lesson",
-    description: "Create or replace a complete guided lesson transactionally. Always declare lessonMode. Use explain when the learner asks to understand, learn, see, or be shown a concept: provide complete example code and progressive explanation beats, not a workspace full of TODOs. Use practice only when the learner asks for an exercise, challenge, TODO, or hands-on work. Use mixed for a demonstration followed by a small validated exercise.",
+    description: `Create or replace a complete guided lesson transactionally. Always declare lessonMode. Use explain when the learner asks to understand, learn, see, or be shown a concept: provide complete example code and progressive explanation beats, not a workspace full of TODOs. Use practice only when the learner asks for an exercise, challenge, TODO, or hands-on work. Use mixed for a demonstration followed by a small validated exercise. ${GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION}`,
   },
   reset_classroom: {
     title: "Reset classroom",
@@ -69,7 +70,7 @@ const TOOL_METADATA = {
   },
   play_teaching_scene: {
     title: "Play teaching scene",
-    description: "Start a visual teaching scene using semantic targets and registered guidance capabilities. Author one small concept per explanation beat, set lessonStepId to the Learning Plan section taught by each micro-step, and target the narrowest useful token or expression. Set allowManualNavigation for learner-controlled Previous, Next, and Finish. Interaction beats are for learner work, must include a registered wait, and automatically remove invasive guidance; validation and feedback beats check and respond without exposing arbitrary code execution.",
+    description: `Start a visual teaching scene using semantic targets and registered guidance capabilities. Author one small concept per explanation beat, set lessonStepId to the Learning Plan section taught by each micro-step, and target the narrowest useful token or expression. Set allowManualNavigation for learner-controlled Previous, Next, and Finish. Interaction beats are for learner work, must include a registered wait, and automatically remove invasive guidance; validation and feedback beats check and respond without exposing arbitrary code execution. ${GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION}`,
   },
   control_teaching_scene: {
     title: "Control teaching scene",

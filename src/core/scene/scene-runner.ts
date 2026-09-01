@@ -106,6 +106,12 @@ type ActiveScene = {
   resumeListeners: Set<() => void>;
 };
 
+type ReplayableScene = {
+  scene: TeachingScene;
+  lessonId: string;
+  initialLessonStepId?: string;
+};
+
 export class SceneRunner {
   readonly #platform: ProviderPlatformRegistries;
   readonly #lesson: LessonStoreAdapter;
@@ -127,6 +133,7 @@ export class SceneRunner {
   readonly #beatDurationMs: number;
   readonly #targetRecoveryMs: number;
   #active?: ActiveScene;
+  #replayable?: ReplayableScene;
 
   constructor(options: SceneRunnerOptions) {
     this.#platform = options.platform;
@@ -203,8 +210,70 @@ export class SceneRunner {
 
   async start(scene: TeachingScene): Promise<SceneSnapshot> {
     this.validate(scene);
+    return this.#startValidated(scene);
+  }
+
+  canReplayLast(): boolean {
+    const replayable = this.#replayable;
+    const lesson = this.#lesson.getSnapshot();
+    if (
+      this.#active ||
+      !replayable ||
+      !lesson.lesson ||
+      replayable.lessonId !== lesson.lesson.id
+    ) {
+      return false;
+    }
+    try {
+      this.validate(
+        replayable.scene,
+        createReplayValidationLesson(lesson, replayable.initialLessonStepId),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async replayLast(): Promise<SceneSnapshot> {
+    const replayable = this.#replayable;
+    const lesson = this.#lesson.getSnapshot();
+    if (
+      this.#active ||
+      !replayable ||
+      !lesson.lesson ||
+      replayable.lessonId !== lesson.lesson.id
+    ) {
+      throw new SceneControlError(
+        "There is no completed teaching scene available for this lesson.",
+      );
+    }
+    this.validate(
+      replayable.scene,
+      createReplayValidationLesson(lesson, replayable.initialLessonStepId),
+    );
+    return this.#startValidated(replayable.scene, replayable);
+  }
+
+  async #startValidated(
+    scene: TeachingScene,
+    replayContext?: ReplayableScene,
+  ): Promise<SceneSnapshot> {
     await this.#disposeActive("cancelled");
     const prepared = structuredClone(scene);
+    const lesson = this.#lesson.getSnapshot();
+    if (lesson.lesson) {
+      this.#replayable = {
+        scene: structuredClone(prepared),
+        lessonId: lesson.lesson.id,
+        ...(replayContext?.initialLessonStepId || lesson.plan.activeStepId
+          ? {
+              initialLessonStepId:
+                replayContext?.initialLessonStepId ?? lesson.plan.activeStepId,
+            }
+          : {}),
+      };
+    }
     const scope = new SceneLifecycleScope(prepared.id, this.#lifecycle);
     const active: ActiveScene = {
       scene: prepared,
@@ -345,6 +414,7 @@ export class SceneRunner {
 
   async dispose(): Promise<void> {
     await this.#disposeActive("cancelled");
+    this.#replayable = undefined;
   }
 
   async #run(active: ActiveScene): Promise<void> {
@@ -848,6 +918,25 @@ function sceneLessonStepIds(scene: TeachingScene): string[] {
   return scene.beats.flatMap(({ lessonStepId }) =>
     lessonStepId ? [lessonStepId] : [],
   );
+}
+
+function createReplayValidationLesson(
+  lesson: LessonState,
+  initialLessonStepId: string | undefined,
+): LessonState {
+  const activeStepId =
+    initialLessonStepId &&
+    lesson.plan.steps.some(({ id }) => id === initialLessonStepId)
+      ? initialLessonStepId
+      : lesson.plan.steps[0]?.id;
+  return {
+    ...lesson,
+    status: "active",
+    plan: {
+      ...lesson.plan,
+      ...(activeStepId ? { activeStepId } : { activeStepId: undefined }),
+    },
+  };
 }
 
 function throwIfSceneWorkAborted(

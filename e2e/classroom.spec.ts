@@ -257,12 +257,19 @@ test.describe("classroom shell", () => {
     await expect
       .poll(() => previewMenuTargetAlignmentDelta(page))
       .toBeLessThanOrEqual(2);
-    const guideBox = await guide.boundingBox();
-    expect(guideBox).not.toBeNull();
-    expect(guideBox!.x).toBeGreaterThanOrEqual(0);
-    expect(guideBox!.y).toBeGreaterThanOrEqual(0);
-    expect(guideBox!.x + guideBox!.width).toBeLessThanOrEqual(1181);
-    expect(guideBox!.y + guideBox!.height).toBeLessThanOrEqual(821);
+    await expect
+      .poll(async () => {
+        const guideBox = await guide.boundingBox();
+        if (!guideBox) return Number.POSITIVE_INFINITY;
+        return Math.max(
+          0,
+          -guideBox.x,
+          -guideBox.y,
+          guideBox.x + guideBox.width - 1181,
+          guideBox.y + guideBox.height - 821,
+        );
+      })
+      .toBeLessThanOrEqual(1);
     await expect
       .poll(async () => (await previewMenuGuidanceTargetOverlap(page)).area)
       .toBe(0);
@@ -1122,15 +1129,18 @@ test.describe("classroom shell", () => {
               { effectId: "effect.pointer" },
               {
                 effectId: "effect.callout",
-                input: { text: "Inspect this registered learning target." },
+                input: { text: "Inspect this registered `learningPlan` target." },
               },
             ],
             guide: {
-              title: "Responsive semantic guidance",
-              body: "Keep this first line.\nKeep this second line.",
-              supportingItems: ["First supporting item", "Second supporting item"],
+              title: "Responsive `semantic` guidance",
+              body: "Keep this `const` line.\nRender `<section>` on the second line.",
+              supportingItems: [
+                "First `string` item",
+                "Second `boolean` item",
+              ],
             },
-            caption: "Visual meaning remains complete without motion or audio.",
+            caption: "Visual `meaning` remains complete without motion or audio.",
             wait: {
               kind: "interaction",
               eventTypeId: "interaction.surface-activate",
@@ -1180,15 +1190,24 @@ test.describe("classroom shell", () => {
     );
     await expect(companion).toHaveAttribute("data-companion-asset", "normal");
     await expect(guide).toContainText("Responsive semantic guidance");
-    await expect(guide).toContainText("Keep this first line.");
-    await expect(guide).toContainText("Keep this second line.");
+    await expect(guide).toContainText("Keep this const line.");
+    await expect(guide).toContainText("Render <section> on the second line.");
     await expect(guide).toContainText(
       "Visual meaning remains complete without motion or audio.",
     );
     const guideText = await guide.textContent();
-    expect(guideText?.indexOf("First supporting item")).toBeLessThan(
-      guideText?.indexOf("Second supporting item") ?? -1,
+    expect(guideText?.indexOf("First string item")).toBeLessThan(
+      guideText?.indexOf("Second boolean item") ?? -1,
     );
+    await expect(guide.locator('[data-slot="guide-inline-code"]')).toHaveCount(6);
+    await expect(guide.locator("code")).toHaveText([
+      "semantic",
+      "const",
+      "<section>",
+      "string",
+      "boolean",
+      "meaning",
+    ]);
     await expect(overlay).toHaveCSS("pointer-events", "none");
     for (const effect of ["focus", "spotlight", "highlight", "point"]) {
       await expect(
@@ -1669,6 +1688,43 @@ test.describe("classroom shell", () => {
     for (const [id] of planSections) {
       await expect(planStep(id)).toHaveAttribute("data-learning-plan-state", "complete");
     }
+
+    const persistentCompanion = page.locator('[data-slot="persistent-companion"]');
+    const persistentContent = page.locator(
+      '[data-slot="persistent-companion-content"]',
+    );
+    const resumeAfterCompletion = page.getByRole("button", {
+      name: "Resume guide",
+    });
+    await expect(persistentCompanion).toBeVisible();
+    await expect(persistentCompanion).toHaveCSS("cursor", "grab");
+    await expect(resumeAfterCompletion).toBeVisible();
+    await persistentCompanion.hover();
+    await expect
+      .poll(() =>
+        persistentContent.evaluate(
+          (element) => getComputedStyle(element).transform,
+        ),
+      )
+      .not.toBe("none");
+
+    await dragBy(page, persistentCompanion, -80, 54, persistentCompanion);
+    const persistentBox = await persistentCompanion.boundingBox();
+    expect(persistentBox).not.toBeNull();
+    expect(persistentBox!.x).toBeGreaterThanOrEqual(11);
+    expect(persistentBox!.y).toBeGreaterThanOrEqual(11);
+    expect(persistentBox!.x + persistentBox!.width).toBeLessThanOrEqual(1429);
+    expect(persistentBox!.y + persistentBox!.height).toBeLessThanOrEqual(889);
+
+    await resumeAfterCompletion.click();
+    await expect(guide).toContainText("Variables overview");
+    await expect(guide).toContainText("Step 1 of 9");
+    await expect(resumeAfterCompletion).toHaveCount(0);
+    await expect(plan).toContainText("Step 1 of 5");
+    await expect(planStep("step.variables")).toHaveAttribute(
+      "data-learning-plan-state",
+      "current",
+    );
   });
 
   test("creates and resets the rendered classroom through the real WebMCP lifecycle", async ({

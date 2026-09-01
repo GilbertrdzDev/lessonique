@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { DEFAULT_SYSTEM_LIMITS } from "@/core/platform/contracts";
 import type { JsonValue } from "@/core/platform/json-schema";
+import { GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION } from "@/core/platform/visual-guide";
 
 import type { WebMCPToolName } from "./tool-names";
 
@@ -103,14 +104,27 @@ const guidanceEffectSchema = z.strictObject({
 });
 
 const visualGuideSchema = z.strictObject({
-  title: z.string().min(1).max(120).optional(),
+  title: z
+    .string()
+    .min(1)
+    .max(120)
+    .describe(GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION)
+    .optional(),
   body: z
     .string()
     .min(1)
     .max(DEFAULT_SYSTEM_LIMITS.maxVisualGuideBodyCharacters)
-    .describe("Keep this explanation focused on the active micro-step; do not combine multiple concepts into a wall of text."),
+    .describe(
+      `Keep this explanation focused on the active micro-step; do not combine multiple concepts into a wall of text. ${GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION}`,
+    ),
   supportingItems: z
-    .array(z.string().min(1).max(DEFAULT_SYSTEM_LIMITS.maxVisualGuideItemCharacters))
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(DEFAULT_SYSTEM_LIMITS.maxVisualGuideItemCharacters)
+        .describe(GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION),
+    )
     .max(DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems)
     .optional(),
 });
@@ -155,7 +169,12 @@ const teachingBeatSchema = z.strictObject({
   assistant: assistantPresentationSchema.optional(),
   effects: z.array(guidanceEffectSchema).max(8).optional(),
   guide: visualGuideSchema.optional(),
-  caption: z.string().min(1).max(DEFAULT_SYSTEM_LIMITS.maxCaptionCharacters).optional(),
+  caption: z
+    .string()
+    .min(1)
+    .max(DEFAULT_SYSTEM_LIMITS.maxCaptionCharacters)
+    .describe(GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION)
+    .optional(),
   wait: waitConditionSchema
     .describe("Required for interaction and validation beats. It blocks forward navigation until the registered local condition resolves.")
     .optional(),
@@ -187,7 +206,16 @@ export const lessonStepInputSchema = z.strictObject({
   objective: z.string().min(1).max(300),
   instructions: z.string().min(1).max(1_000).optional(),
   criteria: z.array(lessonCriterionSchema).max(10).optional(),
-  hints: z.array(z.string().min(1).max(300)).max(5).optional(),
+  hints: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(300)
+        .describe(GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION),
+    )
+    .max(5)
+    .optional(),
 });
 
 const lessonEnvironmentSchema = z.strictObject({
@@ -395,7 +423,16 @@ const lessonStepPatchSchema = z.strictObject({
   objective: z.string().min(1).max(300).optional(),
   instructions: z.string().min(1).max(1_000).optional(),
   criteria: z.array(lessonCriterionSchema).max(10).optional(),
-  hints: z.array(z.string().min(1).max(300)).max(5).optional(),
+  hints: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(300)
+        .describe(GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION),
+    )
+    .max(5)
+    .optional(),
 });
 const lessonPlanOperationSchema = z.discriminatedUnion("type", [
   z.strictObject({

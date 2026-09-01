@@ -32,7 +32,7 @@ describe("Array.map challenge scene", () => {
           filePath: "script.js",
         }),
         target: MAP_TARGET,
-        guide: expect.objectContaining({ title: "Transform every item with map" }),
+        guide: expect.objectContaining({ title: "Transform every item with `map()`" }),
       }),
     );
     expect(scene.beats[1]).toEqual(

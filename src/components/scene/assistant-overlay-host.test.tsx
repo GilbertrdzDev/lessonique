@@ -97,6 +97,47 @@ describe("AssistantOverlayHost", () => {
     expect(html).not.toMatch(/audio|speech|voice/iu);
   });
 
+  it("renders backtick-delimited code consistently across guide prose", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      effects: [
+        {
+          effectId: "effect.callout",
+          input: { text: "Inspect `getUser()`." },
+        },
+      ],
+      guide: {
+        title: "Declare with `const`",
+        body: "Use `let` for reassignment.\nRender `<section>` as text.",
+        supportingItems: ["The value has type `string`."],
+      },
+      caption: "The initial value is `42`.",
+      hint: "Check arrays with `Array.isArray()`.",
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html.match(/data-slot="guide-inline-code"/gu)).toHaveLength(7);
+    for (const code of [
+      "const",
+      "let",
+      "&lt;section&gt;",
+      "string",
+      "getUser()",
+      "Array.isArray()",
+      "42",
+    ]) {
+      expect(html).toContain(`data-slot="guide-inline-code">${code}</code>`);
+    }
+    expect(html).toContain("Use ");
+    expect(html).toContain(" for reassignment.\nRender ");
+    expect(html).not.toContain("`const`");
+  });
+
   it("reflows the guide and points with the target-facing arm on the left side", () => {
     const store = new ScenePresentationStore();
     const current = store.getSnapshot();
@@ -153,7 +194,10 @@ describe("AssistantOverlayHost", () => {
       guide: {
         title: "Untrusted guide",
         body: "<script>globalThis.compromised=true</script>",
-        supportingItems: ["<strong>Keep this literal</strong>"],
+        supportingItems: [
+          "<strong>Keep this literal</strong>",
+          "Keep unmatched `token literal.",
+        ],
       },
       caption: "<iframe srcdoc=unsafe></iframe>",
       hint: "<svg onload=unsafe></svg>",
@@ -168,6 +212,7 @@ describe("AssistantOverlayHost", () => {
     expect(html).toContain("&lt;img src=x onerror=&quot;");
     expect(html).toContain("&lt;iframe srcdoc=unsafe&gt;&lt;/iframe&gt;");
     expect(html).toContain("&lt;svg onload=unsafe&gt;&lt;/svg&gt;");
+    expect(html).toContain("Keep unmatched `token literal.");
     expect(html).not.toMatch(/<(?:script|strong|img|iframe|svg)\b/iu);
   });
 

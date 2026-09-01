@@ -144,6 +144,71 @@ describe("SceneRunner", () => {
     expect(lesson.getSnapshot().plan.steps.every(({ status }) => status === "completed")).toBe(true);
   });
 
+  it("replays the last completed scene from beat one only for the same lesson", async () => {
+    const { runner, lesson } = createHarness({
+      beatDurationMs: 30_000,
+      lessonStepCount: 2,
+    });
+    const replayableScene: TeachingScene = {
+      ...scene("scene.replayable", 2),
+      beats: ["step.1", "step.2"].map((lessonStepId, index) => ({
+        id: `beat.${index + 1}`,
+        lessonStepId,
+        effects: [],
+        guide: { body: `Guide ${index + 1}` },
+      })),
+    };
+
+    expect(runner.canReplayLast()).toBe(false);
+    await runner.start(replayableScene);
+    await vi.advanceTimersByTimeAsync(0);
+    await runner.control("next");
+    await vi.advanceTimersByTimeAsync(0);
+    await runner.control("next");
+    await vi.runAllTimersAsync();
+
+    expect(lesson.getSnapshot().status).toBe("completed");
+    expect(runner.canReplayLast()).toBe(true);
+
+    await runner.replayLast();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(runner.store.getSnapshot()).toEqual(
+      expect.objectContaining({
+        id: "scene.replayable",
+        activeBeatId: "beat.1",
+        status: "waiting",
+      }),
+    );
+    expect(lesson.getSnapshot().plan.steps.map(({ status }) => status)).toEqual([
+      "active",
+      "pending",
+    ]);
+    expect(runner.canReplayLast()).toBe(false);
+
+    await runner.control("cancel");
+    const replacement = createActiveLessonState(
+      {
+        id: "lesson.replacement",
+        title: "Replacement lesson",
+        objective: "Invalidate the previous replay.",
+      },
+      [
+        {
+          id: "step.replacement",
+          title: "Replacement step",
+          objective: "Use the replacement lesson.",
+          criteria: [],
+          hints: [],
+        },
+      ],
+    );
+    lesson.commit({ ...replacement, revision: lesson.getSnapshot().revision + 1 });
+
+    expect(runner.canReplayLast()).toBe(false);
+    await expect(runner.replayLast()).rejects.toThrow(/no completed teaching scene/u);
+  });
+
   it("tracks a semantic target and updates collision-safe presentation geometry", async () => {
     const targetHandle = new ObservableTargetHandle({
       status: "resolved",

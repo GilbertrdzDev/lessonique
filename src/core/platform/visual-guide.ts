@@ -6,6 +6,9 @@ import {
 
 const VISUAL_GUIDE_FIELDS = new Set(["title", "body", "supportingItems"]);
 
+export const GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION =
+  "Wrap every code-related term in single backticks, including keywords, identifiers, functions, values, data types, HTML tags, CSS tokens, and short expressions (for example, `const`, `<section>`, `getUser()`, `string`, or `42`). Only inline code spans are supported; do not use HTML or other Markdown for presentation.";
+
 export class VisualGuideValidationError extends Error {
   constructor(message: string) {
     super(message);

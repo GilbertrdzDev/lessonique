@@ -236,7 +236,7 @@ describe("responsive menu JavaScript scene", () => {
         guide: expect.objectContaining({
           supportingItems: [
             "The source target comes from the JavaScript provider",
-            "Accessible and visual state share one boolean",
+            "Accessible and visual state share one `boolean`",
           ],
         }),
       }),

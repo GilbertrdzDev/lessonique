@@ -15,6 +15,7 @@ import type {
 } from "@/core/platform/contracts";
 import type { ClosedJsonObjectSchema } from "@/core/platform/json-schema";
 import { ProviderPlatformRegistries } from "@/core/platform/registries";
+import { GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION } from "@/core/platform/visual-guide";
 
 import {
   P0_SOURCE_LOCATOR_IDS,
@@ -877,7 +878,12 @@ const GUIDANCE_EFFECTS = [
     inputSchema: {
       type: "object",
       properties: {
-        text: { type: "string", minLength: 1, maxLength: 300 },
+        text: {
+          type: "string",
+          minLength: 1,
+          maxLength: 300,
+          description: GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION,
+        },
       },
       required: ["text"],
       additionalProperties: false,

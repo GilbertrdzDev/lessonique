@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_SYSTEM_LIMITS } from "@/core/platform/contracts";
+import { createP0ProviderPlatform } from "@/providers/p0";
 
 import {
   createGuidedLessonInputSchema,
@@ -10,6 +11,12 @@ import {
   WEBMCP_TOOL_INPUT_SCHEMAS,
 } from "./schemas";
 import { WEBMCP_TOOL_NAMES } from "./tool-names";
+
+type JsonSchemaNode = {
+  description?: string;
+  items?: JsonSchemaNode;
+  properties?: Record<string, JsonSchemaNode>;
+};
 
 describe("WebMCP tool schemas", () => {
   it("defines every P0 tool as a closed JSON object schema", () => {
@@ -98,6 +105,35 @@ describe("WebMCP tool schemas", () => {
         beats: [{ id: "beat.missing-intent" }],
       }).success,
     ).toBe(false);
+  });
+
+  it("describes inline code syntax on every guide-authoring field", () => {
+    const lessonSchema = getWebMCPToolJsonSchema("create_guided_lesson");
+    const sceneSchema = getWebMCPToolJsonSchema("play_teaching_scene");
+    const lessonProperties = lessonSchema.properties as Record<string, JsonSchemaNode>;
+    const sceneProperties = sceneSchema.properties as Record<string, JsonSchemaNode>;
+    const sceneBeatProperties = getBeatProperties(sceneProperties);
+    const initialSceneProperties = lessonProperties.initialScene.properties ?? {};
+    const initialBeatProperties = getBeatProperties(initialSceneProperties);
+    const lessonStepProperties = lessonProperties.steps.items?.properties ?? {};
+
+    for (const beatProperties of [sceneBeatProperties, initialBeatProperties]) {
+      const guideProperties = beatProperties.guide.properties ?? {};
+      expect(guideProperties.title.description).toContain("single backticks");
+      expect(guideProperties.body.description).toContain("single backticks");
+      expect(guideProperties.supportingItems.items?.description).toContain(
+        "single backticks",
+      );
+      expect(beatProperties.caption.description).toContain("single backticks");
+    }
+
+    expect(lessonStepProperties.hints.items?.description).toContain(
+      "single backticks",
+    );
+    const calloutSchema = createP0ProviderPlatform().guidance.effects.require(
+      "effect.callout",
+    ).inputSchema;
+    expect(calloutSchema.properties.text?.description).toContain("single backticks");
   });
 
   it.each(["voice", "audio", "narration", "speech", "ssml", "mediaUrl", "playback"])(
@@ -412,4 +448,10 @@ function createValidLessonInput() {
       },
     ],
   };
+}
+
+function getBeatProperties(
+  sceneProperties: Record<string, JsonSchemaNode>,
+): Record<string, JsonSchemaNode> {
+  return sceneProperties.beats.items?.properties ?? {};
 }
