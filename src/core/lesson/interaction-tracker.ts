@@ -145,28 +145,25 @@ export class InteractionTracker {
     if (!normalized) return undefined;
     this.#onInteraction?.(normalized);
     const state = this.#store.getSnapshot();
+    const matchingWaits = [...this.#waits.values()].filter((wait) =>
+      matchesInteraction(wait.condition, normalized),
+    );
     const interactions = [
       ...state.interactions.filter(({ id }) => id !== normalized.id),
       normalized,
     ].slice(-DEFAULT_SYSTEM_LIMITS.maxActivityEvents);
-    const activity = [
-      ...state.activity.filter(({ id }) => id !== normalized.id),
-      {
-        id: normalized.id,
-        typeId: normalized.typeId,
-        source: "learner" as const,
-        occurredAt: normalized.occurredAt,
-        ...(normalized.lessonStepId
-          ? { lessonStepId: normalized.lessonStepId }
-          : {}),
-        ...(normalized.outcome === "success"
-          ? { outcome: "success" as const }
-          : normalized.outcome === "failure"
-            ? { outcome: "failure" as const }
-            : {}),
-        ...(normalized.summary ? { summary: normalized.summary } : {}),
-      },
-    ].slice(-DEFAULT_SYSTEM_LIMITS.maxActivityEvents);
+    const learnerActivity = toRelevantLearnerActivity(
+      normalized,
+      matchingWaits.length > 0,
+      state,
+      this.#platform,
+    );
+    const activity = learnerActivity
+      ? [
+          ...state.activity.filter(({ id }) => id !== normalized.id),
+          learnerActivity,
+        ].slice(-DEFAULT_SYSTEM_LIMITS.maxActivityEvents)
+      : state.activity;
     const intent = this.#assistantIntents.fromOutcome(
       normalized.outcome,
       normalized.id,
@@ -182,10 +179,8 @@ export class InteractionTracker {
       revision: state.revision + 1,
     });
 
-    [...this.#waits.values()].forEach((wait) => {
-      if (matchesInteraction(wait.condition, normalized)) {
-        wait.finish({ status: "satisfied", event: normalized });
-      }
+    matchingWaits.forEach((wait) => {
+      wait.finish({ status: "satisfied", event: normalized });
     });
     return normalized;
   }
@@ -317,6 +312,51 @@ export class InteractionTracker {
       revision: state.revision + 1,
     });
   }
+}
+
+function toRelevantLearnerActivity(
+  event: NormalizedInteractionEvent,
+  satisfiesWait: boolean,
+  state: ReturnType<LessonStoreAdapter["getSnapshot"]>,
+  platform: ProviderPlatformRegistries,
+) {
+  if (
+    !satisfiesWait &&
+    event.outcome !== "success" &&
+    event.outcome !== "failure"
+  ) {
+    return undefined;
+  }
+
+  const stepTitle = event.lessonStepId
+    ? state.plan.steps.find(({ id }) => id === event.lessonStepId)?.title
+    : undefined;
+  const surfaceName = event.surfaceId
+    ? platform.surfaces.get(event.surfaceId)?.displayName
+    : undefined;
+  const context = stepTitle
+    ? ` for “${stepTitle}”`
+    : surfaceName
+      ? ` in ${surfaceName}`
+      : "";
+  const summary =
+    event.outcome === "failure"
+      ? `The learner needs another attempt${context}.`
+      : `The learner completed the requested action${context}.`;
+
+  return {
+    id: event.id,
+    typeId: event.typeId,
+    source: "learner" as const,
+    occurredAt: event.occurredAt,
+    ...(event.lessonStepId ? { lessonStepId: event.lessonStepId } : {}),
+    ...(event.outcome === "success"
+      ? { outcome: "success" as const }
+      : event.outcome === "failure"
+        ? { outcome: "failure" as const }
+        : {}),
+    summary,
+  };
 }
 
 function matchesInteraction(

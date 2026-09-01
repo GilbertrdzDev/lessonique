@@ -15,13 +15,18 @@ export function WorkspaceConsole({ adapter, entries }: WorkspaceConsoleProps) {
   return (
     <div
       aria-label="Runtime console"
-      className="h-full min-h-0 overflow-auto bg-[#0c0f1a] p-3 font-mono text-xs text-slate-200"
+      className="flex h-full min-h-0 flex-col overflow-auto bg-[#0c0f1a] p-3 font-mono text-xs text-slate-200"
       role="log"
     >
       {entries.length === 0 ? (
-        <p className="text-slate-400">Console output will appear here.</p>
+        <div
+          className="grid min-h-full flex-1 place-items-center px-4 text-center"
+          data-slot="console-empty-state"
+        >
+          <p className="text-slate-400">Console output will appear here.</p>
+        </div>
       ) : (
-        <ol className="space-y-1.5">
+        <ol className="space-y-1.5" data-slot="console-entries">
           {entries.map((entry) => (
             <ConsoleLine adapter={adapter} entry={entry} key={entry.id} />
           ))}

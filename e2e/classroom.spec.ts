@@ -1463,6 +1463,78 @@ test.describe("classroom shell", () => {
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0);
   });
 
+  test("shows meaningful agent actions without anchor or tool telemetry", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    const liveActivity = page.locator(
+      '[data-interaction-anchor="anchor.live-activity"]',
+    );
+    await expect(liveActivity).toBeVisible();
+
+    await liveActivity.click();
+    await liveActivity.evaluate((element) => {
+      element.setAttribute("tabindex", "-1");
+      (element as HTMLElement).focus();
+    });
+    await invokeRegisteredTool(page, "get_system_capabilities", {
+      include: ["limits"],
+    });
+    await invokeRegisteredTool(page, "inspect_classroom", {
+      include: ["activity"],
+    });
+    await invokeRegisteredTool(page, "apply_workspace_changes", {
+      operations: [
+        {
+          type: "create_file",
+          path: "timeline.js",
+          content: "const visible = true;",
+        },
+      ],
+      openAfter: "timeline.js",
+    });
+    for (const content of ["const visible = false;", "const visible = true;"]) {
+      await invokeRegisteredTool(page, "apply_workspace_changes", {
+        operations: [
+          {
+            type: "replace_file",
+            path: "timeline.js",
+            content,
+          },
+        ],
+      });
+    }
+    await invokeRegisteredTool(page, "execute_environment_action", {
+      actionId: "runtime.run",
+    });
+
+    await expect(
+      liveActivity.locator('[data-activity-kind="file"]').filter({
+        hasText: "ChatGPT created and opened timeline.js",
+      }),
+    ).toHaveCount(1);
+    await expect(
+      liveActivity.locator('[data-activity-kind="file"]').filter({
+        hasText: "ChatGPT updated timeline.js",
+      }),
+    ).toHaveCount(1);
+    await expect(
+      liveActivity.locator('[data-activity-kind="execution"]').filter({
+        hasText: "ChatGPT ran the active workspace",
+      }),
+    ).toHaveCount(1);
+    await expect(
+      liveActivity.locator('[data-slot="activity-inline-code"]'),
+    ).toContainText(["timeline.js", "timeline.js"]);
+    await expect(
+      liveActivity.locator('[data-activity-source="agent"]').last(),
+    ).toContainText("AI");
+    await expect(liveActivity).not.toContainText("Registered interface anchor");
+    await expect(liveActivity).not.toContainText("get_system_capabilities");
+    await expect(liveActivity).not.toContainText("inspect_classroom");
+    expect(await liveActivity.locator("li").count()).toBeLessThanOrEqual(8);
+  });
+
   test("keeps guide sections, continuous highlights, Finish, resume, and drag overrides synchronized", async ({
     page,
   }, testInfo) => {
@@ -2116,6 +2188,101 @@ test.describe("classroom shell", () => {
     ).toBe(initialClassroomHeight);
   });
 
+  test("resizes editor and console precisely while the empty console fills its track", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const profile = page.getByRole("combobox", { name: "Environment profile" });
+    await profile.selectOption("profile.javascript-console");
+    await page.getByRole("button", { name: "Clear console" }).click();
+
+    const resizer = page.getByRole("separator", {
+      name: "Resize editor and console panels",
+    });
+    const editorRegion = page.locator(
+      '[data-interaction-anchor="anchor.workspace-editor"]',
+    );
+    const lowerPanel = page.locator('[data-slot="workspace-lower-panel"]');
+    const consolePanel = page.locator(
+      '[data-interaction-anchor="anchor.workspace-console"]',
+    );
+    const runtimeConsole = page.getByRole("log", { name: "Runtime console" });
+    const emptyState = page.locator('[data-slot="console-empty-state"]');
+    await expect(emptyState).toBeVisible();
+    await expect(resizer).toHaveCSS("cursor", "row-resize");
+
+    const initial = await measureVerticalSplit(
+      editorRegion,
+      lowerPanel,
+      consolePanel,
+      runtimeConsole,
+    );
+    expect(Math.abs(initial.lowerHeight - initial.consolePanelHeight)).toBeLessThanOrEqual(1);
+    expect(Math.abs(initial.lowerBottom - initial.consoleBottom)).toBeLessThanOrEqual(1);
+    expect(initial.editorHeight).toBeGreaterThanOrEqual(144);
+    expect(initial.lowerHeight).toBeGreaterThanOrEqual(104);
+
+    const resizerBox = await resizer.boundingBox();
+    if (!resizerBox) throw new Error("The editor-console resizer is not measurable.");
+    const centerX = resizerBox.x + resizerBox.width / 2;
+    const centerY = resizerBox.y + resizerBox.height / 2;
+    await page.mouse.move(centerX, centerY);
+    await page.mouse.down();
+    await page.mouse.move(centerX, centerY - 90, { steps: 8 });
+    await expect(page.locator('[data-slot="workspace-content"]')).toHaveAttribute(
+      "data-vertical-split-resizing",
+      "true",
+    );
+    await page.mouse.up();
+
+    const enlarged = await measureVerticalSplit(
+      editorRegion,
+      lowerPanel,
+      consolePanel,
+      runtimeConsole,
+    );
+    expect(enlarged.lowerHeight).toBeGreaterThan(initial.lowerHeight + 50);
+    expect(enlarged.editorHeight).toBeLessThan(initial.editorHeight - 50);
+    expect(Math.abs(enlarged.lowerHeight - enlarged.consolePanelHeight)).toBeLessThanOrEqual(1);
+    expect(Math.abs(enlarged.lowerBottom - enlarged.consoleBottom)).toBeLessThanOrEqual(1);
+
+    await resizer.press("Home");
+    const minimumConsole = await measureVerticalSplit(
+      editorRegion,
+      lowerPanel,
+      consolePanel,
+      runtimeConsole,
+    );
+    expect(minimumConsole.lowerHeight).toBeGreaterThanOrEqual(104);
+    expect(minimumConsole.editorHeight).toBeGreaterThanOrEqual(144);
+
+    await resizer.press("ArrowUp");
+    await expect
+      .poll(
+        async () =>
+          (
+            await measureVerticalSplit(
+              editorRegion,
+              lowerPanel,
+              consolePanel,
+              runtimeConsole,
+            )
+          ).lowerHeight,
+      )
+      .toBeGreaterThan(minimumConsole.lowerHeight);
+    const keyboardAdjusted = await measureVerticalSplit(
+      editorRegion,
+      lowerPanel,
+      consolePanel,
+      runtimeConsole,
+    );
+    expect(keyboardAdjusted.lowerHeight).toBeGreaterThan(minimumConsole.lowerHeight);
+    expect(keyboardAdjusted.editorHeight).toBeGreaterThanOrEqual(144);
+    expect(Math.abs(keyboardAdjusted.lowerHeight - keyboardAdjusted.consolePanelHeight)).toBeLessThanOrEqual(1);
+    expect(Math.abs(keyboardAdjusted.lowerBottom - keyboardAdjusted.consoleBottom)).toBeLessThanOrEqual(1);
+  });
+
   test("keeps high-volume console output inside its scrollable region", async ({
     page,
   }, testInfo) => {
@@ -2386,6 +2553,31 @@ async function measureWorkspaceReflow(page: Page) {
   });
 }
 
+async function measureVerticalSplit(
+  editorRegion: Locator,
+  lowerPanel: Locator,
+  consolePanel: Locator,
+  runtimeConsole: Locator,
+) {
+  const [editorBounds, lowerBounds, consolePanelBounds, consoleBounds] = await Promise.all([
+    editorRegion.boundingBox(),
+    lowerPanel.boundingBox(),
+    consolePanel.boundingBox(),
+    runtimeConsole.boundingBox(),
+  ]);
+  if (!editorBounds || !lowerBounds || !consolePanelBounds || !consoleBounds) {
+    throw new Error("The editor-console split is not measurable.");
+  }
+  return {
+    editorHeight: editorBounds.height,
+    lowerHeight: lowerBounds.height,
+    lowerBottom: lowerBounds.y + lowerBounds.height,
+    consolePanelHeight: consolePanelBounds.height,
+    consoleHeight: consoleBounds.height,
+    consoleBottom: consoleBounds.y + consoleBounds.height,
+  };
+}
+
 async function guidanceTargetOverlap(page: import("@playwright/test").Page) {
   return page.evaluate(() => {
     const target = document.querySelector<HTMLElement>(
@@ -2482,6 +2674,7 @@ async function guidanceFocusOverlap(page: import("@playwright/test").Page) {
       (companion ? overlapArea(companion.getBoundingClientRect()) : 0)
     );
   });
+
 }
 
 async function previewMenuTargetAlignmentDelta(

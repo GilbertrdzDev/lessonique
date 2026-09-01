@@ -1,5 +1,6 @@
 export * from "./capabilities";
 export * from "./apply-workspace-changes";
+export * from "./agent-activity-timeline";
 export * from "./classroom-tools";
 export * from "./contracts";
 export * from "./dev-tool-fixtures";
@@ -13,6 +14,7 @@ export * from "./schemas";
 export * from "./teaching-scene-tools";
 export * from "./update-lesson-plan";
 export * from "./tool-activity-logger";
+export * from "./tool-activity-presentation";
 export * from "./tool-invocation-service";
 export * from "./tool-registry";
 export * from "./tool-names";

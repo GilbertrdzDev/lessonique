@@ -30,6 +30,16 @@ import { ProjectFilesPanel } from "@/components/workspace/project-files-panel";
 import type { PreviewViewport } from "@/components/workspace/sandpack-runtime-view";
 import { WorkspaceConsole } from "@/components/workspace/workspace-console";
 import {
+  clampVerticalPanelRatio,
+  DEFAULT_LOWER_PANEL_RATIO,
+  getVerticalPanelRatioFromPointer,
+  LOWER_PANEL_SEPARATOR_HEIGHT,
+  MAXIMUM_LOWER_PANEL_RATIO,
+  MINIMUM_EDITOR_PANEL_HEIGHT,
+  MINIMUM_LOWER_PANEL_HEIGHT,
+  MINIMUM_LOWER_PANEL_RATIO,
+} from "@/components/workspace/vertical-panel-split";
+import {
   reorderWorkspaceTabPaths,
   type WorkspaceTabDropPosition,
   WORKSPACE_EDITOR_PANEL_ID,
@@ -52,10 +62,6 @@ import {
 const MINIMUM_PROJECT_FILES_WIDTH = 208;
 const MAXIMUM_PROJECT_FILES_WIDTH = 360;
 const DEFAULT_PROJECT_FILES_WIDTH = 256;
-const DEFAULT_LOWER_PANEL_RATIO = 0.38;
-const MINIMUM_LOWER_PANEL_RATIO = 0.28;
-const MAXIMUM_LOWER_PANEL_RATIO = 0.58;
-
 const MonacoEditorSurface = dynamic(
   () =>
     import("@/components/workspace/monaco-editor-surface").then(
@@ -88,9 +94,9 @@ type ProjectFilesResizeSession = Readonly<{
 
 type LowerPanelResizeSession = Readonly<{
   pointerId: number;
-  startRatio: number;
-  startY: number;
-  workspaceHeight: number;
+  containerTop: number;
+  containerHeight: number;
+  pointerOffsetY: number;
 }>;
 
 type PendingTabPathRemap = Readonly<{
@@ -115,16 +121,41 @@ export function ClassroomWorkspace() {
   const [lowerPanelRatio, setLowerPanelRatio] = useState(
     DEFAULT_LOWER_PANEL_RATIO,
   );
+  const [isLowerPanelResizing, setIsLowerPanelResizing] = useState(false);
   const [openFilePaths, setOpenFilePaths] = useState<string[]>([]);
   const projectFilesResizeSession = useRef<ProjectFilesResizeSession | null>(
     null,
   );
   const lowerPanelResizeSession = useRef<LowerPanelResizeSession | null>(null);
+  const lowerPanelResizeFrame = useRef<number | null>(null);
+  const pendingLowerPanelRatio = useRef<number | null>(null);
+  const workspaceContentRef = useRef<HTMLDivElement>(null);
   const openTabsProfileIdRef = useRef<string | undefined>(undefined);
   const availableFilePathsRef = useRef<string[]>([]);
   const previousActiveFilePathRef = useRef<string | undefined>(undefined);
   const pendingTabPathRemapRef = useRef<PendingTabPathRemap | undefined>(
     undefined,
+  );
+
+  useEffect(() => {
+    const element = workspaceContentRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      setLowerPanelRatio((current) =>
+        clampVerticalPanelRatio(current, element.clientHeight),
+      );
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (lowerPanelResizeFrame.current !== null) {
+        cancelAnimationFrame(lowerPanelResizeFrame.current);
+      }
+    },
+    [],
   );
 
   useEffect(() => {
@@ -388,13 +419,19 @@ export function ClassroomWorkspace() {
   const handleLowerPanelPointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
-    const workspaceHeight = event.currentTarget.parentElement?.clientHeight ?? 0;
+    const container = workspaceContentRef.current;
+    const containerRect = container?.getBoundingClientRect();
+    const separatorRect = event.currentTarget.getBoundingClientRect();
+    if (!containerRect || containerRect.height <= 0) return;
     lowerPanelResizeSession.current = {
       pointerId: event.pointerId,
-      startRatio: lowerPanelRatio,
-      startY: event.clientY,
-      workspaceHeight,
+      containerTop: containerRect.top,
+      containerHeight: containerRect.height,
+      pointerOffsetY:
+        event.clientY - (separatorRect.top + separatorRect.height / 2),
     };
+    event.preventDefault();
+    setIsLowerPanelResizing(true);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -402,11 +439,20 @@ export function ClassroomWorkspace() {
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
     const session = lowerPanelResizeSession.current;
-    if (session?.pointerId !== event.pointerId || session.workspaceHeight <= 0) return;
-    const deltaRatio = (session.startY - event.clientY) / session.workspaceHeight;
-    setLowerPanelRatio(
-      clampLowerPanelRatio(session.startRatio + deltaRatio),
-    );
+    if (session?.pointerId !== event.pointerId) return;
+    pendingLowerPanelRatio.current = getVerticalPanelRatioFromPointer({
+      clientY: event.clientY,
+      containerTop: session.containerTop,
+      containerHeight: session.containerHeight,
+      pointerOffsetY: session.pointerOffsetY,
+    });
+    if (lowerPanelResizeFrame.current !== null) return;
+    lowerPanelResizeFrame.current = requestAnimationFrame(() => {
+      lowerPanelResizeFrame.current = null;
+      const nextRatio = pendingLowerPanelRatio.current;
+      pendingLowerPanelRatio.current = null;
+      if (nextRatio !== null) setLowerPanelRatio(nextRatio);
+    });
   };
 
   const finishLowerPanelResize = (
@@ -414,6 +460,14 @@ export function ClassroomWorkspace() {
   ) => {
     if (lowerPanelResizeSession.current?.pointerId !== event.pointerId) return;
     lowerPanelResizeSession.current = null;
+    if (lowerPanelResizeFrame.current !== null) {
+      cancelAnimationFrame(lowerPanelResizeFrame.current);
+      lowerPanelResizeFrame.current = null;
+    }
+    const finalRatio = pendingLowerPanelRatio.current;
+    pendingLowerPanelRatio.current = null;
+    if (finalRatio !== null) setLowerPanelRatio(finalRatio);
+    setIsLowerPanelResizing(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -422,20 +476,32 @@ export function ClassroomWorkspace() {
   const handleLowerPanelResizeKeyDown = (
     event: ReactKeyboardEvent<HTMLDivElement>,
   ) => {
+    const containerHeight = workspaceContentRef.current?.clientHeight ?? 600;
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      setLowerPanelRatio((current) => clampLowerPanelRatio(current + 0.04));
+      setLowerPanelRatio((current) =>
+        clampVerticalPanelRatio(current + 0.04, containerHeight),
+      );
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      setLowerPanelRatio((current) => clampLowerPanelRatio(current - 0.04));
+      setLowerPanelRatio((current) =>
+        clampVerticalPanelRatio(current - 0.04, containerHeight),
+      );
     } else if (event.key === "Home") {
       event.preventDefault();
-      setLowerPanelRatio(MINIMUM_LOWER_PANEL_RATIO);
+      setLowerPanelRatio(
+        clampVerticalPanelRatio(MINIMUM_LOWER_PANEL_RATIO, containerHeight),
+      );
     } else if (event.key === "End") {
       event.preventDefault();
-      setLowerPanelRatio(MAXIMUM_LOWER_PANEL_RATIO);
+      setLowerPanelRatio(
+        clampVerticalPanelRatio(MAXIMUM_LOWER_PANEL_RATIO, containerHeight),
+      );
     }
   };
+
+  const lowerPanelVisible = previewVisible || consoleVisible;
+  const hasResizableVerticalSplit = editorVisible && lowerPanelVisible;
 
   return (
     <main
@@ -598,8 +664,12 @@ export function ClassroomWorkspace() {
             <div
               className="grid min-h-0 min-w-0 flex-1"
               data-slot="workspace-content"
+              data-vertical-split-resizing={isLowerPanelResizing || undefined}
+              ref={workspaceContentRef}
               style={{
-                gridTemplateRows: `minmax(12rem, ${1 - lowerPanelRatio}fr) 0.5rem minmax(9rem, ${lowerPanelRatio}fr)`,
+                gridTemplateRows: hasResizableVerticalSplit
+                  ? `minmax(${MINIMUM_EDITOR_PANEL_HEIGHT}px, ${1 - lowerPanelRatio}fr) ${LOWER_PANEL_SEPARATOR_HEIGHT}px minmax(${MINIMUM_LOWER_PANEL_HEIGHT}px, ${lowerPanelRatio}fr)`
+                  : "minmax(0, 1fr)",
               }}
             >
               {editorVisible ? (
@@ -627,29 +697,36 @@ export function ClassroomWorkspace() {
                 </WorkspaceSemanticAnchor>
               ) : null}
 
-              <div
-                aria-label="Resize console panel"
-                aria-orientation="horizontal"
-                aria-valuemax={Math.round(MAXIMUM_LOWER_PANEL_RATIO * 100)}
-                aria-valuemin={Math.round(MINIMUM_LOWER_PANEL_RATIO * 100)}
-                aria-valuenow={Math.round(lowerPanelRatio * 100)}
-                className="relative z-20 flex cursor-row-resize touch-none select-none items-center justify-center bg-border/70 outline-none before:h-1 before:w-16 before:rounded-full before:bg-muted-foreground/35 hover:before:bg-primary focus-visible:ring-2 focus-visible:ring-ring"
-                onKeyDown={handleLowerPanelResizeKeyDown}
-                onPointerCancel={finishLowerPanelResize}
-                onPointerDown={handleLowerPanelPointerDown}
-                onPointerMove={handleLowerPanelPointerMove}
-                onPointerUp={finishLowerPanelResize}
-                role="separator"
-                tabIndex={0}
-              />
+              {hasResizableVerticalSplit ? (
+                <div
+                  aria-label="Resize editor and console panels"
+                  aria-orientation="horizontal"
+                  aria-valuemax={Math.round(MAXIMUM_LOWER_PANEL_RATIO * 100)}
+                  aria-valuemin={Math.round(MINIMUM_LOWER_PANEL_RATIO * 100)}
+                  aria-valuenow={Math.round(lowerPanelRatio * 100)}
+                  aria-valuetext={`${Math.round((1 - lowerPanelRatio) * 100)}% editor and ${Math.round(lowerPanelRatio * 100)}% lower panel`}
+                  className={`relative z-20 flex cursor-row-resize touch-none select-none items-center justify-center bg-border/70 outline-none before:h-1 before:w-20 before:rounded-full before:transition-colors hover:before:bg-primary focus-visible:ring-2 focus-visible:ring-ring ${isLowerPanelResizing ? "before:bg-primary" : "before:bg-muted-foreground/35"}`}
+                  data-slot="editor-console-resizer"
+                  onKeyDown={handleLowerPanelResizeKeyDown}
+                  onLostPointerCapture={finishLowerPanelResize}
+                  onPointerCancel={finishLowerPanelResize}
+                  onPointerDown={handleLowerPanelPointerDown}
+                  onPointerMove={handleLowerPanelPointerMove}
+                  onPointerUp={finishLowerPanelResize}
+                  role="separator"
+                  tabIndex={0}
+                />
+              ) : null}
 
-              <div
-                className={
-                  previewVisible
-                    ? "grid min-h-0 border-t lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]"
-                    : "min-h-0 border-t"
-                }
-              >
+              {lowerPanelVisible ? (
+                <div
+                  className={
+                    previewVisible
+                      ? "grid h-full min-h-0 border-t lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]"
+                      : "h-full min-h-0 border-t"
+                  }
+                  data-slot="workspace-lower-panel"
+                >
                 {previewVisible ? (
                   <WorkspaceSemanticAnchor
                     anchorId={P0_INTERACTION_ANCHOR_IDS.preview}
@@ -709,7 +786,7 @@ export function ClassroomWorkspace() {
                 {consoleVisible ? (
                   <WorkspaceSemanticAnchor
                     anchorId={P0_INTERACTION_ANCHOR_IDS.console}
-                    className="flex min-h-0 flex-col overflow-hidden"
+                    className="flex h-full min-h-0 flex-col overflow-hidden"
                     obstruction
                     interactionAdapter={workspace.interactionAnchorAdapter}
                   >
@@ -725,7 +802,8 @@ export function ClassroomWorkspace() {
                     </div>
                   </WorkspaceSemanticAnchor>
                 ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
           </div>
         )}
@@ -782,13 +860,6 @@ function clampProjectFilesWidth(width: number): number {
   return Math.min(
     MAXIMUM_PROJECT_FILES_WIDTH,
     Math.max(MINIMUM_PROJECT_FILES_WIDTH, width),
-  );
-}
-
-function clampLowerPanelRatio(ratio: number): number {
-  return Math.min(
-    MAXIMUM_LOWER_PANEL_RATIO,
-    Math.max(MINIMUM_LOWER_PANEL_RATIO, ratio),
   );
 }
 

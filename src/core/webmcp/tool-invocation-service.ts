@@ -17,6 +17,10 @@ import {
   type ToolInvocationPhase,
 } from "./tool-activity-logger";
 import type { WebMCPToolName } from "./tool-names";
+import {
+  createToolActivityPresentation,
+  type ToolActivityPresentation,
+} from "./tool-activity-presentation";
 
 const MAX_ERROR_MESSAGE_LENGTH = 240;
 const MAX_ALTERNATIVES = 10;
@@ -91,21 +95,50 @@ export class ToolInvocationService {
       operationId,
       signal: controller.signal,
     };
+    let validatedInput: WebMCPToolInputMap[TName] | null = null;
+    let presentation: ToolActivityPresentation | undefined;
 
     this.#record(definition.name, operationId, "received");
     try {
       throwIfAborted(controller.signal);
-      const validatedInput = definition.inputSchema.parse(input);
-      this.#record(definition.name, operationId, "validated");
+      validatedInput = definition.inputSchema.parse(input);
+      presentation = createToolActivityPresentation(
+        definition.name,
+        validatedInput,
+      );
+      this.#record(
+        definition.name,
+        operationId,
+        "validated",
+        undefined,
+        presentation,
+      );
 
       throwIfAborted(controller.signal);
       await definition.capabilityCheck?.(validatedInput, context);
-      this.#record(definition.name, operationId, "capability_checked");
+      this.#record(
+        definition.name,
+        operationId,
+        "capability_checked",
+        undefined,
+        presentation,
+      );
 
       throwIfAborted(controller.signal);
-      this.#record(definition.name, operationId, "executing");
+      this.#record(
+        definition.name,
+        operationId,
+        "executing",
+        undefined,
+        presentation,
+      );
       const execution = await definition.handler(validatedInput, context);
       const result = normalizeExecutionResult(operationId, execution);
+      presentation = createToolActivityPresentation(
+        definition.name,
+        validatedInput,
+        result,
+      );
       this.#record(
         definition.name,
         operationId,
@@ -115,6 +148,7 @@ export class ToolInvocationService {
             ? "cancelled"
             : "succeeded",
         result,
+        presentation,
       );
       return result;
     } catch (error) {
@@ -126,11 +160,19 @@ export class ToolInvocationService {
         status: cancelled ? "cancelled" : "failed",
         error: compactError,
       };
+      if (validatedInput) {
+        presentation = createToolActivityPresentation(
+          definition.name,
+          validatedInput,
+          result,
+        );
+      }
       this.#record(
         definition.name,
         operationId,
         cancelled ? "cancelled" : "failed",
         result,
+        presentation,
       );
       return result;
     } finally {
@@ -143,6 +185,7 @@ export class ToolInvocationService {
     operationId: string,
     phase: ToolInvocationPhase,
     result?: ToolResult<unknown>,
+    presentation?: ToolActivityPresentation,
   ): void {
     const event: ToolInvocationEvent = {
       operationId,
@@ -152,6 +195,7 @@ export class ToolInvocationService {
       ...(result?.status === undefined ? {} : { status: result.status }),
       ...(result?.revision === undefined ? {} : { revision: result.revision }),
       ...(result?.error === undefined ? {} : { error: result.error }),
+      ...(presentation === undefined ? {} : { presentation }),
     };
     this.#activityLogger.record(event);
   }
