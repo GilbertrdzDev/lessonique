@@ -301,6 +301,7 @@ function inspectLesson(lesson: ReturnType<LessonStateReader["getSnapshot"]>) {
     id: lesson.lesson?.id ?? null,
     title: lesson.lesson?.title ?? null,
     objective: lesson.lesson?.objective ?? null,
+    mode: lesson.lesson?.mode ?? null,
     status: lesson.status,
     revision: lesson.revision,
     activeStepId: lesson.plan.activeStepId ?? null,

@@ -55,6 +55,7 @@ export const ARRAY_MAP_TARGET_CATALOG = {
 export function createArrayMapLessonFixture(): CreateGuidedLessonInput {
   return {
     lessonId: ARRAY_MAP_DEMO_IDS.lesson,
+    lessonMode: "mixed",
     title: "Transform scores with Array.map()",
     objective:
       "Create a new array without mutating the source values and verify the result in the JavaScript console.",

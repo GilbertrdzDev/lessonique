@@ -97,6 +97,7 @@ export function toTeachingScene(input: TeachingSceneInput): TeachingScene {
     allowManualNavigation: input.allowManualNavigation ?? false,
     beats: input.beats.map((beat) => ({
       id: beat.id,
+      type: beat.type,
       ...(beat.prepare ? { prepare: structuredClone(beat.prepare) } : {}),
       ...(beat.target
         ? {

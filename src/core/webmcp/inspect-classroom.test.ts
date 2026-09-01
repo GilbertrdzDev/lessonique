@@ -54,7 +54,11 @@ describe("inspect_classroom", () => {
     );
     const data = result.data as Record<string, unknown>;
     expect(data.lesson).toEqual(
-      expect.objectContaining({ id: "lesson.inspect", status: "active" }),
+      expect.objectContaining({
+        id: "lesson.inspect",
+        mode: "mixed",
+        status: "active",
+      }),
     );
     expect(data.workspace).toEqual(
       expect.objectContaining({
@@ -193,6 +197,7 @@ async function createLesson(
 ) {
   const result = await registry.invoke("create_guided_lesson", {
     lessonId: "lesson.inspect",
+    lessonMode: "mixed",
     title: "Inspect semantic state",
     objective: "Inspect a filtered classroom snapshot.",
     environment: { profileId: "profile.vanilla-web" },

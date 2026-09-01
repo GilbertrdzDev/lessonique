@@ -15,6 +15,7 @@ describe("teaching scene WebMCP tools", () => {
       beats: [
         {
           id: "beat.target-retry",
+          type: "explanation",
           target: {
             resolverId: "target.surface-anchor",
             input: { anchorId: "anchor.learning-plan" },
@@ -37,6 +38,7 @@ describe("teaching scene WebMCP tools", () => {
       beats: [
         {
           id: "beat.guide",
+          type: "explanation",
           assistant: {
             stateId: "assistant.explaining",
             placementId: "placement.floating",
@@ -130,6 +132,7 @@ describe("teaching scene WebMCP tools", () => {
       beats: [
         {
           id: "beat.invalid",
+          type: "explanation",
           target: {
             resolverId: "target.surface-anchor",
             input: { anchorId: "anchor.learning-plan" },

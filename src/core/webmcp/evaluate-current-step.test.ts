@@ -208,6 +208,7 @@ function lessonInput(
 ) {
   return {
     lessonId: "lesson.evaluation",
+    lessonMode: "practice" as const,
     title: "Evaluation lesson",
     objective: "Evaluate declared criteria only.",
     environment: {

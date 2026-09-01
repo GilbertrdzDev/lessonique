@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PlacementEngine } from "./placement";
+import { calculatePointerPath, PlacementEngine } from "./placement";
 
 describe("PlacementEngine", () => {
   it("places the companion beside a target without covering it", () => {
@@ -12,7 +12,7 @@ describe("PlacementEngine", () => {
 
     expect(placement).toEqual({
       left: 316,
-      top: 104,
+      top: 70,
       docked: false,
       side: "right",
       facing: "left",
@@ -35,7 +35,7 @@ describe("PlacementEngine", () => {
       side: "docked",
       facing: "left",
       companionOffsetLeft: 0,
-      companionOffsetTop: 68,
+      companionOffsetTop: 34,
     });
   });
 
@@ -49,7 +49,7 @@ describe("PlacementEngine", () => {
 
     expect(placement).toEqual({
       left: 656,
-      top: 524,
+      top: 460,
       docked: false,
       side: "left",
       facing: "right",
@@ -86,13 +86,55 @@ describe("PlacementEngine", () => {
     });
 
     expect(placement).toEqual({
-      left: 176,
-      top: 124,
+      left: 44,
+      top: 32,
       docked: false,
-      side: "right",
-      facing: "left",
+      side: "above",
+      facing: "right",
       companionOffsetLeft: 0,
       companionOffsetTop: 0,
     });
+  });
+
+  it("connects the measured companion and target boundaries", () => {
+    const points = calculatePointerPath({
+      assistant: { left: 100, top: 100, width: 100, height: 100 },
+      target: { left: 300, top: 120, width: 80, height: 40 },
+    });
+
+    expect(points).toHaveLength(2);
+    expect(points[0]!.x).toBe(200);
+    expect(points[0]!.y).toBeGreaterThanOrEqual(100);
+    expect(points[0]!.y).toBeLessThanOrEqual(200);
+    expect(points[1]!.x).toBe(300);
+    expect(points[1]!.y).toBeGreaterThanOrEqual(120);
+    expect(points[1]!.y).toBeLessThanOrEqual(160);
+  });
+
+  it("keeps measured overlays inside the viewport near right and bottom edges", () => {
+    const placement = new PlacementEngine().calculate({
+      placementId: "placement.near-target",
+      target: { left: 1_120, top: 690, width: 120, height: 50 },
+      viewport: { width: 1_280, height: 760 },
+      assistantSize: { width: 118, height: 108 },
+      guideSize: { width: 286, height: 210 },
+    });
+
+    expect(placement.left).toBeGreaterThanOrEqual(16);
+    expect(placement.top).toBeGreaterThanOrEqual(16);
+    expect(placement.left + 118 + 16 + 286).toBeLessThanOrEqual(1_264);
+    expect(placement.top + 210).toBeLessThanOrEqual(744);
+    expect(placement.side).not.toBe("right");
+  });
+
+  it("avoids registered interface obstructions when choosing a target side", () => {
+    const placement = new PlacementEngine().calculate({
+      placementId: "placement.near-target",
+      target: { left: 450, top: 260, width: 100, height: 30 },
+      viewport: { width: 1_100, height: 700 },
+      obstructions: [{ left: 566, top: 160, width: 430, height: 300 }],
+    });
+
+    expect(placement.side).not.toBe("right");
   });
 });

@@ -28,6 +28,7 @@ describe("WebMCP tool schemas", () => {
   it("accepts provider-neutral IDs without hardcoded language unions", () => {
     const result = createGuidedLessonInputSchema.safeParse({
       lessonId: "lesson.fixture",
+      lessonMode: "explain",
       title: "Fixture lesson",
       objective: "Exercise a future provider.",
       environment: {
@@ -61,6 +62,44 @@ describe("WebMCP tool schemas", () => {
     expect(result.success).toBe(true);
   });
 
+  it("requires explicit lesson and beat intent in the public JSON schemas", () => {
+    const lessonSchema = getWebMCPToolJsonSchema("create_guided_lesson");
+    const sceneSchema = getWebMCPToolJsonSchema("play_teaching_scene");
+    const lessonProperties = lessonSchema.properties as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const sceneProperties = sceneSchema.properties as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const beatSchema = (
+      (sceneProperties.beats.items as Record<string, unknown>).properties as Record<
+        string,
+        Record<string, unknown>
+      >
+    );
+
+    expect(lessonSchema.required).toContain("lessonMode");
+    expect(lessonProperties.lessonMode.description).toContain("complete examples");
+    expect(
+      createGuidedLessonInputSchema.safeParse({
+        ...createValidLessonInput(),
+        lessonMode: undefined,
+      }).success,
+    ).toBe(false);
+    expect((sceneProperties.beats.items as { required?: string[] }).required).toContain(
+      "type",
+    );
+    expect(beatSchema.type.description).toContain("one small concept");
+    expect(
+      playTeachingSceneInputSchema.safeParse({
+        id: "scene.missing-intent",
+        beats: [{ id: "beat.missing-intent" }],
+      }).success,
+    ).toBe(false);
+  });
+
   it.each(["voice", "audio", "narration", "speech", "ssml", "mediaUrl", "playback"])(
     "rejects unsupported %s scene fields without changing visual guide content",
     (field) => {
@@ -69,6 +108,7 @@ describe("WebMCP tool schemas", () => {
         beats: [
           {
             id: "beat.fixture",
+            type: "explanation",
             guide: {
               title: "Keep this title",
               body: "Keep this visual explanation.",
@@ -104,6 +144,7 @@ describe("WebMCP tool schemas", () => {
           beats: [
             {
               id: "beat.fixture",
+              type: "explanation",
               target: {
                 resolverId: "target.fixture",
                 input,
@@ -116,7 +157,7 @@ describe("WebMCP tool schemas", () => {
     expect(() =>
       playTeachingSceneInputSchema.parse({
         id: "scene.fixture",
-        beats: [{ id: "beat.fixture", unknown: true }],
+        beats: [{ id: "beat.fixture", type: "explanation", unknown: true }],
       }),
     ).toThrow();
   });
@@ -127,7 +168,7 @@ describe("WebMCP tool schemas", () => {
         id: "scene.fixture",
         beats: Array.from(
           { length: DEFAULT_SYSTEM_LIMITS.maxSceneBeats },
-          (_, index) => ({ id: `beat.${index}` }),
+          (_, index) => ({ id: `beat.${index}`, type: "explanation" }),
         ),
       }).success,
     ).toBe(true);
@@ -136,7 +177,7 @@ describe("WebMCP tool schemas", () => {
         id: "scene.fixture",
         beats: Array.from(
           { length: DEFAULT_SYSTEM_LIMITS.maxSceneBeats + 1 },
-          (_, index) => ({ id: `beat.${index}` }),
+          (_, index) => ({ id: `beat.${index}`, type: "explanation" }),
         ),
       }),
     ).toThrow();
@@ -146,6 +187,7 @@ describe("WebMCP tool schemas", () => {
         beats: [
           {
             id: "beat.fixture",
+            type: "explanation",
             guide: {
               body: "x".repeat(DEFAULT_SYSTEM_LIMITS.maxVisualGuideBodyCharacters + 1),
             },
@@ -159,6 +201,7 @@ describe("WebMCP tool schemas", () => {
         beats: [
           {
             id: "beat.fixture",
+            type: "explanation",
             guide: {
               body: "x".repeat(DEFAULT_SYSTEM_LIMITS.maxVisualGuideBodyCharacters),
               supportingItems: Array.from(
@@ -177,6 +220,7 @@ describe("WebMCP tool schemas", () => {
         beats: [
           {
             id: "beat.fixture",
+            type: "explanation",
             guide: {
               body: "Visible guidance",
               supportingItems: Array.from(
@@ -194,6 +238,7 @@ describe("WebMCP tool schemas", () => {
         beats: [
           {
             id: "beat.fixture",
+            type: "explanation",
             guide: {
               body: "Visible guidance",
               supportingItems: [
@@ -210,6 +255,7 @@ describe("WebMCP tool schemas", () => {
         beats: [
           {
             id: "beat.fixture",
+            type: "explanation",
             caption: "x".repeat(DEFAULT_SYSTEM_LIMITS.maxCaptionCharacters + 1),
           },
         ],
@@ -292,6 +338,7 @@ describe("WebMCP tool schemas", () => {
 function createValidLessonInput() {
   return {
     lessonId: "lesson.fixture",
+    lessonMode: "practice",
     title: "Fixture lesson",
     objective: "Verify the declared system limits.",
     environment: {

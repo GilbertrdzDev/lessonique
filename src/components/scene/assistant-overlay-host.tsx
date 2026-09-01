@@ -1,15 +1,30 @@
 "use client";
 
 import Image from "next/image";
-import { useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type Ref,
+} from "react";
 
-import type { ScenePresentationStore } from "@/core/scene";
+import {
+  calculatePointerPath,
+  PlacementEngine,
+  type SceneControlAction,
+  type ScenePresentationStore,
+} from "@/core/scene";
 import type { TargetGeometry } from "@/core/workspace/targeting";
 import { cn } from "@/lib/utils";
 
 export function AssistantOverlayHost({
+  onControl,
   presentationStore,
-}: Readonly<{ presentationStore: ScenePresentationStore }>) {
+}: Readonly<{
+  onControl?: (action: Extract<SceneControlAction, "next" | "previous">) => Promise<unknown>;
+  presentationStore: ScenePresentationStore;
+}>) {
   const presentation = useSyncExternalStore(
     presentationStore.subscribe,
     presentationStore.getSnapshot,
@@ -25,6 +40,16 @@ export function AssistantOverlayHost({
   )?.input?.text;
   const calloutText = typeof callout === "string" ? callout : undefined;
   const assistant = presentation.assistant;
+  const companionRef = useRef<HTMLDivElement>(null);
+  const guideRef = useRef<HTMLElement>(null);
+  const measured = useMeasuredSceneLayout({
+    assistant,
+    beatId: presentation.beatId,
+    companionRef,
+    guideRef,
+    presentationStore,
+    target,
+  });
   const companionVisualState = resolveSceneCompanionVisualState(
     assistant.stateId,
     effectIds,
@@ -65,7 +90,8 @@ export function AssistantOverlayHost({
             assistant.position.left + assistant.position.companionOffsetLeft
           }
           companionTop={assistant.position.top + assistant.position.companionOffsetTop}
-          facing={assistant.position.facing}
+          companionSize={measured.companionSize}
+          guideGeometry={measured.guideGeometry}
           geometry={target}
         />
       ) : null}
@@ -86,6 +112,7 @@ export function AssistantOverlayHost({
         {assistant.visible ? (
           <LessoniqueCompanion
             facing={assistant.position.facing}
+            containerRef={companionRef}
             paused={presentation.paused}
             stateId={assistant.stateId}
             status={assistant.status}
@@ -101,7 +128,11 @@ export function AssistantOverlayHost({
             caption={presentation.caption}
             guide={presentation.guide}
             hint={presentation.hint}
+            navigation={presentation.navigation}
+            onControl={onControl}
             paused={presentation.paused}
+            phase={presentation.phase}
+            ref={guideRef}
           />
         ) : null}
       </div>
@@ -126,6 +157,7 @@ const INCOMPATIBLE_COMPANION_ASSET =
 
 export function LessoniqueCompanion({
   className,
+  containerRef,
   decorative = false,
   facing,
   paused,
@@ -134,6 +166,7 @@ export function LessoniqueCompanion({
   visualState,
 }: Readonly<{
   className?: string;
+  containerRef?: Ref<HTMLDivElement>;
   decorative?: boolean;
   facing: "left" | "right";
   paused: boolean;
@@ -151,6 +184,7 @@ export function LessoniqueCompanion({
 
   return (
     <div
+      ref={containerRef}
       aria-hidden={decorative || undefined}
       aria-live={decorative ? undefined : "polite"}
       aria-label={
@@ -225,9 +259,12 @@ function resolveAssistantVisualState(stateId: string): CompanionVisualState {
       return "guiding";
     case "assistant.thinking":
       return "thinking";
+    case "assistant.waiting":
+      return "idle";
     case "assistant.success":
       return "success";
     case "assistant.warning":
+    case "assistant.error":
       return "warning";
     default:
       return "idle";
@@ -258,18 +295,48 @@ function VisualGuideCard({
   caption,
   guide,
   hint,
+  navigation,
+  onControl,
   paused,
+  phase,
+  ref,
 }: Readonly<{
   callout?: string;
   caption?: string;
   guide?: { title?: string; body: string; supportingItems?: string[] };
   hint?: string;
+  navigation: {
+    enabled: boolean;
+    current: number;
+    total: number;
+    canGoPrevious: boolean;
+    canGoNext: boolean;
+    nextBlocked: boolean;
+  };
+  onControl?: (action: "next" | "previous") => Promise<unknown>;
   paused: boolean;
-}>) {
+  phase: "teaching" | "interaction" | "validating" | "feedback" | "completed";
+}> & { ref?: Ref<HTMLElement> }) {
+  const [navigating, setNavigating] = useState(false);
+  const navigate = async (action: "next" | "previous") => {
+    if (!onControl || navigating) return;
+    setNavigating(true);
+    try {
+      await onControl(action);
+    } finally {
+      setNavigating(false);
+    }
+  };
   return (
     <aside
+      ref={ref}
       aria-label="Teaching guide"
-      className="pointer-events-none w-[min(19rem,calc(100vw-9rem))] rounded-2xl border border-primary/25 bg-card/96 p-4 text-card-foreground shadow-floating backdrop-blur-md"
+      className={cn(
+        "w-[min(19rem,calc(100vw-9rem))] rounded-2xl border border-primary/25 bg-card/96 text-card-foreground shadow-floating backdrop-blur-md",
+        navigation.enabled ? "pointer-events-auto" : "pointer-events-none",
+        phase === "interaction" ? "max-w-72 p-3" : "p-4",
+      )}
+      data-scene-phase={phase}
       data-slot="visual-guide"
     >
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -309,6 +376,35 @@ function VisualGuideCard({
         <p className="mt-3 border-t pt-2 text-[0.68rem] font-medium text-foreground">
           {caption}
         </p>
+      ) : null}
+      {navigation.enabled ? (
+        <div
+          aria-label="Teaching scene navigation"
+          className="mt-3 flex items-center justify-between gap-2 border-t pt-3"
+          data-slot="scene-navigation"
+          role="group"
+        >
+          <button
+            className="rounded-lg border px-2.5 py-1.5 text-[0.7rem] font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!navigation.canGoPrevious || navigating}
+            onClick={() => void navigate("previous")}
+            type="button"
+          >
+            Previous
+          </button>
+          <span aria-live="polite" className="text-[0.68rem] font-semibold text-muted-foreground">
+            Step {navigation.current} of {navigation.total}
+          </span>
+          <button
+            className="rounded-lg bg-primary px-3 py-1.5 text-[0.7rem] font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!navigation.canGoNext || navigation.nextBlocked || navigating}
+            onClick={() => void navigate("next")}
+            title={navigation.nextBlocked ? "Complete the required interaction first." : undefined}
+            type="button"
+          >
+            Next
+          </button>
+        </div>
       ) : null}
     </aside>
   );
@@ -350,38 +446,230 @@ function TargetHighlight({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
 function TargetPointer({
   companionLeft,
   companionTop,
-  facing,
+  companionSize,
+  guideGeometry,
   geometry,
 }: Readonly<{
   companionLeft: number;
   companionTop: number;
-  facing: "left" | "right";
+  companionSize: { width: number; height: number };
+  guideGeometry?: TargetGeometry;
   geometry: TargetGeometry;
 }>) {
-  const start = {
-    x: companionLeft + (facing === "left" ? 17 : 95),
-    y: companionTop + 62,
-  };
-  const end = {
-    x: geometry.left + geometry.width / 2,
-    y: geometry.top + geometry.height / 2,
-  };
-  const length = Math.hypot(end.x - start.x, end.y - start.y);
-  const angle = Math.atan2(end.y - start.y, end.x - start.x) * (180 / Math.PI);
+  const points = calculatePointerPath({
+    assistant: {
+      left: companionLeft,
+      top: companionTop,
+      width: companionSize.width,
+      height: companionSize.height,
+    },
+    ...(guideGeometry ? { guide: guideGeometry } : {}),
+    target: geometry,
+  });
+  const serializedPoints = points.map(({ x, y }) => `${x},${y}`).join(" ");
+  const start = points[0]!;
+  const end = points.at(-1)!;
   return (
-    <div
+    <svg
       aria-hidden="true"
-      className="absolute h-0.5 origin-left bg-gradient-to-r from-primary via-cyan-300 to-cyan-200 shadow-[0_0_10px_rgb(83_224_255_/_0.8)]"
+      className="absolute inset-0 size-full overflow-visible"
+      data-pointer-end={`${end.x},${end.y}`}
+      data-pointer-start={`${start.x},${start.y}`}
       data-guidance-effect="point"
-      style={{
-        left: start.x,
-        top: start.y,
-        width: length,
-        transform: `rotate(${angle}deg)`,
-      }}
     >
-      <span className="absolute -right-1 -top-1 size-2.5 rotate-45 border-r-2 border-t-2 border-cyan-200" />
-    </div>
+      <defs>
+        <linearGradient id="lessonique-pointer-gradient" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stopColor="rgb(124 92 255)" />
+          <stop offset="1" stopColor="rgb(103 232 249)" />
+        </linearGradient>
+        <marker
+          id="lessonique-pointer-head"
+          markerHeight="8"
+          markerUnits="strokeWidth"
+          markerWidth="8"
+          orient="auto"
+          refX="7"
+          refY="4"
+        >
+          <path d="M0,0 L8,4 L0,8 z" fill="rgb(165 243 252)" />
+        </marker>
+      </defs>
+      <polyline
+        fill="none"
+        markerEnd="url(#lessonique-pointer-head)"
+        points={serializedPoints}
+        stroke="url(#lessonique-pointer-gradient)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+const overlayPlacement = new PlacementEngine();
+
+function useMeasuredSceneLayout({
+  assistant,
+  beatId,
+  companionRef,
+  guideRef,
+  presentationStore,
+  target,
+}: {
+  assistant: ReturnType<ScenePresentationStore["getSnapshot"]>["assistant"];
+  beatId?: string;
+  companionRef: { current: HTMLDivElement | null };
+  guideRef: { current: HTMLElement | null };
+  presentationStore: ScenePresentationStore;
+  target?: TargetGeometry;
+}) {
+  const [measurement, setMeasurement] = useState<{
+    companionSize: { width: number; height: number };
+    guideGeometry?: TargetGeometry;
+  }>({ companionSize: { width: 112, height: 112 } });
+  const targetHeight = target?.height;
+  const targetLeft = target?.left;
+  const targetTop = target?.top;
+  const targetWidth = target?.width;
+
+  useEffect(() => {
+    let animationFrame = 0;
+    let followUpFrame = 0;
+    const synchronize = () => {
+      animationFrame = 0;
+      const companionRect = companionRef.current?.getBoundingClientRect();
+      const guideRect = guideRef.current?.getBoundingClientRect();
+      const companionSize = {
+        width: companionRect?.width || 112,
+        height: companionRect?.height || 112,
+      };
+      const guideSize = {
+        width: guideRect?.width || 0,
+        height: guideRect?.height || 0,
+      };
+      const obstructions = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-scene-obstruction="true"]'),
+      ).map((element) => {
+        const value = element.getBoundingClientRect();
+        return { left: value.left, top: value.top, width: value.width, height: value.height };
+      });
+      const position = overlayPlacement.calculate({
+        placementId: assistant.placementId,
+        ...(targetLeft !== undefined &&
+        targetTop !== undefined &&
+        targetWidth !== undefined &&
+        targetHeight !== undefined
+          ? {
+              target: {
+                left: targetLeft,
+                top: targetTop,
+                width: targetWidth,
+                height: targetHeight,
+              },
+            }
+          : {}),
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        assistantSize: companionSize,
+        guideSize,
+        obstructions,
+      });
+      presentationStore.patch((current) =>
+        positionsEqual(current.assistant.position, position)
+          ? current
+          : {
+              ...current,
+              assistant: { ...current.assistant, position },
+            },
+      );
+      const nextGuideGeometry = guideRef.current
+        ? (() => {
+            const value = guideRef.current!.getBoundingClientRect();
+            return { left: value.left, top: value.top, width: value.width, height: value.height };
+          })()
+        : undefined;
+      setMeasurement((current) =>
+        measurementsEqual(current, companionSize, nextGuideGeometry)
+          ? current
+          : {
+              companionSize,
+              ...(nextGuideGeometry ? { guideGeometry: nextGuideGeometry } : {}),
+            },
+      );
+      followUpFrame = window.requestAnimationFrame(() => {
+        const value = guideRef.current?.getBoundingClientRect();
+        if (!value) return;
+        const guideGeometry = {
+          left: value.left,
+          top: value.top,
+          width: value.width,
+          height: value.height,
+        };
+        setMeasurement((current) =>
+          measurementsEqual(current, current.companionSize, guideGeometry)
+            ? current
+            : { ...current, guideGeometry },
+        );
+      });
+    };
+    const schedule = () => {
+      if (!animationFrame) animationFrame = window.requestAnimationFrame(synchronize);
+    };
+    const observer = new ResizeObserver(schedule);
+    if (companionRef.current) observer.observe(companionRef.current);
+    if (guideRef.current) observer.observe(guideRef.current);
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, true);
+    schedule();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      if (followUpFrame) window.cancelAnimationFrame(followUpFrame);
+    };
+  }, [
+    assistant.placementId,
+    beatId,
+    companionRef,
+    guideRef,
+    presentationStore,
+    targetHeight,
+    targetLeft,
+    targetTop,
+    targetWidth,
+  ]);
+
+  return measurement;
+}
+
+function positionsEqual(
+  left: ReturnType<ScenePresentationStore["getSnapshot"]>["assistant"]["position"],
+  right: ReturnType<ScenePresentationStore["getSnapshot"]>["assistant"]["position"],
+): boolean {
+  return (
+    left.left === right.left &&
+    left.top === right.top &&
+    left.docked === right.docked &&
+    left.side === right.side &&
+    left.facing === right.facing &&
+    left.companionOffsetLeft === right.companionOffsetLeft &&
+    left.companionOffsetTop === right.companionOffsetTop
+  );
+}
+
+function measurementsEqual(
+  current: { companionSize: { width: number; height: number }; guideGeometry?: TargetGeometry },
+  companionSize: { width: number; height: number },
+  guideGeometry?: TargetGeometry,
+): boolean {
+  return (
+    current.companionSize.width === companionSize.width &&
+    current.companionSize.height === companionSize.height &&
+    current.guideGeometry?.left === guideGeometry?.left &&
+    current.guideGeometry?.top === guideGeometry?.top &&
+    current.guideGeometry?.width === guideGeometry?.width &&
+    current.guideGeometry?.height === guideGeometry?.height
   );
 }
 

@@ -12,6 +12,12 @@ describe("ToolRegistry", () => {
     const registry = createEarlyWebMCPToolRegistry(createP0ProviderPlatform());
 
     expect(registry.list().map(({ name }) => name)).toEqual(WEBMCP_TOOL_NAMES);
+    expect(registry.require("create_guided_lesson").description).toContain(
+      "not a workspace full of TODOs",
+    );
+    expect(registry.require("play_teaching_scene").description).toContain(
+      "one small concept per explanation beat",
+    );
     await expect(registry.invoke("get_system_capabilities", {})).resolves.toEqual(
       expect.objectContaining({
         ok: true,
@@ -26,7 +32,7 @@ describe("ToolRegistry", () => {
     await expect(
       registry.invoke("play_teaching_scene", {
         id: "scene.fixture",
-        beats: [{ id: "beat.fixture" }],
+        beats: [{ id: "beat.fixture", type: "explanation" }],
       }),
     ).resolves.toEqual(
       expect.objectContaining({

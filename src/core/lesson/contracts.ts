@@ -15,6 +15,7 @@ export type LessonCriterionId = string;
 export type LessonAttemptId = string;
 export type LessonEventTypeId = string;
 export type LocalWaitId = string;
+export type LessonMode = "explain" | "practice" | "mixed";
 
 export type LessonLifecycleStatus =
   | "idle"
@@ -48,6 +49,7 @@ export interface LessonDefinition {
   id: LessonId;
   title: string;
   objective: string;
+  mode?: LessonMode;
   description?: string;
   locale?: string;
 }

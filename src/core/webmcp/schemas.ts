@@ -104,7 +104,11 @@ const guidanceEffectSchema = z.strictObject({
 
 const visualGuideSchema = z.strictObject({
   title: z.string().min(1).max(120).optional(),
-  body: z.string().min(1).max(DEFAULT_SYSTEM_LIMITS.maxVisualGuideBodyCharacters),
+  body: z
+    .string()
+    .min(1)
+    .max(DEFAULT_SYSTEM_LIMITS.maxVisualGuideBodyCharacters)
+    .describe("Keep this explanation focused on the active micro-step; do not combine multiple concepts into a wall of text."),
   supportingItems: z
     .array(z.string().min(1).max(DEFAULT_SYSTEM_LIMITS.maxVisualGuideItemCharacters))
     .max(DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems)
@@ -133,6 +137,9 @@ const waitConditionSchema = z.discriminatedUnion("kind", [
 
 const teachingBeatSchema = z.strictObject({
   id: identifierSchema,
+  type: z
+    .enum(["explanation", "interaction", "validation", "feedback"])
+    .describe("Use explanation for one small concept, interaction while the learner works, validation while checking declared criteria, and feedback for success or correction."),
   prepare: z
     .strictObject({
       surfaceId: identifierSchema.optional(),
@@ -146,14 +153,19 @@ const teachingBeatSchema = z.strictObject({
   effects: z.array(guidanceEffectSchema).max(8).optional(),
   guide: visualGuideSchema.optional(),
   caption: z.string().min(1).max(DEFAULT_SYSTEM_LIMITS.maxCaptionCharacters).optional(),
-  wait: waitConditionSchema.optional(),
+  wait: waitConditionSchema
+    .describe("Required for interaction and validation beats. It blocks forward navigation until the registered local condition resolves.")
+    .optional(),
 });
 
 export const teachingSceneInputSchema = z.strictObject({
   id: identifierSchema,
   title: z.string().min(1).max(120).optional(),
   cleanupPolicy: z.literal("replace").optional(),
-  allowManualNavigation: z.boolean().optional(),
+  allowManualNavigation: z
+    .boolean()
+    .describe("Set true for progressive explanations so the learner advances locally with Previous and Next instead of asking ChatGPT for each micro-step.")
+    .optional(),
   beats: z
     .array(teachingBeatSchema)
     .min(1)
@@ -223,6 +235,9 @@ export const createGuidedLessonInputSchema = withP0Safety(
     lessonId: identifierSchema,
     title: z.string().min(1).max(120),
     objective: z.string().min(1).max(300),
+    lessonMode: z
+      .enum(["explain", "practice", "mixed"])
+      .describe("Use explain for complete examples and guided demonstrations without TODO-driven work; practice for incomplete exercises and validation; mixed for explanation followed by a small exercise."),
     description: z.string().min(1).max(1_000).optional(),
     language: z.enum(["es", "en"]).optional(),
     replaceExisting: z.literal(true).optional(),
@@ -232,7 +247,9 @@ export const createGuidedLessonInputSchema = withP0Safety(
       .array(lessonStepInputSchema)
       .min(1)
       .max(DEFAULT_SYSTEM_LIMITS.maxLessonSteps),
-    initialScene: teachingSceneInputSchema.optional(),
+    initialScene: teachingSceneInputSchema
+      .describe("For explain or mixed lessons, prefer a complete multi-beat micro-step scene with local navigation. Do not create artificial learner waits merely to keep explanations visible.")
+      .optional(),
   }),
 );
 

@@ -24,6 +24,7 @@ export function createResponsiveMenuHtmlScene(
     beats: [
       {
         id: "beat.responsive-menu-html-plan",
+        type: "explanation",
         target: RESPONSIVE_MENU_TARGET_CATALOG.learningPlan.target,
         assistant: {
           stateId: "assistant.explaining",
@@ -46,6 +47,7 @@ export function createResponsiveMenuHtmlScene(
       },
       {
         id: "beat.responsive-menu-html-source",
+        type: "explanation",
         prepare: {
           surfaceId: "editor",
           filePath: "index.html",
@@ -80,6 +82,7 @@ export function createResponsiveMenuHtmlScene(
       },
       {
         id: "beat.responsive-menu-html-action",
+        type: "interaction",
         prepare: {
           surfaceId: "preview",
           viewportId: "desktop",
@@ -132,6 +135,7 @@ export function createResponsiveMenuCssScene(
     beats: [
       {
         id: "beat.responsive-menu-css-source",
+        type: "explanation",
         prepare: {
           surfaceId: "editor",
           filePath: "styles.css",
@@ -166,6 +170,7 @@ export function createResponsiveMenuCssScene(
       },
       {
         id: "beat.responsive-menu-css-mobile",
+        type: "explanation",
         prepare: {
           surfaceId: "preview",
           viewportId: "mobile",
@@ -215,6 +220,7 @@ export function createResponsiveMenuJavascriptScene(
     beats: [
       {
         id: "beat.responsive-menu-javascript-source",
+        type: "explanation",
         prepare: {
           surfaceId: "editor",
           filePath: "script.js",
@@ -249,6 +255,7 @@ export function createResponsiveMenuJavascriptScene(
       },
       {
         id: "beat.responsive-menu-javascript-preview",
+        type: "interaction",
         prepare: {
           surfaceId: "preview",
           viewportId: "mobile",
@@ -300,6 +307,7 @@ export function createResponsiveMenuWarningScene(): PlayTeachingSceneInput {
     beats: [
       {
         id: "beat.responsive-menu-warning",
+        type: "feedback",
         target: RESPONSIVE_MENU_TARGET_CATALOG.learningPlan.target,
         assistant: {
           stateId: "assistant.warning",
@@ -338,6 +346,7 @@ export function createResponsiveMenuCompletionScene(): PlayTeachingSceneInput {
     beats: [
       {
         id: "beat.responsive-menu-celebration",
+        type: "feedback",
         prepare: {
           surfaceId: "preview",
           viewportId: "mobile",
@@ -371,6 +380,7 @@ export function createResponsiveMenuCompletionScene(): PlayTeachingSceneInput {
       },
       {
         id: "beat.responsive-menu-close",
+        type: "feedback",
         target: RESPONSIVE_MENU_TARGET_CATALOG.learningPlan.target,
         assistant: {
           stateId: "assistant.idle",

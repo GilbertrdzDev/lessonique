@@ -10,6 +10,7 @@ describe("lesson contracts", () => {
         id: "lesson.fake",
         title: "Provider-neutral lesson",
         objective: "Exercise a fake provider without changing the orchestrator.",
+        mode: "mixed",
         locale: "en",
       },
       plan: {
@@ -82,6 +83,7 @@ describe("lesson contracts", () => {
     } satisfies LessonState;
 
     expect(state.lesson.id).toBe("lesson.fake");
+    expect(state.lesson.mode).toBe("mixed");
     expect(state.interactions[0]?.targetRef?.resolverId).toBe("target.fake");
     expect(state.agent.assistantIntent?.stateId).toBe("assistant.fake-thinking");
   });

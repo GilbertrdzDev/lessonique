@@ -16,6 +16,7 @@ import type {
   SceneSnapshot,
   TeachingScene,
   TeachingSceneBeat,
+  TeachingSceneBeatType,
 } from "./contracts";
 import { SceneLifecycleScope } from "./lifecycle";
 import type { MonacoGuidanceAdapter } from "./monaco-guidance-adapter";
@@ -202,6 +203,9 @@ export class SceneRunner {
       status: "preparing",
       activeBeatId: prepared.beats[0]?.id,
       activeBeatIndex: 0,
+      activeBeatType: prepared.beats[0]?.type ?? "explanation",
+      beatCount: prepared.beats.length,
+      allowManualNavigation: prepared.allowManualNavigation,
       assistant: {
         stateId: prepared.beats[0]?.assistant?.stateId ?? "assistant.explaining",
         visible: prepared.beats[0]?.assistant?.visible ?? true,
@@ -247,6 +251,12 @@ export class SceneRunner {
     if (!active.scene.allowManualNavigation && action !== "restart") {
       throw new SceneControlError("The active scene does not allow manual navigation.");
     }
+    const activeBeat = active.scene.beats[active.index];
+    if (action === "next" && activeBeat?.wait && this.#store.getSnapshot().status === "waiting") {
+      throw new SceneControlError(
+        "Complete the required learner interaction before moving to the next step.",
+      );
+    }
     active.requestedIndex =
       action === "restart"
         ? 0
@@ -282,21 +292,31 @@ export class SceneRunner {
           let waitResult: WaitCoordinatorResult | undefined;
           if (beat.wait) {
             this.#setSceneStatus("waiting", beat);
-            this.#actor.setState("assistant.thinking", "waiting");
+            this.#actor.setState(
+              beat.type === "interaction" ? "assistant.waiting" : "assistant.thinking",
+              "waiting",
+            );
             waitResult = await this.#waits.waitFor(
               `${active.scene.id}.${beat.id}.wait`,
               beat.wait,
               signal,
             );
             if (waitResult.status !== "cancelled") {
+              this.#presentation.patch((current) => ({
+                ...current,
+                phase: "feedback",
+              }));
               this.#actor.setState(
                 waitResult.outcome === "success"
                   ? "assistant.success"
-                  : "assistant.warning",
+                  : "assistant.error",
               );
               if (waitResult.hint) this.#guides.showHint(waitResult.hint);
               await cancellableDelay(650, signal);
             }
+          } else if (active.scene.allowManualNavigation) {
+            this.#setSceneStatus("waiting", beat);
+            await waitForManualNavigation(signal);
           } else {
             this.#setSceneStatus("playing", beat);
             await cancellableDelay(this.#beatDurationMs, signal);
@@ -365,6 +385,9 @@ export class SceneRunner {
       status: "preparing",
       activeBeatId: beat.id,
       activeBeatIndex: index,
+      activeBeatType: beat.type ?? "explanation",
+      beatCount: active.scene.beats.length,
+      allowManualNavigation: active.scene.allowManualNavigation,
       ...(beat.target ? { target: structuredClone(beat.target) } : {}),
       ...(beat.wait ? { wait: structuredClone(beat.wait) } : {}),
       assistant: {
@@ -376,6 +399,28 @@ export class SceneRunner {
         status: "moving",
       },
     });
+    const beatType = beat.type ?? "explanation";
+    const interactionBeat = beatType === "interaction";
+    const effectiveAssistant = interactionBeat
+      ? {
+          stateId: "assistant.waiting",
+          placementId: "placement.floating",
+          visible: beat.assistant?.visible ?? true,
+        }
+      : beat.assistant;
+    const effectiveEffects = interactionBeat ? [] : beat.effects;
+    this.#presentation.patch((current) => ({
+      ...current,
+      phase: phaseForBeatType(beatType),
+      navigation: {
+        enabled: active.scene.allowManualNavigation,
+        current: index + 1,
+        total: active.scene.beats.length,
+        canGoPrevious: active.scene.allowManualNavigation && index > 0,
+        canGoNext: active.scene.allowManualNavigation,
+        nextBlocked: Boolean(beat.wait),
+      },
+    }));
     if (beat.prepare) await this.#surfacePreparer.prepare(beat.prepare, signal);
 
     const cleanups: Array<() => Promise<void>> = [];
@@ -398,7 +443,7 @@ export class SceneRunner {
           }));
           const viewport = this.#getViewport();
           const position = this.#placement.calculate({
-            placementId: beat.assistant?.placementId,
+            placementId: effectiveAssistant?.placementId,
             target:
               tracked.resolved.status === "resolved"
                 ? tracked.resolved.geometry
@@ -419,26 +464,26 @@ export class SceneRunner {
       }
     }
 
-    this.#actor.present(active.scene.id, beat.id, beat.assistant, beat.target);
+    this.#actor.present(active.scene.id, beat.id, effectiveAssistant, beat.target);
     const targetGeometry = targetGeometryFromPresentation(
       this.#presentation.getSnapshot(),
     );
     const viewport = this.#getViewport();
     const position = this.#placement.calculate({
-      placementId: beat.assistant?.placementId,
+      placementId: effectiveAssistant?.placementId,
       target: targetGeometry,
       viewport,
       guideSize: estimateGuideSize(beat, viewport.height),
     });
     await this.#motion.moveTo(position, this.#prefersReducedMotion(), signal);
-    this.#effects.show(beat.effects);
+    this.#effects.show(effectiveEffects);
     const disposeEffects = active.scope.add({
       id: `${active.scene.id}.${beat.id}.effects`,
       kind: "overlay",
       dispose: () => this.#effects.clear(),
     });
     cleanups.push(disposeEffects);
-    const clearMonaco = this.#monacoGuidance?.apply(beat.target, beat.effects);
+    const clearMonaco = this.#monacoGuidance?.apply(beat.target, effectiveEffects);
     if (clearMonaco) {
       cleanups.push(
         active.scope.add({
@@ -487,6 +532,16 @@ export class SceneRunner {
   }
 
   #validateBeat(beat: TeachingSceneBeat, lesson: LessonState): void {
+    if (beat.type === "interaction" && !beat.wait) {
+      throw new SceneValidationError(
+        "Interaction beats require a registered learner wait condition.",
+      );
+    }
+    if (beat.type === "validation" && beat.wait?.kind !== "validation") {
+      throw new SceneValidationError(
+        "Validation beats require a validation wait condition.",
+      );
+    }
     if (beat.guide?.body.length && beat.guide.body.length > DEFAULT_SYSTEM_LIMITS.maxVisualGuideBodyCharacters) {
       throw new SceneValidationError("The visual guide body exceeds the system limit.");
     }
@@ -583,7 +638,7 @@ export class SceneRunner {
 
   #setSceneStatus(status: "playing" | "waiting", beat: TeachingSceneBeat): void {
     const snapshot = this.#store.getSnapshot();
-    this.#commit({
+    const next: Omit<SceneSnapshot, "revision"> & { revision?: number } = {
       ...snapshot,
       status,
       ...(beat.wait ? { wait: structuredClone(beat.wait) } : {}),
@@ -591,14 +646,21 @@ export class SceneRunner {
         ...snapshot.assistant,
         status: status === "waiting" ? "waiting" : "presenting",
       },
-    });
+    };
+    if (!beat.wait) delete next.wait;
+    this.#commit(next);
   }
 
   #setPaused(paused: boolean): void {
     const snapshot = this.#store.getSnapshot();
     this.#commit({
       ...snapshot,
-      status: paused ? "paused" : snapshot.wait ? "waiting" : "playing",
+      status:
+        paused
+          ? "paused"
+          : snapshot.wait || this.#active?.scene.allowManualNavigation
+            ? "waiting"
+            : "playing",
     });
     this.#presentation.patch((current) => ({ ...current, paused }));
   }
@@ -664,6 +726,30 @@ function estimateGuideSize(
     width: 300,
     height: Math.min(Math.max(112, 64 + lines * 18), viewportHeight - 32),
   };
+}
+
+function phaseForBeatType(
+  type: TeachingSceneBeatType,
+): "teaching" | "interaction" | "validating" | "feedback" {
+  switch (type) {
+    case "interaction":
+      return "interaction";
+    case "validation":
+      return "validating";
+    case "feedback":
+      return "feedback";
+    default:
+      return "teaching";
+  }
+}
+
+function waitForManualNavigation(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(createAbortError());
+  return new Promise<void>((_resolve, reject) => {
+    signal.addEventListener("abort", () => reject(createAbortError()), {
+      once: true,
+    });
+  });
 }
 
 function estimateTextLines(value: string, charactersPerLine: number): number {

@@ -52,6 +52,15 @@ describe("AssistantOverlayHost", () => {
       },
       caption: "Visible caption",
       hint: "Use a semantic element.",
+      phase: "teaching",
+      navigation: {
+        enabled: false,
+        current: 1,
+        total: 1,
+        canGoPrevious: false,
+        canGoNext: false,
+        nextBlocked: false,
+      },
       paused: false,
     });
 
@@ -211,6 +220,66 @@ describe("AssistantOverlayHost", () => {
       "companion-signal-fragment",
     ].forEach((className) => expect(html).toContain(className));
     expect(html).not.toContain("Connected through WebMCP");
+  });
+
+  it("renders local Previous and Next navigation for a manual micro-step scene", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      phase: "teaching",
+      navigation: {
+        enabled: true,
+        current: 2,
+        total: 4,
+        canGoPrevious: true,
+        canGoNext: true,
+        nextBlocked: false,
+      },
+      guide: {
+        title: "Identifier",
+        body: "This micro-step explains one token.",
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-slot="scene-navigation"');
+    expect(html).toContain("Previous");
+    expect(html).toContain("Step 2 of 4");
+    expect(html).toContain("Next");
+  });
+
+  it("renders a compact interaction card with forward navigation blocked", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      phase: "interaction",
+      navigation: {
+        enabled: true,
+        current: 3,
+        total: 4,
+        canGoPrevious: true,
+        canGoNext: true,
+        nextBlocked: true,
+      },
+      guide: {
+        title: "Your turn",
+        body: "Create courseName using const.",
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-scene-phase="interaction"');
+    expect(html).toContain("max-w-72");
+    expect(html).toContain("Complete the required interaction first.");
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>Next<\/button>/u);
   });
 
   it("uses the focusing treatment without creating a second character renderer", () => {

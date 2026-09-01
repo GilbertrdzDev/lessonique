@@ -79,8 +79,10 @@ export const P0_ASSISTANT_STATE_IDS = {
   explaining: "assistant.explaining",
   pointing: "assistant.pointing",
   thinking: "assistant.thinking",
+  waiting: "assistant.waiting",
   success: "assistant.success",
   warning: "assistant.warning",
+  error: "assistant.error",
 } as const;
 
 export const P0_ASSISTANT_PLACEMENT_IDS = {
@@ -901,8 +903,10 @@ const ASSISTANT_STATES = [
   { id: P0_ASSISTANT_STATE_IDS.explaining, displayName: "Explaining" },
   { id: P0_ASSISTANT_STATE_IDS.pointing, displayName: "Pointing" },
   { id: P0_ASSISTANT_STATE_IDS.thinking, displayName: "Thinking" },
+  { id: P0_ASSISTANT_STATE_IDS.waiting, displayName: "Waiting" },
   { id: P0_ASSISTANT_STATE_IDS.success, displayName: "Success" },
   { id: P0_ASSISTANT_STATE_IDS.warning, displayName: "Warning" },
+  { id: P0_ASSISTANT_STATE_IDS.error, displayName: "Error" },
 ] satisfies readonly AssistantStateDefinition[];
 
 const ASSISTANT_PLACEMENTS = [

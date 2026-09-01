@@ -39,6 +39,7 @@ export function ClassroomHeader() {
   return (
     <header
       className="grid min-h-24 grid-cols-1 overflow-hidden rounded-[1.25rem] border bg-card shadow-panel xl:grid-cols-[1.15fr_0.85fr_1fr]"
+      data-scene-obstruction="true"
       data-webmcp-availability={availability}
     >
       <div className="flex min-w-0 items-center gap-3 px-5 py-4">

@@ -21,7 +21,10 @@ export function WorkspaceRuntimeProvider({ children }: Readonly<{ children: Reac
   return (
     <WorkspaceRuntimeContext.Provider value={workspace}>
       {children}
-      <AssistantOverlayHost presentationStore={workspace.scene.presentation} />
+      <AssistantOverlayHost
+        onControl={(action) => workspace.scene.runner.control(action)}
+        presentationStore={workspace.scene.presentation}
+      />
     </WorkspaceRuntimeContext.Provider>
   );
 }

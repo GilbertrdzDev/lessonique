@@ -4,7 +4,10 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { AgentSidebar } from "@/components/classroom/agent-sidebar";
-import { AppShell } from "@/components/classroom/app-shell";
+import {
+  AppShell,
+  ClassroomSkipLink,
+} from "@/components/classroom/app-shell";
 import { ClassroomHeader } from "@/components/classroom/classroom-header";
 import { ExperienceHeader } from "@/components/classroom/experience-header";
 import { ExperienceLobby } from "@/components/classroom/experience-lobby";
@@ -127,6 +130,7 @@ export function LessoniqueExperience() {
       data-experience-state={experienceState}
       data-slot="lessonique-experience"
     >
+      {experienceState === "classroom" ? <ClassroomSkipLink /> : null}
       <ExperienceHeader experienceState={experienceState} />
       <PersistentCompanion
         experienceState={experienceState}

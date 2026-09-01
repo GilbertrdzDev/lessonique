@@ -93,9 +93,9 @@ test.describe("S007 challenge demo verification", () => {
     const overlay = page.getByLabel("Lessonique visual guidance");
     const guide = page.getByLabel("Teaching guide");
     await expect(guide).toContainText("Start with meaningful structure");
-    await invokeSceneControl(page, "next", "scene.responsive-menu-html");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(guide).toContainText("Inspect the navigation landmark");
-    await invokeSceneControl(page, "next", "scene.responsive-menu-html");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     try {
       await expect(guide).toContainText("Confirm the structure in context", {
         timeout: 30_000,
@@ -113,11 +113,10 @@ test.describe("S007 challenge demo verification", () => {
       "Use the visible preview action to satisfy the learner wait locally.",
     );
     await expect(guide).toContainText(
-      "Activate this preview control when you are ready to continue.",
-    );
-    await expect(guide).toContainText(
       "The scene resumes only after the learner activates the highlighted control.",
     );
+    await expect(page.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+    await expect(page.locator("[data-guidance-effect]")).toHaveCount(0);
     const htmlGuideText = await guide.textContent();
     expect(htmlGuideText?.indexOf("The preview emits a normalized interaction")).toBeLessThan(
       htmlGuideText?.indexOf("The local wait matches the registered anchor") ?? -1,
@@ -155,6 +154,7 @@ test.describe("S007 challenge demo verification", () => {
       invocationResult,
       /Run CSS and mobile scene/u,
     );
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(guide).toContainText("Follow the control into the mobile preview", {
       timeout: 30_000,
     });
@@ -201,6 +201,7 @@ test.describe("S007 challenge demo verification", () => {
     await expect(page.locator('[data-guidance-effect="focus"]')).toBeVisible();
     await expect.poll(() => previewMenuTargetAlignmentDelta(page)).toBeLessThanOrEqual(2);
     await invokeSceneControl(page, "resume", "scene.responsive-menu-css");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(overlay).toHaveCount(0, { timeout: 10_000 });
 
     await runPanelStage(
@@ -208,6 +209,7 @@ test.describe("S007 challenge demo verification", () => {
       invocationResult,
       /Run JavaScript scene/u,
     );
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(guide).toContainText("Run the registered interaction", {
       timeout: 30_000,
     });
@@ -242,7 +244,9 @@ test.describe("S007 challenge demo verification", () => {
         cleanupPolicy: "replace",
         allowManualNavigation: true,
         narration: "Read this guide aloud.",
-        beats: [{ id: "beat.challenge-forbidden-audio" }],
+        beats: [
+          { id: "beat.challenge-forbidden-audio", type: "explanation" },
+        ],
       }),
     );
     await page.getByRole("button", { name: "Run selected tool" }).click();
@@ -580,6 +584,7 @@ async function initializeClassroomThroughWebMCP(page: Page): Promise<void> {
   expectOk(
     await invokeRegisteredTool(page, "create_guided_lesson", {
       lessonId: "lesson.challenge-shell",
+      lessonMode: "mixed",
       title: "Challenge verification lesson",
       objective: "Prepare the classroom before running challenge fixtures.",
       replaceExisting: true,

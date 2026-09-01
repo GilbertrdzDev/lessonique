@@ -180,6 +180,7 @@ export class ClassroomToolService {
         id: input.lessonId,
         title: input.title,
         objective: input.objective,
+        mode: input.lessonMode,
         ...(input.description ? { description: input.description } : {}),
         ...(input.language ? { locale: input.language } : {}),
       },
@@ -428,6 +429,7 @@ function toClassroomData(
   return {
     lesson: {
       id: snapshot.lesson.lesson?.id,
+      mode: snapshot.lesson.lesson?.mode,
       status: snapshot.lesson.status,
       activeStepId: snapshot.lesson.plan.activeStepId,
       stepCount: snapshot.lesson.progress.totalSteps,

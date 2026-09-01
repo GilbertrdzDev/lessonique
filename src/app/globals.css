@@ -320,6 +320,17 @@
   isolation: isolate;
 }
 
+.lessonique-skip-link:not(:focus) {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+  white-space: nowrap;
+}
+
 .lessonique-companion[data-companion-visual-state="incompatible"] {
   --companion-layer-asset: url("/images/companion/lessonique-companion-incompatible.png");
 }

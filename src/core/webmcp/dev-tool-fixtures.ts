@@ -21,6 +21,7 @@ export const DEV_TOOL_FIXTURES = {
   },
   create_guided_lesson: {
     lessonId: "lesson.dev-panel",
+    lessonMode: "mixed",
     title: "Dev Panel lesson",
     objective: "Exercise every registered WebMCP tool without ChatGPT.",
     replaceExisting: true,
@@ -96,6 +97,7 @@ export const DEV_TOOL_FIXTURES = {
     beats: [
       {
         id: "beat.dev-panel-plan",
+        type: "interaction",
         target: {
           resolverId: "target.surface-anchor",
           input: { anchorId: "anchor.learning-plan" },

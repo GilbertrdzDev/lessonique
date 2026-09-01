@@ -13,6 +13,11 @@ import type { LocalWaitCondition } from "@/core/lesson/contracts";
 
 export type SceneId = string;
 export type SceneBeatId = string;
+export type TeachingSceneBeatType =
+  | "explanation"
+  | "interaction"
+  | "validation"
+  | "feedback";
 
 export type SceneStatus =
   | "idle"
@@ -41,6 +46,7 @@ export interface ScenePreparation {
 
 export interface TeachingSceneBeat {
   id: SceneBeatId;
+  type?: TeachingSceneBeatType;
   prepare?: ScenePreparation;
   target?: TargetRef;
   targetLossRecovery?: TargetLossRecovery;
@@ -73,6 +79,9 @@ export interface SceneSnapshot {
   status: SceneStatus;
   activeBeatId?: SceneBeatId;
   activeBeatIndex?: number;
+  activeBeatType?: TeachingSceneBeatType;
+  beatCount?: number;
+  allowManualNavigation?: boolean;
   target?: TargetRef;
   wait?: LocalWaitCondition;
   assistant: AssistantSnapshot;

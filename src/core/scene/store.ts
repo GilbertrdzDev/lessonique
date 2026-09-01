@@ -8,6 +8,22 @@ import type { ResolvedTargetSnapshot, TargetGeometry } from "@/core/workspace/ta
 
 import type { AssistantActorStatus, SceneSnapshot } from "./contracts";
 
+export type ScenePresentationPhase =
+  | "teaching"
+  | "interaction"
+  | "validating"
+  | "feedback"
+  | "completed";
+
+export type SceneNavigationSnapshot = {
+  enabled: boolean;
+  current: number;
+  total: number;
+  canGoPrevious: boolean;
+  canGoNext: boolean;
+  nextBlocked: boolean;
+};
+
 export type ScenePresentationSide = "left" | "right" | "above" | "below" | "docked";
 export type ScenePresentationFacing = "left" | "right";
 
@@ -38,6 +54,8 @@ export interface ScenePresentationSnapshot {
   guide?: VisualGuideInput;
   caption?: string;
   hint?: string;
+  phase: ScenePresentationPhase;
+  navigation: SceneNavigationSnapshot;
   paused: boolean;
 }
 
@@ -123,6 +141,15 @@ export function createIdlePresentationSnapshot(
       reducedMotion,
     },
     effects: [],
+    phase: "completed",
+    navigation: {
+      enabled: false,
+      current: 0,
+      total: 0,
+      canGoPrevious: false,
+      canGoNext: false,
+      nextBlocked: false,
+    },
     paused: false,
   };
 }

@@ -95,6 +95,30 @@ describe("MonacoEditorAdapter", () => {
 
     expect(handle.getSnapshot()).toEqual({ status: "lost" });
   });
+
+  it("recovers a target when Monaco mounts after the scene starts", async () => {
+    const adapter = createAdapter();
+    const handle = await adapter.resolveTarget(
+      {
+        resolverId: "target.code-range",
+        input: {
+          filePath: "index.html",
+          startLine: 1,
+          startColumn: 1,
+          endLine: 1,
+          endColumn: 6,
+        },
+      },
+      new AbortController().signal,
+    );
+
+    expect(handle.getSnapshot()).toEqual({ status: "lost" });
+    adapter.attach(createEditor());
+    expect(handle.getSnapshot()).toEqual({
+      status: "resolved",
+      geometry: { left: 111, top: 220, width: 5, height: 18 },
+    });
+  });
 });
 
 function createAdapter(

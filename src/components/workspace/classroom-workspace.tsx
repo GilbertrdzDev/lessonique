@@ -376,8 +376,12 @@ export function ClassroomWorkspace() {
       aria-labelledby="classroom-title"
       className="flex h-[clamp(46rem,calc(100svh-9rem),56rem)] min-h-0 flex-none flex-col rounded-[1.25rem] border bg-workspace p-3 shadow-panel sm:p-5"
       id="classroom-workspace"
+      tabIndex={-1}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div
+        className="flex flex-wrap items-start justify-between gap-3"
+        data-scene-obstruction="true"
+      >
         <div>
           <h1 id="classroom-title" className="text-xl font-semibold">
             Lessonique Classroom
@@ -409,7 +413,10 @@ export function ClassroomWorkspace() {
         aria-label="Classroom Workspace"
         className="relative mt-5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-code-surface"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-card/80 px-3 py-2.5">
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 border-b bg-card/80 px-3 py-2.5"
+          data-scene-obstruction="true"
+        >
           <div className="flex items-center gap-2">
             <span className="grid size-8 place-items-center rounded-lg bg-brand-soft text-primary">
               <CodeXml aria-hidden="true" className="size-4" />

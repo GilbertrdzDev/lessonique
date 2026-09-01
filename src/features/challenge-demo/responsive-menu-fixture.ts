@@ -131,6 +131,7 @@ export function createResponsiveMenuLessonFixture(
   const topic = RESPONSIVE_MENU_DEMO_TOPICS[topicId];
   return {
     lessonId: RESPONSIVE_MENU_DEMO_IDS.lesson,
+    lessonMode: "mixed",
     title: `Build the ${topic.siteTitle} responsive menu`,
     objective:
       "Create and verify an accessible navigation menu that adapts cleanly to a mobile viewport.",

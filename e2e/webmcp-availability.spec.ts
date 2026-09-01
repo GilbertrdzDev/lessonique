@@ -81,6 +81,7 @@ test.describe("Lessonique WebMCP experience states", () => {
 
     const result = await invokeRegisteredTool(page, "create_guided_lesson", {
       lessonId: "lesson.root-transition",
+      lessonMode: "explain",
       title: "Root transition lesson",
       objective: "Open a real classroom without navigating away from the root route.",
       environment: {

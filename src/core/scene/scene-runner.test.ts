@@ -22,7 +22,7 @@ describe("SceneRunner", () => {
 
   it("starts immediately, presents structured guidance, and cleans up on completion", async () => {
     const { runner, lifecycle } = createHarness();
-    const started = await runner.start(scene("scene.complete", 1));
+    const started = await runner.start(scene("scene.complete", 1, false));
 
     expect(started.status).toBe("preparing");
     await vi.runAllTimersAsync();
@@ -45,7 +45,7 @@ describe("SceneRunner", () => {
     await runner.control("pause", "scene.first");
     expect(runner.store.getSnapshot().status).toBe("paused");
     await runner.control("resume", "scene.first");
-    expect(runner.store.getSnapshot().status).toBe("playing");
+    expect(runner.store.getSnapshot().status).toBe("waiting");
 
     await runner.start(scene("scene.second", 1));
     expect(runner.store.getSnapshot()).toEqual(
@@ -144,6 +144,7 @@ describe("SceneRunner", () => {
         {
           ...targetScene().beats[0]!,
           id: "beat.local-action",
+          type: "interaction",
           assistant: {
             stateId: "assistant.pointing",
             placementId: "placement.near-target",
@@ -164,7 +165,9 @@ describe("SceneRunner", () => {
     };
 
     await runner.start(fixture);
-    await vi.advanceTimersByTimeAsync(5);
+    await vi.advanceTimersByTimeAsync(0);
+    await runner.control("next");
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(runner.store.getSnapshot()).toEqual(
       expect.objectContaining({
@@ -172,9 +175,10 @@ describe("SceneRunner", () => {
         activeBeatId: "beat.local-action",
       }),
     );
-    expect(runner.presentation.getSnapshot().assistant.stateId).toBe(
-      "assistant.thinking",
-    );
+    expect(runner.presentation.getSnapshot().assistant.stateId).toBe("assistant.waiting");
+    expect(runner.presentation.getSnapshot().phase).toBe("interaction");
+    expect(runner.presentation.getSnapshot().effects).toEqual([]);
+    await expect(runner.control("next")).rejects.toThrow(/required learner interaction/u);
     expect(runner.presentation.getSnapshot().targetSnapshot).toEqual(
       expect.objectContaining({
         geometry: expect.objectContaining({ left: 520, top: 260 }),
@@ -359,11 +363,11 @@ function createHarness(options: {
   return { runner, lifecycle, targetHandle, resolveTarget };
 }
 
-function scene(id: string, beatCount: number): TeachingScene {
+function scene(id: string, beatCount: number, allowManualNavigation = true): TeachingScene {
   return {
     id,
     cleanupPolicy: "replace",
-    allowManualNavigation: true,
+    allowManualNavigation,
     beats: Array.from({ length: beatCount }, (_, index) => ({
       id: `beat.${index + 1}`,
       effects: [],

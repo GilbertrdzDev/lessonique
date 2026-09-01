@@ -72,6 +72,7 @@ export class MonacoEditorAdapter
   readonly #getEnvironmentRevision: () => number;
   readonly #now: () => string;
   readonly #interactionListeners = new Set<InteractionEventListener>();
+  readonly #editorLifecycleListeners = new Set<() => void>();
   #editor?: MonacoEditorLike;
   #contentSubscription?: IDisposable;
   #eventSequence = 0;
@@ -100,11 +101,13 @@ export class MonacoEditorAdapter
       this.#focusRequested = false;
       editorInstance.focus();
     }
+    this.#editorLifecycleListeners.forEach((listener) => listener());
     return () => {
       if (this.#editor === editorInstance) {
         this.#contentSubscription?.dispose();
         this.#contentSubscription = undefined;
         this.#editor = undefined;
+        this.#editorLifecycleListeners.forEach((listener) => listener());
       }
     };
   }
@@ -194,15 +197,24 @@ export class MonacoEditorAdapter
     const input = readCodeTarget(target, this.#codeTargetResolverId);
     const handle = new ObservableTargetHandle(this.#measureTarget(input));
     const update = () => handle.update(this.#measureTarget(input));
-    const disposables = this.#editor
-      ? [
-          this.#editor.onDidScrollChange(update),
-          this.#editor.onDidLayoutChange(update),
-          this.#editor.onDidChangeModel(update),
-        ]
-      : [];
+    let disposables: IDisposable[] = [];
+    const subscribeToEditor = () => {
+      disposables.forEach((disposable) => disposable.dispose());
+      this.#editor?.revealRangeInCenter(toRange(input));
+      disposables = this.#editor
+        ? [
+            this.#editor.onDidScrollChange(update),
+            this.#editor.onDidLayoutChange(update),
+            this.#editor.onDidChangeModel(update),
+          ]
+        : [];
+      update();
+    };
+    this.#editorLifecycleListeners.add(subscribeToEditor);
+    subscribeToEditor();
     const abort = () => {
       disposables.forEach((disposable) => disposable.dispose());
+      this.#editorLifecycleListeners.delete(subscribeToEditor);
       handle.dispose();
     };
     signal.addEventListener("abort", abort, { once: true });

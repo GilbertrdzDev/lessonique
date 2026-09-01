@@ -45,7 +45,7 @@ const TOOL_METADATA = {
   },
   create_guided_lesson: {
     title: "Create guided lesson",
-    description: "Create or replace a complete guided lesson transactionally.",
+    description: "Create or replace a complete guided lesson transactionally. Always declare lessonMode. Use explain when the learner asks to understand, learn, see, or be shown a concept: provide complete example code and progressive explanation beats, not a workspace full of TODOs. Use practice only when the learner asks for an exercise, challenge, TODO, or hands-on work. Use mixed for a demonstration followed by a small validated exercise.",
   },
   reset_classroom: {
     title: "Reset classroom",
@@ -69,15 +69,15 @@ const TOOL_METADATA = {
   },
   play_teaching_scene: {
     title: "Play teaching scene",
-    description: "Start a visual teaching scene using semantic targets and registered guidance capabilities.",
+    description: "Start a visual teaching scene using semantic targets and registered guidance capabilities. Author one small concept per explanation beat and target the narrowest useful token or expression. Set allowManualNavigation for learner-controlled Previous and Next. Interaction beats are for learner work, must include a registered wait, and automatically remove invasive guidance; validation and feedback beats check and respond without exposing arbitrary code execution.",
   },
   control_teaching_scene: {
     title: "Control teaching scene",
-    description: "Pause, resume, navigate, restart, or cancel the active teaching scene.",
+    description: "Pause, resume, navigate, restart, or cancel the active teaching scene. Learners normally use Lessonique's local Previous and Next controls; use this tool for agent-directed recovery, remote control, restart, or cancellation, never to bypass a blocked learner interaction.",
   },
   evaluate_current_step: {
     title: "Evaluate current step",
-    description: "Evaluate the active lesson step with its declared criteria.",
+    description: "Evaluate the active lesson step with its declared criteria. Use this for practice or the exercise portion of mixed lessons after learner interaction; do not invent criteria or evaluate a read-only explanation merely to advance it.",
   },
   update_lesson_plan: {
     title: "Update lesson plan",

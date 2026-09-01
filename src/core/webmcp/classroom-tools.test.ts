@@ -27,6 +27,7 @@ describe("classroom WebMCP tools", () => {
         data: expect.objectContaining({
           lesson: {
             id: "lesson.first",
+            mode: "mixed",
             status: "active",
             activeStepId: "step.1",
             stepCount: 3,
@@ -58,6 +59,7 @@ describe("classroom WebMCP tools", () => {
       beats: [
         {
           id: "beat.1",
+          type: "explanation",
           guide: { body: "Welcome to the lesson." },
         },
       ],
@@ -121,6 +123,7 @@ describe("classroom WebMCP tools", () => {
       beats: [
         {
           id: "beat.invalid",
+          type: "explanation",
           target: {
             resolverId: "target.surface-anchor",
             input: { anchorId: "anchor.learning-plan" },
@@ -191,6 +194,7 @@ function createRegistry(runtime: ReturnType<typeof createP0WorkspaceRuntime>) {
 function createLessonInput(lessonId: string) {
   return {
     lessonId,
+    lessonMode: "mixed" as const,
     title: "Web foundations",
     objective: "Build a small provider-neutral web exercise.",
     environment: {
@@ -236,6 +240,7 @@ function createLessonInput(lessonId: string) {
           id: string;
           beats: Array<{
             id: string;
+            type: "explanation" | "interaction" | "validation" | "feedback";
             guide?: { body: string };
             target?: { resolverId: string; input: Record<string, string> };
             effects?: Array<{ effectId: string }>;

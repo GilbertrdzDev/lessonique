@@ -60,6 +60,7 @@ const persistedLessonSchema = z.strictObject({
     id: z.string().min(1).max(120),
     title: z.string().min(1).max(120),
     objective: z.string().min(1).max(300),
+    mode: z.enum(["explain", "practice", "mixed"]).optional(),
     description: z.string().max(1_000).optional(),
     locale: z.string().max(20).optional(),
   }),

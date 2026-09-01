@@ -51,7 +51,12 @@ test.describe("classroom shell", () => {
             window as unknown as {
               __lessoniqueRegisteredTools: Array<{
                 name: string;
-                inputSchema: { additionalProperties?: boolean };
+                description: string;
+                inputSchema: {
+                  additionalProperties?: boolean;
+                  properties?: Record<string, unknown>;
+                  required?: string[];
+                };
               }>;
             }
           ).__lessoniqueRegisteredTools.map(({ name }) => name),
@@ -64,21 +69,43 @@ test.describe("classroom shell", () => {
         window as unknown as {
           __lessoniqueRegisteredTools: Array<{
             name: string;
-            inputSchema: { additionalProperties?: boolean };
+            description: string;
+            inputSchema: {
+              additionalProperties?: boolean;
+              properties?: Record<string, unknown>;
+              required?: string[];
+            };
             execute: (input: unknown) => Promise<unknown>;
           }>;
         }
       ).__lessoniqueRegisteredTools;
       const capabilityTool = tools.find(({ name }) => name === "get_system_capabilities");
+      const createTool = tools.find(({ name }) => name === "create_guided_lesson");
+      const sceneTool = tools.find(({ name }) => name === "play_teaching_scene");
+      const sceneProperties = sceneTool?.inputSchema.properties as
+        | { beats?: { items?: { required?: string[] } } }
+        | undefined;
       return {
         allClosed: tools.every(
           ({ inputSchema }) => inputSchema.additionalProperties === false,
         ),
+        beatTypeRequired:
+          sceneProperties?.beats?.items?.required?.includes("type") ?? false,
+        createDescription: createTool?.description,
+        lessonModeRequired:
+          createTool?.inputSchema.required?.includes("lessonMode") ?? false,
+        sceneDescription: sceneTool?.description,
         result: await capabilityTool?.execute({ include: ["limits"] }),
       };
     });
 
     expect(discovery.allClosed).toBe(true);
+    expect(discovery.lessonModeRequired).toBe(true);
+    expect(discovery.beatTypeRequired).toBe(true);
+    expect(discovery.createDescription).toContain("not a workspace full of TODOs");
+    expect(discovery.sceneDescription).toContain(
+      "one small concept per explanation beat",
+    );
     expect(discovery.result).toEqual(
       expect.objectContaining({
         ok: true,
@@ -177,6 +204,10 @@ test.describe("classroom shell", () => {
     await expect(invocationResult).toContainText('"stageId": "html"');
     await expect(invocationResult).toContainText('"accepted": true');
     const guide = page.getByLabel("Teaching guide");
+    await expect(guide).toContainText("Start with meaningful structure");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(guide).toContainText("Inspect the navigation landmark");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(guide).toContainText("Confirm the structure in context", {
       timeout: 30_000,
     });
@@ -195,6 +226,7 @@ test.describe("classroom shell", () => {
     }).click();
     await expect(invocationResult).toContainText('"stageId": "css"');
     await expect(invocationResult).toContainText('"accepted": true');
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(guide).toContainText("Follow the control into the mobile preview", {
       timeout: 30_000,
     });
@@ -241,6 +273,7 @@ test.describe("classroom shell", () => {
       "scene.responsive-menu-css",
     );
     expect(resumed).toEqual(expect.objectContaining({ ok: true }));
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
       timeout: 5_000,
     });
@@ -250,6 +283,7 @@ test.describe("classroom shell", () => {
     }).click();
     await expect(invocationResult).toContainText('"stageId": "javascript"');
     await expect(invocationResult).toContainText('"accepted": true');
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(guide).toContainText("Run the registered interaction", {
       timeout: 30_000,
     });
@@ -274,6 +308,7 @@ test.describe("classroom shell", () => {
       page.getByRole("status", { name: /Lessonique companion: warning/u }),
     ).toBeVisible({ timeout: 10_000 });
     await expect(guide).toContainText("Preview bounded warning feedback");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
       timeout: 10_000,
     });
@@ -287,12 +322,14 @@ test.describe("classroom shell", () => {
       page.getByRole("status", { name: /Lessonique companion: success/u }),
     ).toBeVisible({ timeout: 10_000 });
     await expect(guide).toContainText("Celebrate verified behavior");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(guide).toContainText("Return to the completed plan", {
       timeout: 10_000,
     });
     await expect(
       page.getByRole("status", { name: /Lessonique companion: idle/u }),
     ).toBeVisible();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
       timeout: 10_000,
     });
@@ -351,6 +388,7 @@ test.describe("classroom shell", () => {
     await expect(guide).toContainText("Transform every item with map", {
       timeout: 15_000,
     });
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(guide).toContainText("Read the validated console output", {
       timeout: 15_000,
     });
@@ -367,6 +405,7 @@ test.describe("classroom shell", () => {
     await expect(
       page.getByRole("status", { name: /Lessonique companion: success/u }),
     ).toBeVisible();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
       timeout: 10_000,
     });
@@ -397,6 +436,7 @@ test.describe("classroom shell", () => {
         tools.find((tool) => tool.name === name)?.execute(input);
       const created = await invoke("create_guided_lesson", {
         lessonId: "lesson.chatgpt-adaptation",
+        lessonMode: "mixed",
         title: "ChatGPT adaptation fixture",
         objective: "Adapt a plan and present one structured reference.",
         environment: {
@@ -1065,6 +1105,7 @@ test.describe("classroom shell", () => {
         beats: [
           {
             id: "beat.browser-guide",
+            type: "interaction",
             target: {
               resolverId: "target.surface-anchor",
               input: { anchorId: "anchor.learning-plan" },
@@ -1131,17 +1172,16 @@ test.describe("classroom shell", () => {
     );
     await expect(companion).toHaveAttribute(
       "data-assistant-state",
-      "assistant.thinking",
+      "assistant.waiting",
     );
     await expect(companion).toHaveAttribute(
       "data-companion-visual-state",
-      "thinking",
+      "idle",
     );
     await expect(companion).toHaveAttribute("data-companion-asset", "normal");
     await expect(guide).toContainText("Responsive semantic guidance");
     await expect(guide).toContainText("Keep this first line.");
     await expect(guide).toContainText("Keep this second line.");
-    await expect(guide).toContainText("Inspect this registered learning target.");
     await expect(guide).toContainText(
       "Visual meaning remains complete without motion or audio.",
     );
@@ -1153,19 +1193,13 @@ test.describe("classroom shell", () => {
     for (const effect of ["focus", "spotlight", "highlight", "point"]) {
       await expect(
         page.locator(`[data-guidance-effect="${effect}"]`),
-      ).toBeVisible();
+      ).toHaveCount(0);
     }
 
-    await expect
-      .poll(() => targetAlignmentDelta(page))
-      .toBeLessThanOrEqual(2);
     await page.setViewportSize({ width: 1366, height: 900 });
     await expect(
       page.locator('[data-interaction-anchor="anchor.learning-plan"]'),
     ).toBeInViewport();
-    await expect
-      .poll(() => targetAlignmentDelta(page))
-      .toBeLessThanOrEqual(2);
     const guideBox = await guide.boundingBox();
     expect(guideBox).not.toBeNull();
     expect(guideBox!.x).toBeGreaterThanOrEqual(0);
@@ -1248,6 +1282,7 @@ test.describe("classroom shell", () => {
 
     const created = await invokeRegisteredTool(page, "create_guided_lesson", {
       lessonId: "lesson.directional-companion",
+      lessonMode: "explain",
       title: "Directional companion lesson",
       objective: "Verify target-aware companion movement and guidance.",
       environment: {
@@ -1312,6 +1347,7 @@ test.describe("classroom shell", () => {
       beats: [
         {
           id: "beat.directional-code",
+          type: "explanation",
           prepare: {
             surfaceId: "editor",
             filePath: "direction.html",
@@ -1334,6 +1370,7 @@ test.describe("classroom shell", () => {
         },
         {
           id: "beat.directional-console",
+          type: "explanation",
           target: consoleTarget,
           assistant: {
             stateId: "assistant.pointing",
@@ -1423,6 +1460,7 @@ test.describe("classroom shell", () => {
       ).__lessoniqueRegisteredTools;
       return tools.find(({ name }) => name === "create_guided_lesson")?.execute({
         lessonId: "lesson.browser-fixture",
+        lessonMode: "mixed",
         title: "Browser fixture lesson",
         objective: "Prove transactional bootstrap in the rendered classroom.",
         environment: {
@@ -1614,6 +1652,25 @@ test.describe("classroom shell", () => {
       darkThemeScan.violations,
       JSON.stringify(darkThemeScan.violations, null, 2),
     ).toEqual([]);
+  });
+
+  test("reveals the skip link only for keyboard navigation", async ({ page }) => {
+    const skipLink = page.getByRole("link", {
+      name: "Skip to Classroom Workspace",
+    });
+    const workspace = page.locator("#classroom-workspace");
+
+    await expect(skipLink).toHaveCSS("opacity", "0");
+    const hiddenBox = await skipLink.boundingBox();
+    expect(hiddenBox).not.toBeNull();
+    expect(hiddenBox!.width).toBeLessThanOrEqual(1);
+    expect(hiddenBox!.height).toBeLessThanOrEqual(1);
+    await skipLink.focus();
+    await expect(skipLink).toBeVisible();
+    await expect(skipLink).toHaveCSS("opacity", "1");
+    await expect(skipLink).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(workspace).toBeFocused();
   });
 
   test("supports keyboard panel controls on desktop", async ({
@@ -1966,6 +2023,7 @@ async function initializeClassroomThroughWebMCP(page: Page): Promise<void> {
 
   const result = await invokeRegisteredTool(page, "create_guided_lesson", {
     lessonId: "lesson.e2e-shell",
+    lessonMode: "mixed",
     title: "Classroom verification lesson",
     objective: "Verify the complete Lessonique classroom experience.",
     replaceExisting: true,
@@ -2041,26 +2099,6 @@ async function measureWorkspaceReflow(page: Page) {
       contentRight: contentBounds.right,
       contentWidth: contentBounds.width,
     };
-  });
-}
-
-async function targetAlignmentDelta(page: import("@playwright/test").Page) {
-  return page.evaluate(() => {
-    const target = document.querySelector<HTMLElement>(
-      '[data-interaction-anchor="anchor.learning-plan"]',
-    );
-    const focus = document.querySelector<HTMLElement>(
-      '[data-guidance-effect="focus"]',
-    );
-    if (!target || !focus) return Number.POSITIVE_INFINITY;
-    const targetRect = target.getBoundingClientRect();
-    const focusRect = focus.getBoundingClientRect();
-    return Math.max(
-      Math.abs(focusRect.left + 4 - targetRect.left),
-      Math.abs(focusRect.top + 4 - targetRect.top),
-      Math.abs(focusRect.width - 8 - targetRect.width),
-      Math.abs(focusRect.height - 8 - targetRect.height),
-    );
   });
 }
 

@@ -12,6 +12,7 @@ describe("LessonPersistence", () => {
         id: "lesson.persistence",
         title: "Persistence",
         objective: "Resume a real lesson after refresh.",
+        mode: "explain",
       },
       [
         {
