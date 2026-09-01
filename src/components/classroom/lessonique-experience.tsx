@@ -189,12 +189,22 @@ function PersistentCompanion({
     >
       <span aria-hidden="true" className="experience-companion-orbit" />
       <LessoniqueCompanion
-        className="size-36 sm:size-44"
+        className="size-48 sm:size-64"
         decorative
         facing={experienceState === "classroom" ? "left" : "right"}
         paused={false}
         stateId={assistantState}
         status={experienceState}
+        visualState={
+          experienceState === "unsupported"
+            ? "incompatible"
+            : experienceState === "connected" ||
+                experienceState === "starting-session"
+              ? "connected"
+              : experienceState === "supported-disconnected"
+                ? "thinking"
+                : "idle"
+        }
       />
       <span aria-hidden="true" className="experience-companion-particle particle-one" />
       <span aria-hidden="true" className="experience-companion-particle particle-two" />

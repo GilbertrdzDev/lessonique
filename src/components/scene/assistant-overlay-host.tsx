@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useSyncExternalStore } from "react";
 
 import type { ScenePresentationStore } from "@/core/scene";
@@ -24,6 +25,10 @@ export function AssistantOverlayHost({
   )?.input?.text;
   const calloutText = typeof callout === "string" ? callout : undefined;
   const assistant = presentation.assistant;
+  const companionVisualState = resolveSceneCompanionVisualState(
+    assistant.stateId,
+    effectIds,
+  );
 
   if (
     !assistant.visible &&
@@ -84,6 +89,7 @@ export function AssistantOverlayHost({
             paused={presentation.paused}
             stateId={assistant.stateId}
             status={assistant.status}
+            visualState={companionVisualState}
           />
         ) : null}
         {presentation.guide ||
@@ -103,6 +109,21 @@ export function AssistantOverlayHost({
   );
 }
 
+export type CompanionVisualState =
+  | "idle"
+  | "connected"
+  | "guiding"
+  | "focusing"
+  | "thinking"
+  | "success"
+  | "warning"
+  | "incompatible";
+
+const NORMAL_COMPANION_ASSET =
+  "/images/companion/lessonique-companion-normal.png";
+const INCOMPATIBLE_COMPANION_ASSET =
+  "/images/companion/lessonique-companion-incompatible.png";
+
 export function LessoniqueCompanion({
   className,
   decorative = false,
@@ -110,6 +131,7 @@ export function LessoniqueCompanion({
   paused,
   stateId,
   status,
+  visualState,
 }: Readonly<{
   className?: string;
   decorative?: boolean;
@@ -117,8 +139,16 @@ export function LessoniqueCompanion({
   paused: boolean;
   stateId: string;
   status: string;
+  visualState?: CompanionVisualState;
 }>) {
   const stateLabel = stateId.replace("assistant.", "");
+  const resolvedVisualState =
+    visualState ?? resolveAssistantVisualState(stateId);
+  const asset =
+    resolvedVisualState === "incompatible"
+      ? INCOMPATIBLE_COMPANION_ASSET
+      : NORMAL_COMPANION_ASSET;
+
   return (
     <div
       aria-hidden={decorative || undefined}
@@ -136,60 +166,91 @@ export function LessoniqueCompanion({
       data-pointing-arm={stateId === "assistant.pointing" ? facing : "none"}
       data-assistant-state={stateId}
       data-assistant-status={status}
+      data-companion-asset={
+        resolvedVisualState === "incompatible" ? "incompatible" : "normal"
+      }
+      data-companion-visual-state={resolvedVisualState}
       role={decorative ? undefined : "status"}
     >
-      <svg
-        aria-hidden="true"
-        className="size-full overflow-visible drop-shadow-[0_14px_22px_rgb(92_70_210_/_0.3)]"
-        viewBox="0 0 120 132"
-      >
-        <defs>
-          <linearGradient id="companion-shell" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0" stopColor="#ffffff" />
-            <stop offset="0.42" stopColor="#f7f5ff" />
-            <stop offset="0.72" stopColor="#e2dcff" />
-            <stop offset="1" stopColor="#a898fa" />
-          </linearGradient>
-          <radialGradient id="companion-face" cx="0.38" cy="0.28" r="0.9">
-            <stop offset="0" stopColor="#51488a" />
-            <stop offset="0.38" stopColor="#282653" />
-            <stop offset="1" stopColor="#0c132c" />
-          </radialGradient>
-          <linearGradient id="companion-leaf" x1="0" x2="1">
-            <stop stopColor="#7c4dff" />
-            <stop offset="1" stopColor="#c778ff" />
-          </linearGradient>
-          <radialGradient id="companion-core" cx="0.42" cy="0.35" r="0.75">
-            <stop offset="0" stopColor="#bff9ff" />
-            <stop offset="0.42" stopColor="#7364ff" />
-            <stop offset="1" stopColor="#5034b8" />
-          </radialGradient>
-        </defs>
-        <ellipse className="companion-shadow" cx="60" cy="124" fill="#7664f4" opacity=".2" rx="33" ry="5" />
-        <g className="companion-body">
-          <ellipse cx="60" cy="77" fill="url(#companion-shell)" rx="44" ry="39" stroke="#ffffff" strokeWidth="2.4" />
-          <ellipse cx="52" cy="67" fill="none" opacity=".5" rx="33" ry="28" stroke="#ffffff" strokeLinecap="round" strokeWidth="1.4" />
-          <path className="companion-arm companion-arm-left" d="M18 67c-12 7-14 22-4 30 8 6 14-4 18-13" fill="url(#companion-shell)" stroke="#c9c0ff" strokeWidth="2" />
-          <path className="companion-arm companion-arm-right" d="M102 67c12 7 14 22 4 30-8 6-14-4-18-13" fill="url(#companion-shell)" stroke="#c9c0ff" strokeWidth="2" />
-          <rect x="24" y="42" width="72" height="56" rx="29" fill="url(#companion-face)" stroke="#8f7cf6" strokeWidth="2" />
-          <path d="M33 51c11-10 35-12 50-3" fill="none" opacity=".26" stroke="#ffffff" strokeLinecap="round" strokeWidth="2" />
-          <g className="companion-eye-look">
-            <ellipse className="companion-eye companion-eye-left" cx="46" cy="68" fill="#78f1ff" rx="5" ry="10" />
-            <ellipse className="companion-eye companion-eye-right" cx="74" cy="68" fill="#78f1ff" rx="5" ry="10" />
-          </g>
-          <path className="companion-mouth" d="M53 82q7 8 14 0" fill="none" stroke="#9befff" strokeLinecap="round" strokeWidth="3" />
-          <circle cx="60" cy="106" fill="url(#companion-core)" r="10" stroke="#bdf7ff" strokeWidth="2" />
-          <path d="m55 105 4-4 2 4 5-1-4 7-2-4z" fill="#d9fbff" />
-          <path d="M57 39c-8-13-3-22 7-25 5 9 2 18-7 25Z" fill="url(#companion-leaf)" />
-          <path d="M63 39c1-12 9-18 18-14-1 10-7 15-18 14Z" fill="#8f78ff" />
-        </g>
-        <g className="companion-rings" fill="none" stroke="#8ceeff" strokeWidth="2">
-          <ellipse cx="60" cy="118" rx="25" ry="5" opacity=".7" />
-          <ellipse cx="60" cy="126" rx="17" ry="3" opacity=".4" />
-        </g>
-      </svg>
+      <span aria-hidden="true" className="companion-aura" />
+      <span aria-hidden="true" className="companion-focus-halo" />
+      <span aria-hidden="true" className="companion-ground-shadow" />
+      <span aria-hidden="true" className="companion-hover-system">
+        <span className="companion-hover-ring companion-hover-ring-upper" />
+        <span className="companion-hover-ring companion-hover-ring-lower" />
+        <span className="companion-hover-spark" />
+      </span>
+      <span aria-hidden="true" className="companion-character-stage">
+        <span className="companion-body-shell">
+          <Image
+            alt=""
+            className="companion-character-image h-full w-full select-none object-contain"
+            draggable={false}
+            height={1254}
+            loading="eager"
+            sizes="(max-width: 640px) 144px, 176px"
+            src={asset}
+            width={1254}
+          />
+          <span className="companion-limb-layer companion-limb-left" />
+          <span className="companion-limb-layer companion-limb-right" />
+          <span className="companion-body-glitch-slice body-glitch-slice-a" />
+          <span className="companion-body-glitch-slice body-glitch-slice-b" />
+          <span className="companion-body-glitch-slice body-glitch-slice-c" />
+          <span className="companion-eye-glimmer companion-eye-glimmer-left" />
+          <span className="companion-eye-glimmer companion-eye-glimmer-right" />
+          <span className="companion-expression-glow" />
+          <span className="companion-blink-mask companion-blink-mask-left" />
+          <span className="companion-blink-mask companion-blink-mask-right" />
+          <span className="companion-leaf-glint" />
+        </span>
+      </span>
+      <span aria-hidden="true" className="companion-hover-ripple" />
+      <span aria-hidden="true" className="companion-state-spark" />
+      <span aria-hidden="true" className="companion-interference-slice interference-a" />
+      <span aria-hidden="true" className="companion-interference-slice interference-b" />
+      <span aria-hidden="true" className="companion-interference-slice interference-c" />
+      <span aria-hidden="true" className="companion-interference-slice interference-d" />
+      <span aria-hidden="true" className="companion-signal-fragment fragment-a" />
+      <span aria-hidden="true" className="companion-signal-fragment fragment-b" />
+      <span aria-hidden="true" className="companion-signal-fragment fragment-c" />
     </div>
   );
+}
+
+function resolveAssistantVisualState(stateId: string): CompanionVisualState {
+  switch (stateId) {
+    case "assistant.explaining":
+    case "assistant.pointing":
+      return "guiding";
+    case "assistant.thinking":
+      return "thinking";
+    case "assistant.success":
+      return "success";
+    case "assistant.warning":
+      return "warning";
+    default:
+      return "idle";
+  }
+}
+
+function resolveSceneCompanionVisualState(
+  stateId: string,
+  effectIds: ReadonlySet<string>,
+): CompanionVisualState {
+  if (stateId === "assistant.pointing") return "guiding";
+  const semanticState = resolveAssistantVisualState(stateId);
+  if (
+    semanticState === "thinking" ||
+    semanticState === "success" ||
+    semanticState === "warning"
+  ) {
+    return semanticState;
+  }
+  if (effectIds.has("effect.focus") || effectIds.has("effect.spotlight")) {
+    return "focusing";
+  }
+  return semanticState;
 }
 
 function VisualGuideCard({

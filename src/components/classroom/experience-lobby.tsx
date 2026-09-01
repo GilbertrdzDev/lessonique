@@ -22,7 +22,7 @@ export function ExperienceLobby({ state }: Readonly<{ state: LobbyState }>) {
     <motion.main
       animate={{ opacity: 1, scale: 1, y: 0 }}
       aria-labelledby="experience-title"
-      className="mx-auto flex min-h-[calc(100svh-6.5rem)] w-full max-w-[120rem] flex-col items-center px-4 pb-10 pt-[17rem] text-center sm:px-8 sm:pt-[18rem]"
+      className="mx-auto flex min-h-[calc(100svh-6.5rem)] w-full max-w-[120rem] flex-col items-center px-4 pb-10 pt-[22rem] text-center sm:px-8 sm:pt-[24rem]"
       data-lobby-state={state}
       initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.985, y: 10 }}
       key={state}

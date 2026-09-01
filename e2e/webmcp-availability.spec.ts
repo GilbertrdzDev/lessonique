@@ -21,6 +21,7 @@ test.describe("Lessonique WebMCP experience states", () => {
     await page.goto("/");
 
     await expectExperienceState(page, "supported-disconnected");
+    await expectCompanionVisualState(page, "thinking", "normal");
     await expect(
       page.getByRole("heading", { name: "Waiting for your AI guide" }),
     ).toBeVisible();
@@ -36,6 +37,7 @@ test.describe("Lessonique WebMCP experience states", () => {
 
     await expectRegisteredToolCount(page, 12);
     await expectExperienceState(page, "supported-disconnected");
+    await expectCompanionVisualState(page, "thinking", "normal");
     await expect(
       page.getByText("Looking for WebMCP connection", { exact: true }),
     ).toHaveCount(2);
@@ -58,6 +60,8 @@ test.describe("Lessonique WebMCP experience states", () => {
 
     expect(result).toEqual(expect.objectContaining({ ok: true }));
     await expectExperienceState(page, "connected");
+    await expectCompanionVisualState(page, "connected", "normal");
+    await expectSharedHoverWaveAndNormalShadow(page);
     await expect(
       page.getByText("Connected through WebMCP", { exact: true }),
     ).toHaveCount(2);
@@ -103,7 +107,9 @@ test.describe("Lessonique WebMCP experience states", () => {
 
     expect(result).toEqual(expect.objectContaining({ ok: true }));
     await expectExperienceState(page, "starting-session");
+    await expectCompanionVisualState(page, "connected", "normal");
     await expectExperienceState(page, "classroom", 10_000);
+    await expectCompanionVisualState(page, "idle", "normal");
     await expect(page).toHaveURL(/\/$/u);
     await expect(
       page.getByRole("main", { name: "Lessonique Classroom" }),
@@ -135,6 +141,12 @@ test.describe("Lessonique WebMCP experience states", () => {
     await page.goto("/");
 
     await expectExperienceState(page, "unsupported");
+    await expectCompanionVisualState(page, "incompatible", "incompatible");
+    await expect(
+      persistentCompanion(page).locator(".companion-character-image"),
+    ).toHaveAttribute("src", /lessonique-companion-incompatible/u);
+    await expectIndependentIncompatibleMotion(page);
+    await expectSharedHoverWaveAndNormalShadow(page);
     await expect(
       page
         .locator('[data-lobby-state="unsupported"]')
@@ -145,6 +157,92 @@ test.describe("Lessonique WebMCP experience states", () => {
     ).toBeVisible();
     await expectNoClassroom(page);
     await expect(page.locator('[data-slot="webmcp-dev-panel"]')).toHaveCount(0);
+  });
+
+  test("keeps the incompatible composition static with reduced motion", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript(() => {
+      Object.defineProperty(document, "modelContext", {
+        configurable: true,
+        value: undefined,
+      });
+    });
+
+    await page.goto("/");
+
+    await expectExperienceState(page, "unsupported");
+    await expectCompanionVisualState(page, "incompatible", "incompatible");
+    const companion = persistentCompanion(page);
+    for (const selector of [
+      ".companion-character-stage",
+      ".companion-ground-shadow",
+      ".companion-hover-ring-upper",
+      ".companion-limb-left",
+      ".body-glitch-slice-a",
+      ".interference-a",
+    ]) {
+      await expect(companion.locator(selector)).toHaveCSS(
+        "animation-name",
+        "none",
+      );
+    }
+    await expect(companion.locator(".companion-ground-shadow")).toHaveCSS(
+      "opacity",
+      "0.82",
+    );
+    await expect(companion.locator(".companion-hover-ring-upper")).toHaveCSS(
+      "opacity",
+      "0.82",
+    );
+    await expect(companion.locator(".body-glitch-slice-a")).toHaveCSS(
+      "opacity",
+      "0",
+    );
+    await expect(companion.locator(".interference-a")).toHaveCSS(
+      "opacity",
+      "0.3",
+    );
+  });
+
+  test("keeps the normal shared waves and shadow static with reduced motion", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await installCapturedWebMCP(page);
+    await page.goto("/");
+    await expectRegisteredToolCount(page, 12);
+    await invokeRegisteredTool(page, "get_system_capabilities", {
+      include: ["profiles"],
+    });
+
+    await expectExperienceState(page, "connected");
+    await expectCompanionVisualState(page, "connected", "normal");
+    const companion = persistentCompanion(page);
+    for (const selector of [
+      ".companion-ground-shadow",
+      ".companion-hover-ring-upper",
+      ".companion-hover-ring-lower",
+      ".companion-hover-spark",
+    ]) {
+      await expect(companion.locator(selector)).toHaveCSS(
+        "animation-name",
+        "none",
+      );
+    }
+    await expect(companion.locator(".companion-ground-shadow")).toHaveCSS(
+      "background-image",
+      /lessonique-companion-normal\.png/u,
+    );
+    await expect(companion.locator(".companion-ground-shadow")).toHaveCSS(
+      "opacity",
+      "0.86",
+    );
+    await expect(companion.locator(".companion-hover-ring-upper")).toHaveCSS(
+      "opacity",
+      "0.9",
+    );
   });
 
   test("does not report a connection when WebMCP registration fails", async ({
@@ -164,6 +262,7 @@ test.describe("Lessonique WebMCP experience states", () => {
     await page.goto("/");
 
     await expectExperienceState(page, "unsupported");
+    await expectCompanionVisualState(page, "incompatible", "incompatible");
     await expect(
       page.getByText("Connected through WebMCP", { exact: true }),
     ).toHaveCount(0);
@@ -187,6 +286,7 @@ test.describe("Lessonique WebMCP experience states", () => {
     });
     await page.goto("/");
     await expectExperienceState(page, "unsupported");
+    await expectCompanionVisualState(page, "incompatible", "incompatible");
 
     await page.evaluate(() => {
       const tools = (
@@ -207,10 +307,12 @@ test.describe("Lessonique WebMCP experience states", () => {
 
     await expectRegisteredToolCount(page, 12);
     await expectExperienceState(page, "supported-disconnected");
+    await expectCompanionVisualState(page, "thinking", "normal");
     await invokeRegisteredTool(page, "get_system_capabilities", {
       include: ["profiles"],
     });
     await expectExperienceState(page, "connected");
+    await expectCompanionVisualState(page, "connected", "normal");
   });
 
   test("redirects the legacy classroom URL to the canonical root", async ({
@@ -238,6 +340,70 @@ async function installCapturedWebMCP(page: Page): Promise<void> {
       },
     });
   });
+}
+
+function persistentCompanion(page: Page) {
+  return page.locator(
+    '[data-companion-experience-state] .lessonique-companion',
+  );
+}
+
+async function expectIndependentIncompatibleMotion(page: Page): Promise<void> {
+  const companion = persistentCompanion(page);
+  const animationContracts = [
+    [".companion-character-stage", "lessonique-companion-error-body-float"],
+    [".companion-ground-shadow", "lessonique-companion-error-shadow"],
+    [".companion-hover-ring-upper", "lessonique-companion-error-ring-upper"],
+    [".companion-hover-ring-lower", "lessonique-companion-error-ring-lower"],
+    [".companion-limb-left", "lessonique-companion-error-left-limb"],
+    [".companion-limb-right", "lessonique-companion-error-right-limb"],
+    [".companion-eye-glimmer-left", "lessonique-companion-error-eye-look"],
+    [".companion-eye-glimmer-right", "lessonique-companion-error-eye-glitch"],
+    [".body-glitch-slice-a", "lessonique-companion-error-body-slice-a"],
+    [".interference-a", "lessonique-companion-error-interference-a"],
+  ] as const;
+
+  for (const [selector, animationName] of animationContracts) {
+    await expect(companion.locator(selector)).toHaveCSS(
+      "animation-name",
+      animationName,
+    );
+  }
+}
+
+async function expectSharedHoverWaveAndNormalShadow(
+  page: Page,
+): Promise<void> {
+  const companion = persistentCompanion(page);
+  const waveAnimations = [
+    [".companion-hover-ring-upper", "lessonique-companion-error-ring-upper"],
+    [".companion-hover-ring-lower", "lessonique-companion-error-ring-lower"],
+    [".companion-hover-spark", "lessonique-companion-error-hover-spark"],
+  ] as const;
+
+  for (const [selector, animationName] of waveAnimations) {
+    await expect(companion.locator(selector)).toHaveCSS(
+      "animation-name",
+      animationName,
+    );
+  }
+  await expect(companion.locator(".companion-ground-shadow")).toHaveCSS(
+    "background-image",
+    /lessonique-companion-normal\.png/u,
+  );
+}
+
+async function expectCompanionVisualState(
+  page: Page,
+  visualState: string,
+  asset: "normal" | "incompatible",
+): Promise<void> {
+  const companion = persistentCompanion(page);
+  await expect(companion).toHaveAttribute(
+    "data-companion-visual-state",
+    visualState,
+  );
+  await expect(companion).toHaveAttribute("data-companion-asset", asset);
 }
 
 async function expectRegisteredToolCount(

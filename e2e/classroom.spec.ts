@@ -1121,11 +1121,11 @@ test.describe("classroom shell", () => {
     });
     const guide = page.getByLabel("Teaching guide");
     await expect(overlay).toHaveAttribute("data-reduced-motion", "true");
-    await expect(companion.locator(".companion-body")).toHaveCSS(
+    await expect(companion.locator(".companion-character-stage")).toHaveCSS(
       "animation-name",
       "none",
     );
-    await expect(companion.locator(".companion-eye-look")).toHaveCSS(
+    await expect(companion.locator(".companion-blink-mask").first()).toHaveCSS(
       "animation-name",
       "none",
     );
@@ -1133,6 +1133,11 @@ test.describe("classroom shell", () => {
       "data-assistant-state",
       "assistant.thinking",
     );
+    await expect(companion).toHaveAttribute(
+      "data-companion-visual-state",
+      "thinking",
+    );
+    await expect(companion).toHaveAttribute("data-companion-asset", "normal");
     await expect(guide).toContainText("Responsive semantic guidance");
     await expect(guide).toContainText("Keep this first line.");
     await expect(guide).toContainText("Keep this second line.");
@@ -1358,15 +1363,16 @@ test.describe("classroom shell", () => {
     await expect(presentation).toHaveAttribute("data-assistant-facing", "left");
     await expect(companion).toHaveAttribute("data-assistant-facing", "left");
     await expect(companion).toHaveAttribute("data-pointing-arm", "left");
-    await expect(companion.locator(".companion-arm-left")).toHaveCSS(
-      "animation-name",
-      "lessonique-companion-point-left",
+    await expect(companion).toHaveAttribute(
+      "data-companion-visual-state",
+      "guiding",
     );
-    await expect(companion.locator(".companion-body")).toHaveCSS(
+    await expect(companion).toHaveAttribute("data-companion-asset", "normal");
+    await expect(companion.locator(".companion-character-stage")).toHaveCSS(
       "animation-name",
       "lessonique-companion-float",
     );
-    await expect(companion.locator(".companion-eye").first()).toHaveCSS(
+    await expect(companion.locator(".companion-blink-mask").first()).toHaveCSS(
       "animation-name",
       "lessonique-companion-blink",
     );
@@ -1382,9 +1388,9 @@ test.describe("classroom shell", () => {
     await expect(presentation).toHaveAttribute("data-assistant-facing", "right");
     await expect(companion).toHaveAttribute("data-assistant-facing", "right");
     await expect(companion).toHaveAttribute("data-pointing-arm", "right");
-    await expect(companion.locator(".companion-arm-right")).toHaveCSS(
+    await expect(companion.locator(".companion-state-spark")).toHaveCSS(
       "animation-name",
-      "lessonique-companion-point-right",
+      "lessonique-companion-guide-spark",
     );
     await expect(presentation).toHaveClass(/flex-row-reverse/u);
     expect(await presentation.getAttribute("style")).not.toBe(firstTransform);

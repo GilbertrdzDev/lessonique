@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 
 import { ScenePresentationStore } from "@/core/scene";
 
-import { AssistantOverlayHost } from "./assistant-overlay-host";
+import {
+  AssistantOverlayHost,
+  LessoniqueCompanion,
+} from "./assistant-overlay-host";
 
 describe("AssistantOverlayHost", () => {
   it("preserves visual guide structure, caption, hint, and semantic assistant state", () => {
@@ -58,6 +61,7 @@ describe("AssistantOverlayHost", () => {
 
     expect(html).toContain("Lessonique companion: success");
     expect(html).toContain('data-assistant-state="assistant.success"');
+    expect(html).toContain('data-companion-visual-state="success"');
     expect(html).toContain('data-assistant-side="right"');
     expect(html).toContain('data-assistant-facing="left"');
     expect(html).toContain("Responsive navigation");
@@ -109,9 +113,10 @@ describe("AssistantOverlayHost", () => {
     expect(html).toContain('data-assistant-side="left"');
     expect(html).toContain('data-assistant-facing="right"');
     expect(html).toContain('data-pointing-arm="right"');
+    expect(html).toContain('data-companion-visual-state="guiding"');
+    expect(html).toContain('data-companion-asset="normal"');
     expect(html).toContain("flex-row-reverse");
-    expect(html).toContain("companion-arm-left");
-    expect(html).toContain("companion-arm-right");
+    expect(html).toContain("lessonique-companion-normal.png");
   });
 
   it("renders untrusted guidance as inert text instead of HTML", () => {
@@ -171,6 +176,63 @@ describe("AssistantOverlayHost", () => {
 
     expect(html).toContain(`data-assistant-state="${stateId}"`);
     expect(html).toContain(`Lessonique companion: ${stateId.replace("assistant.", "")}`);
+  });
+
+  it("keeps the same companion identity while rendering WebMCP incompatibility", () => {
+    const html = renderToStaticMarkup(
+      <LessoniqueCompanion
+        facing="right"
+        paused={false}
+        stateId="assistant.warning"
+        status="unsupported"
+        visualState="incompatible"
+      />,
+    );
+
+    expect(html).toContain('data-companion-visual-state="incompatible"');
+    expect(html).toContain('data-companion-asset="incompatible"');
+    expect(html).toContain("lessonique-companion-incompatible.png");
+    [
+      "companion-ground-shadow",
+      "companion-hover-ring-upper",
+      "companion-hover-ring-lower",
+      "companion-hover-spark",
+      "companion-limb-left",
+      "companion-limb-right",
+      "body-glitch-slice-a",
+      "body-glitch-slice-b",
+      "body-glitch-slice-c",
+      "companion-eye-glimmer-left",
+      "companion-eye-glimmer-right",
+      "interference-a",
+      "interference-b",
+      "interference-c",
+      "interference-d",
+      "companion-signal-fragment",
+    ].forEach((className) => expect(html).toContain(className));
+    expect(html).not.toContain("Connected through WebMCP");
+  });
+
+  it("uses the focusing treatment without creating a second character renderer", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      assistant: {
+        ...current.assistant,
+        stateId: "assistant.explaining",
+        visible: true,
+      },
+      effects: [{ effectId: "effect.focus" }],
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-companion-visual-state="focusing"');
+    expect(html).toContain('data-companion-asset="normal"');
+    expect(html.match(/class="lessonique-companion /gu)).toHaveLength(1);
   });
 
   it("keeps the full visual meaning in reduced-motion mode", () => {
