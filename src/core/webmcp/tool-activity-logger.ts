@@ -2,6 +2,7 @@ import { DEFAULT_SYSTEM_LIMITS } from "@/core/platform/contracts";
 
 import type { ToolResultError, ToolResultStatus } from "./contracts";
 import type { WebMCPToolName } from "./tool-names";
+import type { ToolActivityPresentation } from "./tool-activity-presentation";
 
 export type ToolInvocationPhase =
   | "received"
@@ -20,6 +21,7 @@ export type ToolInvocationEvent = {
   status?: ToolResultStatus;
   revision?: number;
   error?: ToolResultError;
+  presentation?: ToolActivityPresentation;
 };
 
 export type ToolActivityEntry = {
@@ -31,6 +33,7 @@ export type ToolActivityEntry = {
   status?: ToolResultStatus;
   revision?: number;
   error?: ToolResultError;
+  presentation?: ToolActivityPresentation;
 };
 
 export type ToolActivityListener = (
@@ -72,6 +75,9 @@ export class ToolActivityLogger {
           ...(event.status === undefined ? {} : { status: event.status }),
           ...(event.revision === undefined ? {} : { revision: event.revision }),
           ...(event.error === undefined ? {} : { error: cloneToolError(event.error) }),
+          ...(event.presentation === undefined
+            ? {}
+            : { presentation: { ...event.presentation } }),
         }
       : {
           operationId: event.operationId,
@@ -82,6 +88,9 @@ export class ToolActivityLogger {
           ...(event.status === undefined ? {} : { status: event.status }),
           ...(event.revision === undefined ? {} : { revision: event.revision }),
           ...(event.error === undefined ? {} : { error: cloneToolError(event.error) }),
+          ...(event.presentation === undefined
+            ? {}
+            : { presentation: { ...event.presentation } }),
         };
 
     if (existingIndex >= 0) {
@@ -102,6 +111,9 @@ function cloneActivityEntry(entry: ToolActivityEntry): ToolActivityEntry {
   return {
     ...entry,
     ...(entry.error === undefined ? {} : { error: cloneToolError(entry.error) }),
+    ...(entry.presentation === undefined
+      ? {}
+      : { presentation: { ...entry.presentation } }),
   };
 }
 
@@ -109,6 +121,9 @@ function cloneInvocationEvent(event: ToolInvocationEvent): ToolInvocationEvent {
   return {
     ...event,
     ...(event.error === undefined ? {} : { error: cloneToolError(event.error) }),
+    ...(event.presentation === undefined
+      ? {}
+      : { presentation: { ...event.presentation } }),
   };
 }
 

@@ -74,7 +74,7 @@ flowchart TB
 
 The main boundaries are:
 
-- **WebMCP Tool Layer** — registration, closed inputs, invocation lifecycle, compact results, and activity logging.
+- **WebMCP Tool Layer** — registration, closed inputs, invocation lifecycle, compact results, and privacy-safe student-facing activity presentation.
 - **Lesson Orchestrator** — lesson state, transactional bootstrap/reset, progress, attempts, and plan adaptation.
 - **Workspace Controller** — the only layer that mutates files, profiles, surfaces, and runtime configuration.
 - **Scene Engine** — cancelable choreography, semantic targets, companion placement, visual guides, effects, waits, and cleanup.

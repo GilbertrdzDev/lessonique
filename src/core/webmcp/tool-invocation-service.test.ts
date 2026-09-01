@@ -96,6 +96,38 @@ describe("ToolInvocationService", () => {
     expect(JSON.stringify(service.activityLogger.getSnapshot())).not.toContain("must-not-leak");
   });
 
+  it("stores a student-facing presentation without retaining validated file content", async () => {
+    const service = new ToolInvocationService({
+      createOperationId: () => "operation.file",
+      now: () => "2026-08-30T12:00:00.000Z",
+    });
+    await service.invoke(
+      {
+        name: "apply_workspace_changes",
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.apply_workspace_changes,
+        handler: () => ({ ok: true, status: "completed" }),
+      },
+      {
+        operations: [
+          {
+            type: "replace_file",
+            path: "variables.js",
+            content: "private source content",
+          },
+        ],
+      },
+    );
+
+    expect(service.activityLogger.getSnapshot()[0]?.presentation).toEqual({
+      kind: "file",
+      summary: "ChatGPT updated `variables.js`.",
+      dedupeKey: "file:update:variables.js",
+    });
+    expect(JSON.stringify(service.activityLogger.getSnapshot())).not.toContain(
+      "private source content",
+    );
+  });
+
   it("preserves structured capability alternatives and does not execute after rejection", async () => {
     const handler = vi.fn(() => ({ ok: true, status: "completed" as const }));
     const service = new ToolInvocationService({

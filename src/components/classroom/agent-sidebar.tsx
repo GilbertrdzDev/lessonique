@@ -5,14 +5,14 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
+  CircleCheckBig,
   CircleDot,
   CodeXml,
-  Eye,
   FileCode2,
   FolderOpen,
   GraduationCap,
   InspectionPanel,
-  MessageCircleMore,
   MonitorPlay,
   RadioTower,
   Sparkles,
@@ -31,6 +31,7 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import { DevToolPanel } from "@/components/webmcp/dev-tool-panel";
 import {
   getWebMCPAvailabilityPresentation,
@@ -41,7 +42,11 @@ import {
   type AgentConnection,
 } from "@/components/webmcp/webmcp-registration-provider";
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
-import type { ToolActivityEntry, WebMCPToolName } from "@/core/webmcp";
+import {
+  buildAgentActivityTimeline,
+  type AgentActivityKind,
+  type ToolActivityEntry,
+} from "@/core/webmcp";
 import { cn } from "@/lib/utils";
 import { P0_INTERACTION_ANCHOR_IDS } from "@/providers/p0";
 
@@ -58,31 +63,24 @@ const activityTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "America/Bogota",
 });
 
-type ActivityKind = "connection" | "explanation" | "file" | "lesson" | "preview" | "request";
-
-const activityIcons: Readonly<Record<ActivityKind, LucideIcon>> = {
+const activityIcons: Readonly<Record<AgentActivityKind, LucideIcon>> = {
   connection: RadioTower,
-  explanation: MessageCircleMore,
+  console: SquareTerminal,
+  editor: CodeXml,
+  error: CircleAlert,
+  execution: MonitorPlay,
   file: FileCode2,
-  lesson: GraduationCap,
-  preview: Eye,
-  request: Sparkles,
+  guide: GraduationCap,
+  learner: CircleDot,
+  panel: InspectionPanel,
+  success: CircleCheckBig,
 };
 
-const toolActivityLabels: Readonly<Partial<Record<WebMCPToolName, string>>> = {
-  get_system_capabilities: "Discovering Lessonique capabilities",
-  create_guided_lesson: "Creating the guided lesson",
-  reset_classroom: "Resetting the classroom",
-  inspect_classroom: "Inspecting the classroom state",
-  configure_learning_environment: "Configuring the learning environment",
-  apply_workspace_changes: "Updating workspace files",
-  execute_environment_action: "Running an environment action",
-  play_teaching_scene: "Starting a teaching scene",
-  control_teaching_scene: "Controlling the teaching scene",
-  evaluate_current_step: "Evaluating the current step",
-  update_lesson_plan: "Updating the learning plan",
-  show_reference_panel: "Showing a lesson reference",
-};
+const activitySourceLabels = {
+  agent: "AI",
+  learner: "You",
+  system: "System",
+} as const;
 
 const toolIcons: Readonly<Record<string, LucideIcon>> = {
   console: SquareTerminal,
@@ -94,18 +92,6 @@ const toolIcons: Readonly<Record<string, LucideIcon>> = {
   "surface.inspector": InspectionPanel,
   "surface.preview": MonitorPlay,
 };
-
-function getToolActivityKind(toolName: WebMCPToolName): ActivityKind {
-  if (toolName === "create_guided_lesson" || toolName === "update_lesson_plan") {
-    return "lesson";
-  }
-  if (toolName === "apply_workspace_changes") return "file";
-  if (toolName === "execute_environment_action") return "preview";
-  if (toolName === "play_teaching_scene" || toolName === "control_teaching_scene") {
-    return "explanation";
-  }
-  return "request";
-}
 
 type ResizeSession = Readonly<{
   pointerId: number;
@@ -383,40 +369,57 @@ function ActivityFeed({
   );
   const activity = useMemo(
     () =>
-      [
+      buildAgentActivityTimeline([
         ...(agentConnection.connectedAt
           ? [
               {
                 id: `connection-${agentConnection.connectedAt}`,
                 kind: "connection" as const,
-                label: "Connected through WebMCP",
+                source: "system" as const,
+                summary: "Connected through WebMCP",
                 occurredAt: agentConnection.connectedAt,
-                status: "succeeded",
+                dedupeKey: "connection:webmcp",
+                status: "succeeded" as const,
               },
             ]
           : []),
         ...lesson.activity.map((event) => ({
           id: event.id,
-          kind: "lesson" as const,
-          label: event.summary ?? event.typeId,
+          kind:
+            event.outcome === "failure"
+              ? ("error" as const)
+              : event.outcome === "success"
+                ? ("success" as const)
+                : event.source === "learner"
+                  ? ("learner" as const)
+                  : ("guide" as const),
+          source: event.source,
+          summary: event.summary ?? "The lesson activity changed.",
           occurredAt: event.occurredAt,
+          dedupeKey: `lesson:${event.source}:${event.summary ?? event.typeId}`,
           status:
             event.outcome === "failure"
-              ? "failed"
+              ? ("failed" as const)
               : event.outcome === "success"
-                ? "succeeded"
+                ? ("succeeded" as const)
                 : undefined,
         })),
-        ...toolActivity.map((entry) => ({
-          id: entry.operationId,
-          kind: getToolActivityKind(entry.toolName),
-          label: toolActivityLabels[entry.toolName] ?? entry.toolName,
-          occurredAt: entry.updatedAt,
-          status: entry.status,
-        })),
-      ]
-        .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
-        .slice(-8),
+        ...toolActivity.flatMap((entry) =>
+          entry.presentation
+            ? [
+                {
+                  id: entry.operationId,
+                  kind: entry.presentation.kind,
+                  source: "agent" as const,
+                  summary: entry.presentation.summary,
+                  occurredAt: entry.updatedAt,
+                  dedupeKey: entry.presentation.dedupeKey,
+                  ...(entry.status ? { status: entry.status } : {}),
+                },
+              ]
+            : [],
+        ),
+      ]),
     [agentConnection.connectedAt, lesson.activity, toolActivity],
   );
   return (
@@ -437,42 +440,59 @@ function ActivityFeed({
           {activity.map((event) => {
             const Icon = activityIcons[event.kind];
             const isConnection = event.kind === "connection";
+            const sourceLabel = activitySourceLabels[event.source];
 
             return (
               <li
-                className="grid grid-cols-[3.4rem_1rem_1fr_auto] items-center gap-1.5 text-[0.68rem]"
+                className="grid grid-cols-[3.25rem_1rem_minmax(0,1fr)_auto] items-start gap-1.5 rounded-lg px-1 py-1 text-[0.68rem]"
+                data-activity-kind={event.kind}
+                data-activity-source={event.source}
                 key={event.id}
               >
                 <time
-                  className="font-mono text-muted-foreground tabular-nums"
+                  className="pt-0.5 font-mono text-[0.6rem] text-muted-foreground tabular-nums"
                   dateTime={event.occurredAt}
                 >
                   {activityTimeFormatter.format(new Date(event.occurredAt))}
                 </time>
-                <Icon aria-hidden="true" className="size-3.5 text-primary" />
-                <span className="truncate text-muted-foreground">
-                  {isConnection ? presentation.activityLabel : event.label}
+                <Icon
+                  aria-hidden="true"
+                  className={cn(
+                    "mt-0.5 size-3.5 text-primary",
+                    event.kind === "success" && "text-success",
+                    event.kind === "error" && "text-destructive",
+                    event.kind === "learner" && "text-accent-foreground",
+                  )}
+                />
+                <span className="min-w-0 leading-snug text-foreground/85">
+                  <InlineCodeText
+                    codeClassName="px-1 py-0 text-[0.9em]"
+                    dataSlot="activity-inline-code"
+                    text={
+                      isConnection ? presentation.activityLabel : event.summary
+                    }
+                  />
                 </span>
                 <span
-                  aria-label={
-                    isConnection
-                      ? presentation.activityStatusLabel
-                      : "Activity recorded"
-                  }
+                  aria-label={`${sourceLabel} activity${event.status ? `, ${event.status}` : ""}`}
                   className={cn(
-                    "size-1.5 rounded-full bg-primary",
-                    (isConnection ||
-                      event.status === "completed" ||
-                      event.status === "succeeded") &&
-                      "bg-success",
-                    event.status === "failed" && "bg-warning",
+                    "flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[0.55rem] font-semibold uppercase tracking-wide text-muted-foreground",
+                    event.source === "agent" && "bg-brand-soft text-primary",
+                    event.source === "learner" &&
+                      "bg-accent text-accent-foreground",
                   )}
-                  data-webmcp-status-indicator={isConnection ? "" : undefined}
-                  data-webmcp-status-tone={
-                    isConnection ? availability : undefined
-                  }
-                  role="img"
-                />
+                >
+                  {isConnection ? (
+                    <span
+                      aria-label={presentation.activityStatusLabel}
+                      className="size-1.5 rounded-full bg-success"
+                      data-webmcp-status-indicator
+                      data-webmcp-status-tone={availability}
+                      role="img"
+                    />
+                  ) : null}
+                  {sourceLabel}
+                </span>
               </li>
             );
           })}

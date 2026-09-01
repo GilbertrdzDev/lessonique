@@ -25,6 +25,7 @@ import type {
   TargetGeometry,
   TargetRectangle,
 } from "@/core/workspace/targeting";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import { cn } from "@/lib/utils";
 
 const subscribeToPortalHost = () => () => undefined;
@@ -779,37 +780,37 @@ function VisualGuideCard({
       </div>
       {guide?.title ? (
         <h2 className="text-sm font-bold">
-          <InlineCodeText text={guide.title} />
+          <InlineCodeText dataSlot="guide-inline-code" text={guide.title} />
         </h2>
       ) : null}
       {guide ? (
         <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
-          <InlineCodeText text={guide.body} />
+          <InlineCodeText dataSlot="guide-inline-code" text={guide.body} />
         </p>
       ) : null}
       {guide?.supportingItems?.length ? (
         <ol className="mt-2 list-decimal space-y-1 pl-4 text-[0.7rem] text-muted-foreground">
           {guide.supportingItems.map((item, index) => (
             <li key={`${index}-${item}`}>
-              <InlineCodeText text={item} />
+              <InlineCodeText dataSlot="guide-inline-code" text={item} />
             </li>
           ))}
         </ol>
       ) : null}
       {callout ? (
         <p className="mt-3 rounded-xl border border-primary/20 bg-brand-soft/70 px-3 py-2 text-[0.72rem] font-medium leading-relaxed text-foreground">
-          <InlineCodeText text={callout} />
+          <InlineCodeText dataSlot="guide-inline-code" text={callout} />
         </p>
       ) : null}
       {hint ? (
         <p className="mt-3 rounded-xl bg-warning/12 px-3 py-2 text-[0.7rem] leading-relaxed text-foreground">
           <span className="font-bold">Hint:</span>{" "}
-          <InlineCodeText text={hint} />
+          <InlineCodeText dataSlot="guide-inline-code" text={hint} />
         </p>
       ) : null}
       {caption ? (
         <p className="mt-3 border-t pt-2 text-[0.68rem] font-medium text-foreground">
-          <InlineCodeText text={caption} />
+          <InlineCodeText dataSlot="guide-inline-code" text={caption} />
         </p>
       ) : null}
       {navigation.enabled ? (
@@ -842,42 +843,6 @@ function VisualGuideCard({
         </div>
       ) : null}
     </aside>
-  );
-}
-
-function InlineCodeText({ text }: Readonly<{ text: string }>) {
-  const segments: Array<
-    | { kind: "code"; text: string; offset: number }
-    | { kind: "text"; text: string }
-  > = [];
-  const pattern = /`([^`\r\n]+)`/gu;
-  let cursor = 0;
-
-  for (const match of text.matchAll(pattern)) {
-    const offset = match.index;
-    if (offset > cursor) {
-      segments.push({ kind: "text", text: text.slice(cursor, offset) });
-    }
-    segments.push({ kind: "code", text: match[1] ?? "", offset });
-    cursor = offset + match[0].length;
-  }
-
-  if (cursor < text.length) {
-    segments.push({ kind: "text", text: text.slice(cursor) });
-  }
-
-  return segments.map((segment) =>
-    segment.kind === "code" ? (
-      <code
-        className="break-words rounded-md border border-primary/20 bg-primary/10 px-1 py-0.5 font-mono text-[0.92em] font-semibold text-primary"
-        data-slot="guide-inline-code"
-        key={`code-${segment.offset}`}
-      >
-        {segment.text}
-      </code>
-    ) : (
-      segment.text
-    ),
   );
 }
 

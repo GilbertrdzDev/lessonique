@@ -5,7 +5,12 @@ import type {
   InteractionEventListener,
   InteractionSourceAdapter,
 } from "@/core/workspace/targeting";
-import { createP0ProviderPlatform } from "@/providers/p0";
+import {
+  createP0ProviderPlatform,
+  P0_INTERACTION_ANCHOR_IDS,
+  P0_INTERACTION_EVENT_TYPE_IDS,
+  P0_TARGET_RESOLVER_IDS,
+} from "@/providers/p0";
 
 import { createActiveLessonState } from "./state";
 import { LessonStore } from "./store";
@@ -32,11 +37,72 @@ describe("InteractionTracker", () => {
       }),
     ]);
     expect(store.getSnapshot().activity).toEqual([
-      expect.objectContaining({ id: "interaction.1", source: "learner" }),
+      expect.objectContaining({
+        id: "interaction.1",
+        source: "learner",
+        summary: "The learner completed the requested action for “Step 1”.",
+      }),
     ]);
+    expect(JSON.stringify(store.getSnapshot().activity)).not.toContain(
+      "Preview target activated",
+    );
     expect(JSON.stringify(store.getSnapshot())).not.toContain("private input");
     expect(store.getSnapshot().agent.assistantIntent?.stateId).toBe(
       "assistant.success",
+    );
+  });
+
+  it("keeps low-level anchor activation in interaction history without promoting it", () => {
+    const { tracker, store, source } = createHarness();
+    tracker.attachSources([source]);
+
+    source.emit({
+      id: "interaction.anchor",
+      typeId: P0_INTERACTION_EVENT_TYPE_IDS.surfaceActivate,
+      targetRef: {
+        resolverId: P0_TARGET_RESOLVER_IDS.surfaceAnchor,
+        input: { anchorId: P0_INTERACTION_ANCHOR_IDS.activity },
+      },
+      surfaceId: "activity",
+      environmentRevision: 7,
+      occurredAt: "2026-08-30T12:00:00.000Z",
+      summary: `Registered interface anchor "${P0_INTERACTION_ANCHOR_IDS.activity}" was activated.`,
+    });
+
+    expect(store.getSnapshot().interactions).toEqual([
+      expect.objectContaining({ id: "interaction.anchor" }),
+    ]);
+    expect(store.getSnapshot().activity).toEqual([]);
+  });
+
+  it("promotes a wait-satisfying interaction once without exposing adapter text", async () => {
+    const { tracker, store, source } = createHarness();
+    tracker.attachSources([source]);
+    const waiting = tracker.waitFor("wait.preview.context", {
+      kind: "interaction",
+      eventTypeId: "interaction.preview-click",
+      lessonStepId: "step.1",
+      timeoutMs: 1_000,
+    });
+
+    source.emit({
+      ...interaction("interaction.wait"),
+      outcome: undefined,
+      summary: "Technical preview bridge click.",
+    });
+
+    await expect(waiting).resolves.toEqual({
+      status: "satisfied",
+      event: expect.objectContaining({ id: "interaction.wait" }),
+    });
+    expect(store.getSnapshot().activity).toEqual([
+      expect.objectContaining({
+        id: "interaction.wait",
+        summary: "The learner completed the requested action for “Step 1”.",
+      }),
+    ]);
+    expect(JSON.stringify(store.getSnapshot().activity)).not.toContain(
+      "Technical preview bridge click",
     );
   });
 
