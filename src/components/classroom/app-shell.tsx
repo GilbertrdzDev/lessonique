@@ -5,21 +5,19 @@ import { cn } from "@/lib/utils";
 type AppShellProps = Readonly<{
   agent: ReactNode;
   className?: string;
-  header: ReactNode;
-  navigation: ReactNode;
+  sessionInfo: ReactNode;
   workspace: ReactNode;
 }>;
 
 export function AppShell({
   agent,
   className,
-  header,
-  navigation,
+  sessionInfo,
   workspace,
 }: AppShellProps) {
   return (
     <div
-      className={cn("min-h-svh overflow-x-hidden p-2 sm:p-2.5", className)}
+      className={cn("min-w-0", className)}
       data-slot="app-shell"
     >
       <a
@@ -28,10 +26,9 @@ export function AppShell({
       >
         Skip to Classroom Workspace
       </a>
-      <div className="mx-auto grid min-h-[calc(100svh-1rem)] min-w-0 max-w-[120rem] grid-cols-1 gap-2 rounded-[1.25rem] border bg-background/80 p-2 shadow-panel backdrop-blur-xl sm:min-h-[calc(100svh-1.25rem)] sm:gap-2.5 sm:rounded-[1.5rem] sm:p-2.5 md:grid-cols-[auto_minmax(0,1fr)] 2xl:grid-cols-[auto_minmax(34rem,1fr)_auto]">
-        {navigation}
-        <div className="order-1 flex min-w-0 flex-col gap-2 md:order-none sm:gap-2.5">
-          {header}
+      <div className="mx-auto grid min-w-0 max-w-[120rem] grid-cols-1 gap-2 sm:gap-2.5 2xl:grid-cols-[minmax(34rem,1fr)_auto]">
+        <div className="order-1 flex min-w-0 flex-col gap-2 sm:gap-2.5 2xl:order-none">
+          {sessionInfo}
           {workspace}
         </div>
         {agent}

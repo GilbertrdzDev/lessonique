@@ -99,7 +99,7 @@
   --card-foreground: oklch(0.2 0.025 275);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.2 0.025 275);
-  --primary: oklch(0.56 0.235 280);
+  --primary: oklch(0.54 0.235 280);
   --primary-foreground: oklch(0.99 0.005 275);
   --secondary: oklch(0.965 0.013 277);
   --secondary-foreground: oklch(0.31 0.05 277);
@@ -125,7 +125,7 @@
   --radius: 0.72rem;
   --sidebar: oklch(0.995 0.003 275);
   --sidebar-foreground: oklch(0.28 0.035 275);
-  --sidebar-primary: oklch(0.56 0.235 280);
+  --sidebar-primary: oklch(0.54 0.235 280);
   --sidebar-primary-foreground: oklch(0.99 0.005 275);
   --sidebar-accent: oklch(0.95 0.032 280);
   --sidebar-accent-foreground: oklch(0.44 0.16 280);
@@ -231,6 +231,87 @@
 
 .lessonique-companion-presentation {
   transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.experience-companion {
+  top: clamp(7.5rem, 13vh, 10rem);
+  left: 50%;
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+  transition:
+    top 850ms cubic-bezier(0.22, 1, 0.36, 1),
+    left 850ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 300ms ease,
+    transform 850ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 300ms ease;
+}
+
+.experience-companion-hidden {
+  opacity: 0;
+}
+
+[data-experience-state="classroom"] .experience-companion {
+  top: 9.25rem;
+  left: min(64vw, calc(100vw - 32rem));
+  transform: translateX(-50%) scale(0.74);
+}
+
+[data-experience-state="starting-session"] .experience-companion {
+  top: clamp(7rem, 11vh, 8.5rem);
+  transform: translateX(-50%) scale(1.04);
+}
+
+[data-companion-experience-state="unsupported"] {
+  filter: saturate(0.72) brightness(0.96);
+}
+
+.experience-companion-orbit {
+  position: absolute;
+  inset: -1.5rem;
+  z-index: -1;
+  border: 1px solid color-mix(in oklch, var(--primary) 24%, transparent);
+  border-radius: 999px;
+  animation: lessonique-orbit-pulse 3.6s ease-in-out infinite;
+}
+
+[data-companion-experience-state="unsupported"] .experience-companion-orbit {
+  border-style: dashed;
+  border-color: color-mix(in oklch, var(--warning) 42%, transparent);
+  animation: lessonique-signal-glitch 2.2s steps(2, end) infinite;
+}
+
+.experience-companion-particle {
+  position: absolute;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--primary) 72%, white);
+  box-shadow: 0 0 14px color-mix(in oklch, var(--primary) 58%, transparent);
+  animation: lessonique-particle-pulse 2.8s ease-in-out infinite;
+}
+
+.experience-companion-particle.particle-one {
+  top: 8%;
+  right: -1rem;
+}
+
+.experience-companion-particle.particle-two {
+  right: 4%;
+  bottom: 2%;
+  animation-delay: -0.9s;
+}
+
+.experience-companion-particle.particle-three {
+  bottom: 18%;
+  left: -0.75rem;
+  animation-delay: -1.8s;
+}
+
+[data-companion-experience-state="unsupported"]
+  .experience-companion-particle {
+  border-radius: 1px;
+  background: var(--warning);
+  animation-name: lessonique-signal-glitch;
 }
 
 .lessonique-companion .companion-body {
@@ -363,6 +444,63 @@
   }
 }
 
+@keyframes lessonique-orbit-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes lessonique-particle-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0) scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-0.4rem) scale(1);
+  }
+}
+
+@keyframes lessonique-signal-glitch {
+  0%,
+  84%,
+  100% {
+    opacity: 0.65;
+    transform: translate(0);
+  }
+  88% {
+    opacity: 0.25;
+    transform: translate(3px, -1px);
+  }
+  94% {
+    opacity: 0.8;
+    transform: translate(-2px, 1px);
+  }
+}
+
+@media (max-width: 80rem) {
+  [data-experience-state="classroom"] .experience-companion {
+    top: 9.5rem;
+    left: 70%;
+    transform: translateX(-50%) scale(0.62);
+  }
+}
+
+@media (max-width: 48rem) {
+  [data-experience-state="classroom"] .experience-companion {
+    top: 11rem;
+    left: 76%;
+    transform: translateX(-50%) scale(0.48);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -374,6 +512,9 @@
   }
 
   .lessonique-companion-presentation,
+  .experience-companion,
+  .experience-companion-orbit,
+  .experience-companion-particle,
   .lessonique-companion .companion-body,
   .lessonique-companion .companion-eye,
   .lessonique-companion .companion-eye-look,

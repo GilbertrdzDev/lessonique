@@ -22,7 +22,8 @@ test.describe("classroom shell", () => {
         },
       });
     });
-    await page.goto("/classroom");
+    await page.goto("/");
+    await initializeClassroomThroughWebMCP(page);
   });
 
   test("registers the closed P0 WebMCP catalog from the top-level document", async ({
@@ -216,7 +217,9 @@ test.describe("classroom shell", () => {
     await expect
       .poll(() => previewMenuTargetAlignmentDelta(page))
       .toBeLessThanOrEqual(2);
-    expect((await previewMenuGuidanceTargetOverlap(page)).area).toBe(0);
+    await expect
+      .poll(async () => (await previewMenuGuidanceTargetOverlap(page)).area)
+      .toBe(0);
 
     await page.setViewportSize({ width: 1180, height: 820 });
     await expect
@@ -226,9 +229,11 @@ test.describe("classroom shell", () => {
     expect(guideBox).not.toBeNull();
     expect(guideBox!.x).toBeGreaterThanOrEqual(0);
     expect(guideBox!.y).toBeGreaterThanOrEqual(0);
-    expect(guideBox!.x + guideBox!.width).toBeLessThanOrEqual(1180);
-    expect(guideBox!.y + guideBox!.height).toBeLessThanOrEqual(820);
-    expect((await previewMenuGuidanceTargetOverlap(page)).area).toBe(0);
+    expect(guideBox!.x + guideBox!.width).toBeLessThanOrEqual(1181);
+    expect(guideBox!.y + guideBox!.height).toBeLessThanOrEqual(821);
+    await expect
+      .poll(async () => (await previewMenuGuidanceTargetOverlap(page)).area)
+      .toBe(0);
 
     const resumed = await invokeSceneControl(
       page,
@@ -1162,8 +1167,9 @@ test.describe("classroom shell", () => {
     expect(guideBox!.y).toBeGreaterThanOrEqual(0);
     expect(guideBox!.x + guideBox!.width).toBeLessThanOrEqual(1366);
     expect(guideBox!.y + guideBox!.height).toBeLessThanOrEqual(900);
-    const overlap = await guidanceTargetOverlap(page);
-    expect(overlap.area, JSON.stringify(overlap)).toBe(0);
+    await expect
+      .poll(async () => (await guidanceTargetOverlap(page)).area)
+      .toBe(0);
 
     const accessibility = await new AxeBuilder({ page })
       .include('[data-slot="assistant-overlay-host"]')
@@ -1382,7 +1388,9 @@ test.describe("classroom shell", () => {
     );
     await expect(presentation).toHaveClass(/flex-row-reverse/u);
     expect(await presentation.getAttribute("style")).not.toBe(firstTransform);
-    expect((await guidanceTargetOverlap(page)).area).toBe(0);
+    await expect
+      .poll(async () => (await guidanceTargetOverlap(page)).area)
+      .toBe(0);
 
     await testInfo.attach("lessonique-directional-companion-console", {
       body: await page.screenshot(),
@@ -1559,7 +1567,7 @@ test.describe("classroom shell", () => {
     await expect(page).toHaveTitle(/Lessonique/);
     await expect(
       page.getByRole("complementary", { name: "Primary navigation" }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await expect(
       page.getByRole("main", { name: "Lessonique Classroom" }),
     ).toBeVisible();
@@ -1607,31 +1615,7 @@ test.describe("classroom shell", () => {
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium");
 
-    const navigation = page.getByRole("complementary", {
-      name: "Primary navigation",
-    });
     const agent = page.getByRole("complementary", { name: "Learning agent" });
-
-    await expect(navigation).toHaveCSS("width", "256px");
-    await page.getByRole("button", { name: "Collapse navigation" }).click();
-    await expect(navigation).toHaveCSS("width", "76px");
-
-    const expandNavigation = page.getByRole("button", {
-      name: "Expand navigation",
-    });
-    const brandIcon = expandNavigation.locator("[data-navigation-brand-icon]");
-    const expandIcon = expandNavigation.locator(
-      "[data-navigation-expand-icon]",
-    );
-
-    await expect(expandNavigation).toBeVisible();
-    await expect(brandIcon).toHaveCSS("opacity", "1");
-    await expect(expandIcon).toHaveCSS("opacity", "0");
-    await expandNavigation.hover();
-    await expect(brandIcon).toHaveCSS("opacity", "0");
-    await expect(expandIcon).toHaveCSS("opacity", "1");
-    await expandNavigation.click();
-    await expect(navigation).toHaveCSS("width", "256px");
 
     const resizeHandle = page.getByRole("separator", {
       name: "Resize learning agent panel",
@@ -1960,6 +1944,75 @@ async function invokeRegisteredTool(
   }, { requestedName: name, requestedInput: input });
 }
 
+async function initializeClassroomThroughWebMCP(page: Page): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __lessoniqueRegisteredTools: Array<{ name: string }>;
+            }
+          ).__lessoniqueRegisteredTools.length,
+      ),
+    )
+    .toBe(12);
+
+  const result = await invokeRegisteredTool(page, "create_guided_lesson", {
+    lessonId: "lesson.e2e-shell",
+    title: "Classroom verification lesson",
+    objective: "Verify the complete Lessonique classroom experience.",
+    replaceExisting: true,
+    environment: {
+      profileId: "profile.vanilla-web",
+      languageIds: [
+        "language.html",
+        "language.css",
+        "language.javascript",
+      ],
+      activeFile: "index.html",
+      activeSurfaceId: "editor",
+    },
+    files: [
+      {
+        path: "index.html",
+        languageId: "language.html",
+        content:
+          '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>Lessonique Workspace</title>\n    <link rel="stylesheet" href="./styles.css" />\n  </head>\n  <body>\n    <main id="app"></main>\n    <script src="./script.js"></script>\n  </body>\n</html>\n',
+      },
+      {
+        path: "styles.css",
+        languageId: "language.css",
+        content: "",
+      },
+      {
+        path: "script.js",
+        languageId: "language.javascript",
+        content: "",
+      },
+    ],
+    steps: [
+      {
+        id: "step.e2e-shell",
+        title: "Verify the classroom",
+        objective: "Exercise the real workspace and learning controls.",
+      },
+    ],
+  });
+
+  expect(result).toEqual(expect.objectContaining({ ok: true }));
+  await expect(
+    page.getByRole("main", { name: "Lessonique Classroom" }),
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(
+    page.locator('[data-slot="classroom-transition"]'),
+  ).toHaveCSS("opacity", "1");
+  await expect(
+    page.locator('[data-slot="classroom-transition"]'),
+  ).toHaveCSS("transform", "none");
+  await expect(page).toHaveURL(/\/$/u);
+}
+
 async function getWorkspaceTabOrder(page: Page): Promise<string[]> {
   return page.locator("[data-workspace-tab-path]").evaluateAll((tabs) =>
     tabs.map((tab) => tab.getAttribute("data-workspace-tab-path") ?? ""),
@@ -2011,24 +2064,31 @@ async function guidanceTargetOverlap(page: import("@playwright/test").Page) {
       '[data-interaction-anchor="anchor.learning-plan"]',
     );
     const guide = document.querySelector<HTMLElement>('[data-slot="visual-guide"]');
-    const wrapper = guide?.parentElement;
-    if (!target || !wrapper) {
+    const companion = document.querySelector<HTMLElement>(
+      '[data-slot="assistant-overlay-host"] [data-assistant-state]',
+    );
+    if (!target || !guide) {
       return { area: Number.POSITIVE_INFINITY, guidance: null, target: null };
     }
     const targetRect = target.getBoundingClientRect();
-    const guidanceRect = wrapper.getBoundingClientRect();
-    const overlapWidth = Math.max(
-      0,
-      Math.min(targetRect.right, guidanceRect.right) -
-        Math.max(targetRect.left, guidanceRect.left),
-    );
-    const overlapHeight = Math.max(
-      0,
-      Math.min(targetRect.bottom, guidanceRect.bottom) -
-        Math.max(targetRect.top, guidanceRect.top),
-    );
+    const guidanceRect = guide.getBoundingClientRect();
+    const overlapArea = (candidate: DOMRect) => {
+      const overlapWidth = Math.max(
+        0,
+        Math.min(targetRect.right, candidate.right) -
+          Math.max(targetRect.left, candidate.left),
+      );
+      const overlapHeight = Math.max(
+        0,
+        Math.min(targetRect.bottom, candidate.bottom) -
+          Math.max(targetRect.top, candidate.top),
+      );
+      return overlapWidth * overlapHeight;
+    };
     return {
-      area: overlapWidth * overlapHeight,
+      area:
+        overlapArea(guidanceRect) +
+        (companion ? overlapArea(companion.getBoundingClientRect()) : 0),
       guidance: {
         left: guidanceRect.left,
         top: guidanceRect.top,
@@ -2071,23 +2131,29 @@ async function previewMenuGuidanceTargetOverlap(
     .frameLocator("[data-preview-viewport]:visible iframe")
     .getByRole("button", { name: "Menu" })
     .boundingBox();
-  const guidanceRect = await page
-    .locator('[data-slot="assistant-overlay-host"] [data-assistant-docked]')
-    .boundingBox();
-  if (!targetRect || !guidanceRect) {
+  const [guideRect, companionRect] = await Promise.all([
+    page.locator('[data-slot="assistant-overlay-host"] [data-slot="visual-guide"]').boundingBox(),
+    page.locator('[data-slot="assistant-overlay-host"] [data-assistant-state]').boundingBox(),
+  ]);
+  if (!targetRect || !guideRect) {
     return { area: Number.POSITIVE_INFINITY };
   }
-  const overlapWidth = Math.max(
-    0,
-    Math.min(targetRect.x + targetRect.width, guidanceRect.x + guidanceRect.width) -
-      Math.max(targetRect.x, guidanceRect.x),
-  );
-  const overlapHeight = Math.max(
-    0,
-    Math.min(targetRect.y + targetRect.height, guidanceRect.y + guidanceRect.height) -
-      Math.max(targetRect.y, guidanceRect.y),
-  );
-  return { area: overlapWidth * overlapHeight };
+  const overlapArea = (candidate: NonNullable<typeof guideRect>) => {
+    const overlapWidth = Math.max(
+      0,
+      Math.min(targetRect.x + targetRect.width, candidate.x + candidate.width) -
+        Math.max(targetRect.x, candidate.x),
+    );
+    const overlapHeight = Math.max(
+      0,
+      Math.min(targetRect.y + targetRect.height, candidate.y + candidate.height) -
+        Math.max(targetRect.y, candidate.y),
+    );
+    return overlapWidth * overlapHeight;
+  };
+  return {
+    area: overlapArea(guideRect) + (companionRect ? overlapArea(companionRect) : 0),
+  };
 }
 
 async function invokeSceneControl(

@@ -27,10 +27,12 @@ export type WebMCPProviderStatus =
   | "stopped";
 
 type ModelContextResolver = () => BrowserModelContext | undefined;
+type AgentInvocationListener = (toolName: WebMCPToolName) => void;
 
 export class WebMCPProvider {
   readonly #registry: ToolRegistry;
   readonly #resolveModelContext: ModelContextResolver;
+  readonly #onAgentInvocation?: AgentInvocationListener;
   #abortController?: AbortController;
   #registration?: Promise<WebMCPProviderStatus>;
   #status: WebMCPProviderStatus = "idle";
@@ -38,13 +40,19 @@ export class WebMCPProvider {
   constructor(
     registry: ToolRegistry,
     resolveModelContext: ModelContextResolver = resolveDocumentModelContext,
+    onAgentInvocation?: AgentInvocationListener,
   ) {
     this.#registry = registry;
     this.#resolveModelContext = resolveModelContext;
+    this.#onAgentInvocation = onAgentInvocation;
   }
 
   get status(): WebMCPProviderStatus {
     return this.#status;
+  }
+
+  hasBrowserSurface(): boolean {
+    return this.#resolveModelContext() !== undefined;
   }
 
   async start(): Promise<WebMCPProviderStatus> {
@@ -97,7 +105,10 @@ export class WebMCPProvider {
             title: definition.title,
             description: definition.description,
             inputSchema: getWebMCPToolJsonSchema(definition.name),
-            execute: (input) => definition.invoke(input),
+            execute: (input) => {
+              this.#onAgentInvocation?.(definition.name);
+              return definition.invoke(input);
+            },
           },
           { signal: controller.signal },
         );

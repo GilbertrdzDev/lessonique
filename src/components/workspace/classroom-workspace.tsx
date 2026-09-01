@@ -38,7 +38,6 @@ import {
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import type { SurfaceConfiguration } from "@/core/platform/contracts";
 import type { SurfaceState } from "@/core/workspace/contracts";
-import { WorkspacePersistence } from "@/core/workspace/persistence";
 import {
   isSameOrDescendantPath,
   replaceWorkspacePathPrefix,
@@ -113,44 +112,6 @@ export function ClassroomWorkspace() {
   const pendingTabPathRemapRef = useRef<PendingTabPathRemap | undefined>(
     undefined,
   );
-
-  useEffect(() => {
-    let active = true;
-    let unsubscribe: (() => void) | undefined;
-    const persistence = new WorkspacePersistence(window.localStorage);
-    const prepareWorkspace = async () => {
-      const persisted = persistence.load();
-      try {
-        if (persisted) {
-          await workspace.controller.restore(persisted);
-        } else {
-          await workspace.controller.activateProfile(
-            P0_ENVIRONMENT_PROFILE_IDS.vanillaWeb,
-          );
-        }
-      } catch {
-        persistence.clear();
-        await workspace.controller.activateProfile(
-          P0_ENVIRONMENT_PROFILE_IDS.vanillaWeb,
-        );
-      }
-      if (active) {
-        persistence.save(workspace.store.getSnapshot());
-        unsubscribe = workspace.store.subscribe(() => {
-          persistence.save(workspace.store.getSnapshot());
-        });
-      }
-    };
-    void prepareWorkspace().catch((error: unknown) => {
-      if (active) {
-        setErrorMessage(getErrorMessage(error));
-      }
-    });
-    return () => {
-      active = false;
-      unsubscribe?.();
-    };
-  }, [workspace]);
 
   useEffect(() => {
     const availableFilePaths = state.files

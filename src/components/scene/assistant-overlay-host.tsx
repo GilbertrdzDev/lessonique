@@ -103,12 +103,16 @@ export function AssistantOverlayHost({
   );
 }
 
-function LessoniqueCompanion({
+export function LessoniqueCompanion({
+  className,
+  decorative = false,
   facing,
   paused,
   stateId,
   status,
 }: Readonly<{
+  className?: string;
+  decorative?: boolean;
   facing: "left" | "right";
   paused: boolean;
   stateId: string;
@@ -117,14 +121,22 @@ function LessoniqueCompanion({
   const stateLabel = stateId.replace("assistant.", "");
   return (
     <div
-      aria-live="polite"
-      aria-label={`Lessonique companion: ${stateLabel}${paused ? ", paused" : ""}`}
-      className="lessonique-companion relative size-28 shrink-0"
+      aria-hidden={decorative || undefined}
+      aria-live={decorative ? undefined : "polite"}
+      aria-label={
+        decorative
+          ? undefined
+          : `Lessonique companion: ${stateLabel}${paused ? ", paused" : ""}`
+      }
+      className={cn(
+        "lessonique-companion relative size-28 shrink-0",
+        className,
+      )}
       data-assistant-facing={facing}
       data-pointing-arm={stateId === "assistant.pointing" ? facing : "none"}
       data-assistant-state={stateId}
       data-assistant-status={status}
-      role="status"
+      role={decorative ? undefined : "status"}
     >
       <svg
         aria-hidden="true"

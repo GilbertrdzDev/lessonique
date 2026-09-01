@@ -201,12 +201,13 @@ export async function runDevToolFixtureSuite(
 ): Promise<readonly DevToolFixtureRun[]> {
   const results: DevToolFixtureRun[] = [];
   for (const toolName of DEV_TOOL_FIXTURE_ORDER) {
+    const fixture =
+      toolName === "reset_classroom"
+        ? { scope: "guidance" as const }
+        : structuredClone(DEV_TOOL_FIXTURES[toolName]);
     results.push({
       toolName,
-      result: await registry.invoke(
-        toolName,
-        structuredClone(DEV_TOOL_FIXTURES[toolName]),
-      ),
+      result: await registry.invoke(toolName, fixture),
     });
   }
   return results;

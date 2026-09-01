@@ -43,7 +43,7 @@ export default defineConfig({
         command: "node node_modules/next/dist/bin/next start -p 3100",
         reuseExistingServer: false,
         timeout: 120_000,
-        url: "http://127.0.0.1:3100/classroom",
+        url: "http://127.0.0.1:3100/",
       },
   workers: process.env.CI ? 1 : 4,
 });

@@ -18,6 +18,10 @@ import {
   LESSONIQUE_DEEP_OCEAN_THEME_ID,
   lessoniqueDeepOceanTheme,
 } from "@/components/workspace/monaco-deep-ocean-theme";
+import {
+  LESSONIQUE_DAYLIGHT_THEME_ID,
+  lessoniqueDaylightTheme,
+} from "@/components/workspace/monaco-daylight-theme";
 import { WORKSPACE_EDITOR_PANEL_ID } from "@/components/workspace/workspace-tabs";
 
 loader.config({ paths: { vs: "/vendor/monaco/vs" } });
@@ -47,7 +51,9 @@ export function MonacoEditorSurface({
   const filesRef = useRef(files);
   const synchronizingRef = useRef(false);
   const editorTheme =
-    resolvedTheme === "dark" ? LESSONIQUE_DEEP_OCEAN_THEME_ID : "light";
+    resolvedTheme === "dark"
+      ? LESSONIQUE_DEEP_OCEAN_THEME_ID
+      : LESSONIQUE_DAYLIGHT_THEME_ID;
 
   useEffect(() => {
     activeFilePathRef.current = activeFilePath;
@@ -66,6 +72,10 @@ export function MonacoEditorSurface({
     monaco.editor.defineTheme(
       LESSONIQUE_DEEP_OCEAN_THEME_ID,
       lessoniqueDeepOceanTheme,
+    );
+    monaco.editor.defineTheme(
+      LESSONIQUE_DAYLIGHT_THEME_ID,
+      lessoniqueDaylightTheme,
     );
     ensureRegistry(monaco);
   };

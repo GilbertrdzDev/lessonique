@@ -11,6 +11,7 @@ describe("WebMCPProvider", () => {
   it("registers every tool on one model context and unregisters through one abort signal", async () => {
     const tools: BrowserWebMCPTool[] = [];
     const signals: AbortSignal[] = [];
+    const onAgentInvocation = vi.fn();
     const modelContext: BrowserModelContext = {
       registerTool: vi.fn(async (tool, options) => {
         tools.push(tool);
@@ -20,8 +21,10 @@ describe("WebMCPProvider", () => {
     const provider = new WebMCPProvider(
       createEarlyWebMCPToolRegistry(createP0ProviderPlatform()),
       () => modelContext,
+      onAgentInvocation,
     );
 
+    expect(provider.hasBrowserSurface()).toBe(true);
     await expect(provider.start()).resolves.toBe("ready");
     expect(tools.map(({ name }) => name)).toEqual(WEBMCP_TOOL_NAMES);
     expect(tools.every(({ inputSchema }) => inputSchema.additionalProperties === false)).toBe(
@@ -33,6 +36,7 @@ describe("WebMCPProvider", () => {
         data: expect.objectContaining({ limits: expect.any(Object) }),
       }),
     );
+    expect(onAgentInvocation).toHaveBeenCalledWith("get_system_capabilities");
 
     provider.stop();
     expect(provider.status).toBe("stopped");
@@ -47,6 +51,7 @@ describe("WebMCPProvider", () => {
     );
 
     await expect(provider.start()).resolves.toBe("unavailable");
+    expect(provider.hasBrowserSurface()).toBe(false);
     expect(provider.status).toBe("unavailable");
   });
 

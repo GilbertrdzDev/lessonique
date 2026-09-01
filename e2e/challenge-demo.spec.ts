@@ -63,7 +63,8 @@ test.describe("S007 challenge demo verification", () => {
         });
       }
     });
-    await page.goto("/classroom");
+    await page.goto("/");
+    await initializeClassroomThroughWebMCP(page);
   });
 
   test("preserves the complete visual contract through the Dev Panel with reduced motion and target churn", async ({
@@ -368,7 +369,9 @@ async function runResponsiveMenuRehearsal(
   await invokeSceneControl(page, "next", "scene.responsive-menu-css");
   await expect(guide).toContainText("Follow the control into the mobile preview");
   await expect.poll(() => previewMenuTargetAlignmentDelta(page)).toBeLessThanOrEqual(2);
-  expect((await previewMenuGuidanceTargetOverlap(page)).area).toBe(0);
+  await expect
+    .poll(async () => (await previewMenuGuidanceTargetOverlap(page)).area)
+    .toBe(0);
   await invokeSceneControl(page, "next", "scene.responsive-menu-css");
   await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0);
 
@@ -560,6 +563,60 @@ async function invokeRegisteredTool(
   }, { toolInput: input, toolName: name });
 }
 
+async function initializeClassroomThroughWebMCP(page: Page): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __lessoniqueRegisteredTools: Array<{ name: string }>;
+            }
+          ).__lessoniqueRegisteredTools.length,
+      ),
+    )
+    .toBe(12);
+
+  expectOk(
+    await invokeRegisteredTool(page, "create_guided_lesson", {
+      lessonId: "lesson.challenge-shell",
+      title: "Challenge verification lesson",
+      objective: "Prepare the classroom before running challenge fixtures.",
+      replaceExisting: true,
+      environment: {
+        profileId: "profile.vanilla-web",
+        languageIds: ["language.javascript"],
+        activeFile: "script.js",
+        activeSurfaceId: "editor",
+      },
+      files: [
+        {
+          path: "script.js",
+          languageId: "language.javascript",
+          content: "const challengeReady = true;",
+        },
+      ],
+      steps: [
+        {
+          id: "step.challenge-shell",
+          title: "Prepare the challenge",
+          objective: "Load the complete responsive-menu challenge fixture.",
+        },
+      ],
+    }),
+    "initialize challenge classroom",
+  );
+  await expect(
+    page.getByRole("main", { name: "Lessonique Classroom" }),
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(
+    page.locator('[data-slot="classroom-transition"]'),
+  ).toHaveCSS("opacity", "1");
+  await expect(
+    page.locator('[data-slot="classroom-transition"]'),
+  ).toHaveCSS("transform", "none");
+}
+
 async function readBlockedAudioApiCalls(
   page: Page,
 ): Promise<{ host: string[]; preview: string[] }> {
@@ -630,17 +687,25 @@ async function previewMenuGuidanceTargetOverlap(
     .frameLocator("[data-preview-viewport]:visible iframe")
     .getByRole("button", { name: "Menu" })
     .boundingBox();
-  const guidanceRect = await guidanceWrapper(page).boundingBox();
-  if (!targetRect || !guidanceRect) return { area: Number.POSITIVE_INFINITY };
-  const overlapWidth = Math.max(
-    0,
-    Math.min(targetRect.x + targetRect.width, guidanceRect.x + guidanceRect.width) -
-      Math.max(targetRect.x, guidanceRect.x),
-  );
-  const overlapHeight = Math.max(
-    0,
-    Math.min(targetRect.y + targetRect.height, guidanceRect.y + guidanceRect.height) -
-      Math.max(targetRect.y, guidanceRect.y),
-  );
-  return { area: overlapWidth * overlapHeight };
+  const [guideRect, companionRect] = await Promise.all([
+    page.locator('[data-slot="assistant-overlay-host"] [data-slot="visual-guide"]').boundingBox(),
+    page.locator('[data-slot="assistant-overlay-host"] [data-assistant-state]').boundingBox(),
+  ]);
+  if (!targetRect || !guideRect) return { area: Number.POSITIVE_INFINITY };
+  const overlapArea = (candidate: NonNullable<typeof guideRect>) => {
+    const overlapWidth = Math.max(
+      0,
+      Math.min(targetRect.x + targetRect.width, candidate.x + candidate.width) -
+        Math.max(targetRect.x, candidate.x),
+    );
+    const overlapHeight = Math.max(
+      0,
+      Math.min(targetRect.y + targetRect.height, candidate.y + candidate.height) -
+        Math.max(targetRect.y, candidate.y),
+    );
+    return overlapWidth * overlapHeight;
+  };
+  return {
+    area: overlapArea(guideRect) + (companionRect ? overlapArea(companionRect) : 0),
+  };
 }

@@ -8,16 +8,33 @@ import {
   RadioTower,
   Sparkles,
 } from "lucide-react";
+import { useSyncExternalStore } from "react";
 
-import { ThemeToggle } from "@/components/classroom/theme-toggle";
 import { getWebMCPAvailabilityPresentation } from "@/components/webmcp/webmcp-availability";
 import { useWebMCPRuntime } from "@/components/webmcp/webmcp-registration-provider";
-import { classroomTechnologiesMock } from "@/features/classroom/classroom-mocks";
+import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import { cn } from "@/lib/utils";
 
 export function ClassroomHeader() {
-  const { availability } = useWebMCPRuntime();
+  const { agentConnection, availability } = useWebMCPRuntime();
+  const workspace = useWorkspaceRuntime();
+  const workspaceState = useSyncExternalStore(
+    workspace.store.subscribe,
+    workspace.store.getSnapshot,
+    workspace.store.getSnapshot,
+  );
   const presentation = getWebMCPAvailabilityPresentation(availability);
+  const connected =
+    availability === "ready" && agentConnection.status === "connected";
+  const connectionTone = connected
+    ? "ready"
+    : availability === "unsupported"
+      ? "unsupported"
+      : "detecting";
+  const capabilities = workspaceState.languageIds.flatMap((languageId) => {
+    const language = workspace.registries.languages.get(languageId);
+    return language ? [language] : [];
+  });
 
   return (
     <header
@@ -30,10 +47,10 @@ export function ClassroomHeader() {
         </span>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-primary text-wrap-balance">
-            {presentation.requestLabel}
+            Request received from ChatGPT
           </p>
           <p className="mt-1 truncate text-xs text-muted-foreground">
-            {presentation.requestDetail}
+            Guided session led by ChatGPT
           </p>
         </div>
       </div>
@@ -46,28 +63,36 @@ export function ClassroomHeader() {
         <span
           className="relative flex size-3 shrink-0"
           data-webmcp-status-indicator
-          data-webmcp-status-tone={availability}
+          data-webmcp-status-tone={connectionTone}
         >
-          {availability === "ready" ? (
+          {connectionTone === "ready" ? (
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-35 motion-reduce:animate-none" />
           ) : null}
           <span
             aria-hidden="true"
             className={cn(
               "relative inline-flex size-3 rounded-full",
-              availability === "detecting" && "bg-muted-foreground/45",
-              availability === "ready" && "bg-success",
-              availability === "unsupported" && "bg-warning",
+              connectionTone === "detecting" && "bg-muted-foreground/45",
+              connectionTone === "ready" && "bg-success",
+              connectionTone === "unsupported" && "bg-warning",
             )}
           />
         </span>
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 truncate text-sm font-semibold">
             <RadioTower aria-hidden="true" className="size-4 text-primary" />
-            {presentation.connectionLabel}
+            {connected
+              ? "Connected through WebMCP"
+              : availability === "unsupported"
+                ? "WebMCP connection unavailable"
+                : "Waiting for WebMCP reconnection"}
           </p>
           <p className="mt-1 truncate text-xs text-muted-foreground">
-            {presentation.connectionDetail}
+            {connected
+              ? "Secure and active channel"
+              : availability === "unsupported"
+                ? "The classroom remains available while the agent reconnects"
+                : "Registered tools are waiting for agent activity"}
           </p>
         </div>
       </div>
@@ -79,7 +104,7 @@ export function ClassroomHeader() {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-semibold">
-              {presentation.capabilitiesLabel}
+              Detected Capabilities
             </p>
             {availability === "ready" ? (
               <CircleCheck aria-hidden="true" className="size-4 text-success" />
@@ -92,16 +117,16 @@ export function ClassroomHeader() {
               />
             )}
           </div>
-          {availability === "ready" ? (
+          {capabilities.length > 0 ? (
             <div className="mt-1.5 flex items-center gap-1.5">
-              {classroomTechnologiesMock.map((technology) => (
+              {capabilities.map((technology) => (
                 <span
                   className="rounded-lg border bg-background/70 px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground"
                   key={technology.id}
-                  title={technology.label}
+                  title={technology.displayName}
                   translate="no"
                 >
-                  {technology.shortLabel}
+                  {getCapabilityShortLabel(technology.displayName)}
                 </span>
               ))}
             </div>
@@ -111,8 +136,15 @@ export function ClassroomHeader() {
             </p>
           )}
         </div>
-        <ThemeToggle />
       </div>
     </header>
   );
+}
+
+function getCapabilityShortLabel(displayName: string): string {
+  return displayName === "JavaScript"
+    ? "JS"
+    : displayName.length <= 5
+      ? displayName
+      : displayName.slice(0, 5);
 }

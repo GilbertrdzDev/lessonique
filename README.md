@@ -2,7 +2,7 @@
 
 Lessonique is an agent-guided coding classroom built for WebMCP. ChatGPT discovers a closed catalog of Site Tools, configures the learning environment, presents structured visual guidance, follows semantic targets across the editor and preview, waits for learner interactions locally, and evaluates declared criteria without solving the exercise for the learner.
 
-[Open the production classroom](https://lessonique.vercel.app/classroom)
+[Open Lessonique](https://lessonique.vercel.app/)
 
 ## Why it matters
 
@@ -12,11 +12,12 @@ Most coding assistants can describe a change but cannot safely direct the learni
 - The learner works in Monaco while Sandpack runs HTML, CSS, and vanilla JavaScript.
 - Guidance uses provider-owned semantic targets, never public CSS selectors, XPath, DOM paths, or coordinates.
 - Visual guides, captions, callouts, references, and companion reactions remain complete without audio.
-- The classroom still works when WebMCP is unavailable; the collapsed Dev Panel exposes the same production handlers for review and testing.
+- The root experience reports WebMCP compatibility and waits for a real agent invocation without mounting a fictional workspace.
+- Once ChatGPT creates a guided lesson, the classroom exposes the same production handlers through its collapsed Dev Panel for review and testing.
 
 ## Challenge flow
 
-The primary demonstration builds and validates a responsive navigation menu. ChatGPT discovers the available capabilities, creates the lesson, guides the learner through HTML, CSS, and JavaScript targets, waits for registered preview interactions, evaluates the result, and resets every owned resource. A second fixture replaces the environment with a JavaScript-only `Array.map()` lesson without reloading the page.
+The primary demonstration starts at `/`, moves from WebMCP discovery to a connected lobby, and builds and validates a responsive navigation menu without navigating away. ChatGPT discovers the available capabilities, creates the lesson, guides the learner through HTML, CSS, and JavaScript targets, waits for registered preview interactions locally, evaluates the result, and resets every owned resource. A second fixture replaces the environment with a JavaScript-only `Array.map()` lesson without reloading the page.
 
 ```mermaid
 sequenceDiagram
@@ -150,7 +151,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open `http://localhost:3000/classroom`. The production handlers can be exercised without ChatGPT by expanding **WebMCP Dev Panel** and running either the complete tool fixtures or the staged challenge demo.
+Open `http://localhost:3000/`. In a WebMCP-capable ChatGPT session, the page advances from compatibility detection to connection confirmation and mounts the classroom only after `create_guided_lesson` succeeds. During local development, the production handlers can be exercised by starting a lesson and then expanding **WebMCP Dev Panel** to run either the complete tool fixtures or the staged challenge demo. The legacy `/classroom` URL redirects to `/`.
 
 ## Verification
 

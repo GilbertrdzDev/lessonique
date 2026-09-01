@@ -22,6 +22,7 @@ import {
 import { motion, useReducedMotion } from "motion/react";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -35,14 +36,12 @@ import {
   getWebMCPAvailabilityPresentation,
   type WebMCPAvailability,
 } from "@/components/webmcp/webmcp-availability";
-import { useWebMCPRuntime } from "@/components/webmcp/webmcp-registration-provider";
-import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import {
-  activityFeedMock,
-  learningPlanMock,
-  toolCapabilitiesMock,
-  type ActivityKind,
-} from "@/features/classroom/classroom-mocks";
+  useWebMCPRuntime,
+  type AgentConnection,
+} from "@/components/webmcp/webmcp-registration-provider";
+import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
+import type { ToolActivityEntry, WebMCPToolName } from "@/core/webmcp";
 import { cn } from "@/lib/utils";
 import { P0_INTERACTION_ANCHOR_IDS } from "@/providers/p0";
 
@@ -59,6 +58,8 @@ const activityTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "America/Bogota",
 });
 
+type ActivityKind = "connection" | "explanation" | "file" | "lesson" | "preview" | "request";
+
 const activityIcons: Readonly<Record<ActivityKind, LucideIcon>> = {
   connection: RadioTower,
   explanation: MessageCircleMore,
@@ -68,13 +69,43 @@ const activityIcons: Readonly<Record<ActivityKind, LucideIcon>> = {
   request: Sparkles,
 };
 
+const toolActivityLabels: Readonly<Partial<Record<WebMCPToolName, string>>> = {
+  get_system_capabilities: "Discovering Lessonique capabilities",
+  create_guided_lesson: "Creating the guided lesson",
+  reset_classroom: "Resetting the classroom",
+  inspect_classroom: "Inspecting the classroom state",
+  configure_learning_environment: "Configuring the learning environment",
+  apply_workspace_changes: "Updating workspace files",
+  execute_environment_action: "Running an environment action",
+  play_teaching_scene: "Starting a teaching scene",
+  control_teaching_scene: "Controlling the teaching scene",
+  evaluate_current_step: "Evaluating the current step",
+  update_lesson_plan: "Updating the learning plan",
+  show_reference_panel: "Showing a lesson reference",
+};
+
 const toolIcons: Readonly<Record<string, LucideIcon>> = {
+  console: SquareTerminal,
+  editor: CodeXml,
+  preview: MonitorPlay,
   "surface.console": SquareTerminal,
   "surface.editor": CodeXml,
   "surface.files": FolderOpen,
   "surface.inspector": InspectionPanel,
   "surface.preview": MonitorPlay,
 };
+
+function getToolActivityKind(toolName: WebMCPToolName): ActivityKind {
+  if (toolName === "create_guided_lesson" || toolName === "update_lesson_plan") {
+    return "lesson";
+  }
+  if (toolName === "apply_workspace_changes") return "file";
+  if (toolName === "execute_environment_action") return "preview";
+  if (toolName === "play_teaching_scene" || toolName === "control_teaching_scene") {
+    return "explanation";
+  }
+  return "request";
+}
 
 type ResizeSession = Readonly<{
   pointerId: number;
@@ -87,9 +118,26 @@ function clampPanelWidth(width: number) {
 }
 
 function AgentStatus({
+  agentConnection,
   availability,
-}: Readonly<{ availability: WebMCPAvailability }>) {
+}: Readonly<{
+  agentConnection: AgentConnection;
+  availability: WebMCPAvailability;
+}>) {
+  const workspace = useWorkspaceRuntime();
+  const lesson = useSyncExternalStore(
+    workspace.lessonStore.subscribe,
+    workspace.lessonStore.getSnapshot,
+    workspace.lessonStore.getSnapshot,
+  );
   const presentation = getWebMCPAvailabilityPresentation(availability);
+  const connected =
+    availability === "ready" && agentConnection.status === "connected";
+  const tone = connected
+    ? "ready"
+    : availability === "unsupported"
+      ? "unsupported"
+      : "detecting";
 
   return (
     <div
@@ -102,12 +150,12 @@ function AgentStatus({
           aria-hidden="true"
           className={cn(
             "absolute -bottom-1 -right-1 size-3 rounded-full border-2 border-card",
-            availability === "detecting" && "bg-muted-foreground/45",
-            availability === "ready" && "bg-success",
-            availability === "unsupported" && "bg-warning",
+            tone === "detecting" && "bg-muted-foreground/45",
+            tone === "ready" && "bg-success",
+            tone === "unsupported" && "bg-warning",
           )}
           data-webmcp-status-indicator
-          data-webmcp-status-tone={availability}
+          data-webmcp-status-tone={tone}
         />
       </div>
       <div className="min-w-0 flex-1">
@@ -117,14 +165,17 @@ function AgentStatus({
             aria-hidden="true"
             className={cn(
               "size-2 rounded-full",
-              availability === "detecting" && "bg-muted-foreground/45",
-              availability === "ready" && "bg-success",
-              availability === "unsupported" && "bg-warning",
+              tone === "detecting" && "bg-muted-foreground/45",
+              tone === "ready" && "bg-success",
+              tone === "unsupported" && "bg-warning",
             )}
             data-webmcp-status-indicator
-            data-webmcp-status-tone={availability}
+            data-webmcp-status-tone={tone}
           />
-          {presentation.agentDetail}
+          {lesson.agent.message ??
+            (connected
+              ? "Guided session through ChatGPT"
+              : presentation.agentDetail)}
         </p>
       </div>
     </div>
@@ -136,25 +187,21 @@ function LearningPlan({
 }: Readonly<{ availability: WebMCPAvailability }>) {
   const workspace = useWorkspaceRuntime();
   const anchorRef = useInteractionAnchor(P0_INTERACTION_ANCHOR_IDS.plan);
-  const presentation = getWebMCPAvailabilityPresentation(availability);
   const lesson = useSyncExternalStore(
     workspace.lessonStore.subscribe,
     workspace.lessonStore.getSnapshot,
     workspace.lessonStore.getSnapshot,
   );
-  const planSteps =
-    lesson.plan.steps.length > 0
-      ? lesson.plan.steps.map((step) => ({
-          id: step.id,
-          label: step.title,
-          state:
-            step.status === "completed"
-              ? ("complete" as const)
-              : step.status === "active"
-                ? ("current" as const)
-                : ("pending" as const),
-        }))
-      : learningPlanMock;
+  const planSteps = lesson.plan.steps.map((step) => ({
+    id: step.id,
+    label: step.title,
+    state:
+      step.status === "completed"
+        ? ("complete" as const)
+        : step.status === "active"
+          ? ("current" as const)
+          : ("pending" as const),
+  }));
   const isPlaceholderPlan = lesson.plan.steps.length === 0;
   const currentStepIndex = planSteps.findIndex(
     (step) => step.state === "current",
@@ -172,9 +219,9 @@ function LearningPlan({
         <h2 className="text-sm font-bold" id="learning-plan-title">
           Learning Plan
         </h2>
-        {isPlaceholderPlan && availability !== "ready" ? (
+        {isPlaceholderPlan ? (
           <span className="rounded-lg bg-secondary px-2 py-1 text-[0.68rem] font-medium text-muted-foreground">
-            {availability === "detecting" ? "Detecting" : "Unavailable"}
+            No steps
           </span>
         ) : (
           <span className="rounded-lg bg-secondary px-2 py-1 text-[0.68rem] font-medium text-muted-foreground">
@@ -182,9 +229,9 @@ function LearningPlan({
           </span>
         )}
       </div>
-      {isPlaceholderPlan && availability !== "ready" ? (
+      {isPlaceholderPlan ? (
         <p className="rounded-xl bg-muted/45 px-3 py-4 text-xs leading-relaxed text-muted-foreground">
-          {presentation.planDetail}
+          ChatGPT has not added any learning steps to this session yet.
         </p>
       ) : (
         <ol className="space-y-1">
@@ -294,10 +341,75 @@ function ReferencePanel() {
 }
 
 function ActivityFeed({
+  agentConnection,
   availability,
-}: Readonly<{ availability: WebMCPAvailability }>) {
+}: Readonly<{
+  agentConnection: AgentConnection;
+  availability: WebMCPAvailability;
+}>) {
+  const workspace = useWorkspaceRuntime();
+  const { registry } = useWebMCPRuntime();
   const anchorRef = useInteractionAnchor(P0_INTERACTION_ANCHOR_IDS.activity);
   const presentation = getWebMCPAvailabilityPresentation(availability);
+  const activityTone =
+    availability === "ready" && agentConnection.status === "connected"
+      ? "ready"
+      : availability === "unsupported"
+        ? "unsupported"
+        : "detecting";
+  const lesson = useSyncExternalStore(
+    workspace.lessonStore.subscribe,
+    workspace.lessonStore.getSnapshot,
+    workspace.lessonStore.getSnapshot,
+  );
+  const [toolActivity, setToolActivity] = useState<readonly ToolActivityEntry[]>(
+    () => registry.activityLogger.getSnapshot(),
+  );
+  useEffect(
+    () =>
+      registry.subscribe((_event, entries) => {
+        setToolActivity(entries);
+      }),
+    [registry],
+  );
+  const activity = useMemo(
+    () =>
+      [
+        ...(agentConnection.connectedAt
+          ? [
+              {
+                id: `connection-${agentConnection.connectedAt}`,
+                kind: "connection" as const,
+                label: "Connected through WebMCP",
+                occurredAt: agentConnection.connectedAt,
+                status: "succeeded",
+              },
+            ]
+          : []),
+        ...lesson.activity.map((event) => ({
+          id: event.id,
+          kind: "lesson" as const,
+          label: event.summary ?? event.typeId,
+          occurredAt: event.occurredAt,
+          status:
+            event.outcome === "failure"
+              ? "failed"
+              : event.outcome === "success"
+                ? "succeeded"
+                : undefined,
+        })),
+        ...toolActivity.map((entry) => ({
+          id: entry.operationId,
+          kind: getToolActivityKind(entry.toolName),
+          label: toolActivityLabels[entry.toolName] ?? entry.toolName,
+          occurredAt: entry.updatedAt,
+          status: entry.status,
+        })),
+      ]
+        .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
+        .slice(-8),
+    [agentConnection.connectedAt, lesson.activity, toolActivity],
+  );
   return (
     <section
       aria-labelledby="activity-title"
@@ -310,13 +422,10 @@ function ActivityFeed({
         <h2 className="text-sm font-bold" id="activity-title">
           Live Activity
         </h2>
-        <Button className="h-auto px-1 text-[0.68rem]" size="xs" variant="link">
-          View All
-        </Button>
       </div>
-      {availability === "ready" ? (
+      {activity.length > 0 ? (
         <ol className="space-y-1.5">
-          {activityFeedMock.map((event) => {
+          {activity.map((event) => {
             const Icon = activityIcons[event.kind];
             const isConnection = event.kind === "connection";
 
@@ -343,7 +452,11 @@ function ActivityFeed({
                   }
                   className={cn(
                     "size-1.5 rounded-full bg-primary",
-                    isConnection && "bg-success",
+                    (isConnection ||
+                      event.status === "completed" ||
+                      event.status === "succeeded") &&
+                      "bg-success",
+                    event.status === "failed" && "bg-warning",
                   )}
                   data-webmcp-status-indicator={isConnection ? "" : undefined}
                   data-webmcp-status-tone={
@@ -358,7 +471,11 @@ function ActivityFeed({
       ) : (
         <div className="flex items-center gap-2 rounded-xl bg-muted/45 px-3 py-3 text-[0.68rem] text-muted-foreground">
           <RadioTower aria-hidden="true" className="size-3.5 text-primary" />
-          <span className="min-w-0 flex-1">{presentation.activityLabel}</span>
+          <span className="min-w-0 flex-1">
+            {agentConnection.status === "connected"
+              ? "Waiting for the next agent action"
+              : presentation.activityLabel}
+          </span>
           <span
             aria-label={presentation.activityStatusLabel}
             className={cn(
@@ -367,7 +484,7 @@ function ActivityFeed({
               availability === "unsupported" && "bg-warning",
             )}
             data-webmcp-status-indicator
-            data-webmcp-status-tone={availability}
+            data-webmcp-status-tone={activityTone}
             role="img"
           />
         </div>
@@ -389,9 +506,41 @@ function useInteractionAnchor(anchorId: string) {
 }
 
 function WebMCPStatusCard({
+  agentConnection,
   availability,
-}: Readonly<{ availability: WebMCPAvailability }>) {
+}: Readonly<{
+  agentConnection: AgentConnection;
+  availability: WebMCPAvailability;
+}>) {
+  const workspace = useWorkspaceRuntime();
+  const state = useSyncExternalStore(
+    workspace.store.subscribe,
+    workspace.store.getSnapshot,
+    workspace.store.getSnapshot,
+  );
   const presentation = getWebMCPAvailabilityPresentation(availability);
+  const connected =
+    availability === "ready" && agentConnection.status === "connected";
+  const statusTone = connected
+    ? "ready"
+    : availability === "unsupported"
+      ? "unsupported"
+      : "detecting";
+  const capabilities = [
+    ...state.surfaces
+      .filter(
+        ({ id, visible }) =>
+          visible && ["editor", "preview", "console"].includes(id),
+      )
+      .flatMap((surface) => {
+        const definition = workspace.registries.surfaces.get(surface.id);
+        return definition
+          ? [{ id: surface.id, label: definition.displayName }]
+          : [];
+      }),
+    { id: "surface.inspector", label: "Inspector" },
+    { id: "surface.files", label: "Files" },
+  ];
 
   return (
     <section
@@ -399,7 +548,7 @@ function WebMCPStatusCard({
       className={cn(
         "rounded-2xl border p-3",
         availability === "detecting" && "bg-muted/30",
-        availability === "ready" && "border-primary/35 bg-brand-soft/70",
+        connected && "border-primary/35 bg-brand-soft/70",
         availability === "unsupported" && "border-warning/45 bg-warning/10",
       )}
       data-webmcp-availability={availability}
@@ -410,26 +559,28 @@ function WebMCPStatusCard({
             aria-hidden="true"
             className={cn(
               "size-2 rounded-full",
-              availability === "detecting" && "bg-muted-foreground/45",
-              availability === "ready" && "bg-success",
-              availability === "unsupported" && "bg-warning",
+              statusTone === "detecting" && "bg-muted-foreground/45",
+              connected && "bg-success",
+              statusTone === "unsupported" && "bg-warning",
             )}
             data-webmcp-status-indicator
-            data-webmcp-status-tone={availability}
+            data-webmcp-status-tone={statusTone}
           />
         </span>
         <div>
           <h2 className="text-sm font-bold" id="webmcp-status-title">
-            {presentation.statusTitle}
+            {connected ? "WebMCP Ready" : presentation.statusTitle}
           </h2>
           <p className="mt-1 text-[0.68rem] leading-relaxed text-muted-foreground">
-            {presentation.statusDetail}
+            {connected
+              ? "Classroom tools are available for this guided session."
+              : presentation.statusDetail}
           </p>
         </div>
       </div>
-      {availability === "ready" ? (
+      {connected ? (
         <ul className="mt-3 grid grid-cols-5 overflow-hidden rounded-xl border border-primary/20 bg-background/65">
-          {toolCapabilitiesMock.map((capability) => {
+          {capabilities.map((capability) => {
             const Icon = toolIcons[capability.id] ?? CircleDot;
 
             return (
@@ -452,7 +603,13 @@ function WebMCPStatusCard({
 }
 
 export function AgentSidebar() {
-  const { availability } = useWebMCPRuntime();
+  const { agentConnection, availability } = useWebMCPRuntime();
+  const connectionTone =
+    availability === "ready" && agentConnection.status === "connected"
+      ? "ready"
+      : availability === "unsupported"
+        ? "unsupported"
+        : "detecting";
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const resizeSession = useRef<ResizeSession | null>(null);
@@ -566,12 +723,12 @@ export function AgentSidebar() {
               aria-hidden="true"
               className={cn(
                 "absolute -bottom-1 -right-1 size-3 rounded-full border-2 border-card",
-                availability === "detecting" && "bg-muted-foreground/45",
-                availability === "ready" && "bg-success",
-                availability === "unsupported" && "bg-warning",
+                connectionTone === "detecting" && "bg-muted-foreground/45",
+                connectionTone === "ready" && "bg-success",
+                connectionTone === "unsupported" && "bg-warning",
               )}
               data-webmcp-status-indicator
-              data-webmcp-status-tone={availability}
+              data-webmcp-status-tone={connectionTone}
             />
           </span>
           <span className="h-px w-8 bg-border" />
@@ -584,12 +741,21 @@ export function AgentSidebar() {
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
           id="learning-agent-content"
         >
-          <AgentStatus availability={availability} />
+          <AgentStatus
+            agentConnection={agentConnection}
+            availability={availability}
+          />
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3 md:grid md:grid-cols-3 2xl:flex">
             <LearningPlan availability={availability} />
-            <ActivityFeed availability={availability} />
+            <ActivityFeed
+              agentConnection={agentConnection}
+              availability={availability}
+            />
             <ReferencePanel />
-            <WebMCPStatusCard availability={availability} />
+            <WebMCPStatusCard
+              agentConnection={agentConnection}
+              availability={availability}
+            />
             <DevToolPanel />
           </div>
         </div>

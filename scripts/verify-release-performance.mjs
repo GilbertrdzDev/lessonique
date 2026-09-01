@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const manifestPath = resolve(
-  ".next/server/app/classroom/page/react-loadable-manifest.json",
+  ".next/server/app/page/react-loadable-manifest.json",
 );
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const expectedLazyModules = [

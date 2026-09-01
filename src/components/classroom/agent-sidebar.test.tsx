@@ -28,7 +28,9 @@ describe("AgentSidebar", () => {
     expect(markup).toContain("Live Activity");
     expect(markup).toContain('data-webmcp-availability="detecting"');
     expect(markup).toContain("Detecting WebMCP");
-    expect(markup).toContain("The guided plan will appear after WebMCP is ready.");
+    expect(markup).toContain(
+      "ChatGPT has not added any learning steps to this session yet.",
+    );
     expect(markup).not.toContain("WebMCP Ready");
     expect(markup).not.toContain("Connected through WebMCP");
     expect(markup).not.toContain("Understand the objective");

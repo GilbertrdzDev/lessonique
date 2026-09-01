@@ -1,0 +1,48 @@
+import type { editor } from "monaco-editor";
+
+export const LESSONIQUE_DAYLIGHT_THEME_ID = "lessonique-daylight";
+
+export const lessoniqueDaylightTheme: editor.IStandaloneThemeData = {
+  base: "vs",
+  inherit: true,
+  rules: [
+    { token: "comment", foreground: "4B5563", fontStyle: "italic" },
+    { token: "keyword", foreground: "6B21A8" },
+    { token: "keyword.control", foreground: "6B21A8" },
+    { token: "string", foreground: "166534" },
+    { token: "number", foreground: "9A3412" },
+    { token: "type", foreground: "1D4ED8" },
+    { token: "type.identifier", foreground: "1D4ED8" },
+    { token: "identifier", foreground: "1F2937" },
+    { token: "function", foreground: "1D4ED8" },
+    { token: "metatag", foreground: "4B5563" },
+    { token: "metatag.html", foreground: "4B5563" },
+    { token: "metatag.content.html", foreground: "4B5563" },
+    { token: "tag", foreground: "B42318" },
+    { token: "tag.html", foreground: "B42318" },
+    { token: "attribute.name", foreground: "B42318" },
+    { token: "attribute.name.html", foreground: "B42318" },
+    { token: "attribute.value.html", foreground: "1D4ED8" },
+    { token: "string.html", foreground: "1D4ED8" },
+    { token: "delimiter", foreground: "334155" },
+    { token: "delimiter.html", foreground: "334155" },
+    { token: "operator", foreground: "334155" },
+    { token: "regexp", foreground: "0F766E" },
+  ],
+  colors: {
+    "editor.background": "#FFFFFF",
+    "editor.foreground": "#1F2937",
+    "editor.lineHighlightBackground": "#F8FAFC",
+    "editor.lineHighlightBorder": "#00000000",
+    "editor.selectionBackground": "#C7D2FE",
+    "editor.inactiveSelectionBackground": "#E0E7FF",
+    "editorCursor.foreground": "#4338CA",
+    "editorLineNumber.foreground": "#64748B",
+    "editorLineNumber.activeForeground": "#1E293B",
+    "editorGutter.background": "#FFFFFF",
+    "editorIndentGuide.background1": "#E2E8F0",
+    "editorIndentGuide.activeBackground1": "#94A3B8",
+    "editorWhitespace.foreground": "#CBD5E1",
+    "focusBorder": "#4338CA",
+  },
+};

@@ -1,37 +1,13 @@
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-
-import { WorkspaceRuntimeProvider } from "@/components/workspace/workspace-runtime-provider";
-import { WebMCPRegistrationProvider } from "@/components/webmcp/webmcp-registration-provider";
+import { permanentRedirect } from "next/navigation";
+import { describe, expect, it, vi } from "vitest";
 
 import ClassroomPage from "./page";
 
-describe("ClassroomPage", () => {
-  it("renders the three-column classroom shell", () => {
-    const markup = renderToStaticMarkup(
-      createElement(
-        WorkspaceRuntimeProvider,
-        null,
-        createElement(
-          WebMCPRegistrationProvider,
-          null,
-          createElement(ClassroomPage),
-        ),
-      ),
-    );
+vi.mock("next/navigation", () => ({ permanentRedirect: vi.fn() }));
 
-    expect(markup).toContain('data-slot="app-shell"');
-    expect(markup).toContain('aria-label="Primary navigation"');
-    expect(markup).toContain('aria-labelledby="classroom-title"');
-    expect(markup).toContain('aria-label="Learning agent"');
-    expect(markup).toContain('data-webmcp-availability="detecting"');
-    expect(markup).toContain("Waiting for WebMCP");
-    expect(markup).toContain("Detecting WebMCP");
-    expect(markup).not.toContain("Request received from ChatGPT");
-    expect(markup).not.toContain("Connected through WebMCP");
-    expect(markup).not.toContain("WebMCP Ready");
-    expect(markup).toContain("Learning Plan");
-    expect(markup).toContain("Lessonique Classroom");
+describe("ClassroomPage", () => {
+  it("redirects the legacy classroom route to the root experience", () => {
+    ClassroomPage();
+    expect(permanentRedirect).toHaveBeenCalledWith("/");
   });
 });
