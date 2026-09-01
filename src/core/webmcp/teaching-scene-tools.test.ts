@@ -27,6 +27,21 @@ describe("teaching scene WebMCP tools", () => {
     expect(scene.beats[0]?.targetLossRecovery).toBe("retry");
   });
 
+  it("preserves the Learning Plan section mapped to each guide micro-step", () => {
+    const scene = toTeachingScene({
+      id: "scene.section-map",
+      beats: [
+        {
+          id: "beat.section-map",
+          lessonStepId: "step.variables",
+          type: "explanation",
+        },
+      ],
+    });
+
+    expect(scene.beats[0]?.lessonStepId).toBe("step.variables");
+  });
+
   it("starts immediately, preserves structured guidance, and exposes real control state", async () => {
     const runtime = createP0WorkspaceRuntime();
     await runtime.controller.activateProfile("profile.vanilla-web");

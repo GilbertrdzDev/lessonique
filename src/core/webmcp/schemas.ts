@@ -137,6 +137,9 @@ const waitConditionSchema = z.discriminatedUnion("kind", [
 
 const teachingBeatSchema = z.strictObject({
   id: identifierSchema,
+  lessonStepId: identifierSchema
+    .describe("Reference the Learning Plan section taught by this micro-step. Reuse the same ID across consecutive beats in one section.")
+    .optional(),
   type: z
     .enum(["explanation", "interaction", "validation", "feedback"])
     .describe("Use explanation for one small concept, interaction while the learner works, validation while checking declared criteria, and feedback for success or correction."),
@@ -164,7 +167,7 @@ export const teachingSceneInputSchema = z.strictObject({
   cleanupPolicy: z.literal("replace").optional(),
   allowManualNavigation: z
     .boolean()
-    .describe("Set true for progressive explanations so the learner advances locally with Previous and Next instead of asking ChatGPT for each micro-step.")
+    .describe("Set true for progressive explanations so the learner advances locally with Previous, Next, and Finish instead of asking ChatGPT for each micro-step.")
     .optional(),
   beats: z
     .array(teachingBeatSchema)

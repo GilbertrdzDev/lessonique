@@ -203,6 +203,9 @@ function LearningPlan({
           : ("pending" as const),
   }));
   const isPlaceholderPlan = lesson.plan.steps.length === 0;
+  const isPlanCompleted =
+    !isPlaceholderPlan &&
+    lesson.plan.steps.every((step) => step.status === "completed");
   const currentStepIndex = planSteps.findIndex(
     (step) => step.state === "current",
   );
@@ -222,6 +225,10 @@ function LearningPlan({
         {isPlaceholderPlan ? (
           <span className="rounded-lg bg-secondary px-2 py-1 text-[0.68rem] font-medium text-muted-foreground">
             No steps
+          </span>
+        ) : isPlanCompleted ? (
+          <span className="rounded-lg bg-success/12 px-2 py-1 text-[0.68rem] font-semibold text-success">
+            Completed
           </span>
         ) : (
           <span className="rounded-lg bg-secondary px-2 py-1 text-[0.68rem] font-medium text-muted-foreground">
@@ -246,6 +253,8 @@ function LearningPlan({
                   "flex min-h-10 items-center gap-3 rounded-xl px-2.5 py-2 text-xs",
                   isCurrent && "bg-brand-soft text-accent-foreground",
                 )}
+                data-learning-plan-state={step.state}
+                data-learning-plan-step-id={step.id}
                 key={step.id}
               >
                 <span

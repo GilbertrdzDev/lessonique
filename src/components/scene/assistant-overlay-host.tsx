@@ -2,12 +2,15 @@
 
 import Image from "next/image";
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
   useState,
   useSyncExternalStore,
   type Ref,
+  type RefObject,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -27,6 +30,189 @@ import { cn } from "@/lib/utils";
 const subscribeToPortalHost = () => () => undefined;
 const getPortalHost = (): HTMLElement | null => document.body;
 const getServerPortalHost = (): HTMLElement | null => null;
+const DRAG_VIEWPORT_MARGIN = 12;
+
+type DragOffset = Readonly<{ x: number; y: number }>;
+type PointerDragBindings = Readonly<{
+  onLostPointerCapture(event: ReactPointerEvent<HTMLElement>): void;
+  onPointerCancel(event: ReactPointerEvent<HTMLElement>): void;
+  onPointerDown(event: ReactPointerEvent<HTMLElement>): void;
+  onPointerMove(event: ReactPointerEvent<HTMLElement>): void;
+  onPointerUp(event: ReactPointerEvent<HTMLElement>): void;
+}>;
+
+function useBoundedPointerDrag(
+  elementRef: RefObject<HTMLElement | null>,
+  resetKey: string | number,
+  ignoreInteractiveChildren = false,
+) {
+  const [dragState, setDragState] = useState<{
+    dragging: boolean;
+    offset: DragOffset;
+    resetKey: string | number;
+  }>({ dragging: false, offset: { x: 0, y: 0 }, resetKey });
+  const offset =
+    dragState.resetKey === resetKey ? dragState.offset : { x: 0, y: 0 };
+  const dragging =
+    dragState.resetKey === resetKey ? dragState.dragging : false;
+  const sessionRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    startOffset: DragOffset;
+    startRect: DOMRect;
+  } | null>(null);
+
+  const reset = useCallback(() => {
+    sessionRef.current = null;
+    setDragState({ dragging: false, offset: { x: 0, y: 0 }, resetKey });
+  }, [resetKey]);
+
+  const updateOffset = useCallback(
+    (update: DragOffset | ((current: DragOffset) => DragOffset)) => {
+      setDragState((current) => {
+        const currentOffset =
+          current.resetKey === resetKey ? current.offset : { x: 0, y: 0 };
+        return {
+          dragging: current.resetKey === resetKey ? current.dragging : false,
+          offset:
+            typeof update === "function" ? update(currentOffset) : update,
+          resetKey,
+        };
+      });
+    },
+    [resetKey],
+  );
+
+  const updateDragging = useCallback(
+    (nextDragging: boolean) => {
+      setDragState((current) => ({
+        dragging: nextDragging,
+        offset: current.resetKey === resetKey ? current.offset : { x: 0, y: 0 },
+        resetKey,
+      }));
+    },
+    [resetKey],
+  );
+
+  useEffect(() => {
+    const keepInsideViewport = () => {
+      if (!dragging && offset.x === 0 && offset.y === 0) return;
+      const element = elementRef.current;
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      const bounds = dragViewportBounds();
+      const correctionX =
+        rect.left < bounds.left
+          ? bounds.left - rect.left
+          : rect.right > bounds.right
+            ? bounds.right - rect.right
+            : 0;
+      const correctionY =
+        rect.top < bounds.top
+          ? bounds.top - rect.top
+          : rect.bottom > bounds.bottom
+            ? bounds.bottom - rect.bottom
+            : 0;
+      if (correctionX || correctionY) {
+        updateOffset((current) => ({
+          x: current.x + correctionX,
+          y: current.y + correctionY,
+        }));
+      }
+    };
+    window.addEventListener("resize", keepInsideViewport);
+    window.visualViewport?.addEventListener("resize", keepInsideViewport);
+    return () => {
+      window.removeEventListener("resize", keepInsideViewport);
+      window.visualViewport?.removeEventListener("resize", keepInsideViewport);
+    };
+  }, [dragging, elementRef, offset.x, offset.y, updateOffset]);
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    if (
+      ignoreInteractiveChildren &&
+      event.target instanceof Element &&
+      event.target.closest("button, a, input, select, textarea, [role='button']")
+    ) {
+      return;
+    }
+    const element = elementRef.current;
+    if (!element) return;
+    event.preventDefault();
+    sessionRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startOffset: offset,
+      startRect: element.getBoundingClientRect(),
+    };
+    updateDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const session = sessionRef.current;
+    if (!session || session.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const bounds = dragViewportBounds();
+    const deltaX = event.clientX - session.startClientX;
+    const deltaY = event.clientY - session.startClientY;
+    const minimumX =
+      session.startOffset.x + bounds.left - session.startRect.left;
+    const maximumX =
+      session.startOffset.x + bounds.right - session.startRect.right;
+    const minimumY =
+      session.startOffset.y + bounds.top - session.startRect.top;
+    const maximumY =
+      session.startOffset.y + bounds.bottom - session.startRect.bottom;
+    updateOffset({
+      x: clamp(session.startOffset.x + deltaX, minimumX, maximumX),
+      y: clamp(session.startOffset.y + deltaY, minimumY, maximumY),
+    });
+  };
+
+  const finish = (event: ReactPointerEvent<HTMLElement>) => {
+    if (sessionRef.current?.pointerId !== event.pointerId) return;
+    sessionRef.current = null;
+    updateDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const bindings: PointerDragBindings = {
+    onLostPointerCapture: finish,
+    onPointerCancel: finish,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp: finish,
+  };
+  return { bindings, dragging, offset, reset };
+}
+
+function dragViewportBounds() {
+  const viewport = window.visualViewport;
+  const left = (viewport?.offsetLeft ?? 0) + DRAG_VIEWPORT_MARGIN;
+  const top = (viewport?.offsetTop ?? 0) + DRAG_VIEWPORT_MARGIN;
+  return {
+    left,
+    top,
+    right:
+      (viewport?.offsetLeft ?? 0) +
+      (viewport?.width ?? window.innerWidth) -
+      DRAG_VIEWPORT_MARGIN,
+    bottom:
+      (viewport?.offsetTop ?? 0) +
+      (viewport?.height ?? window.innerHeight) -
+      DRAG_VIEWPORT_MARGIN,
+  };
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
+}
 
 export function AssistantOverlayHost({
   onControl,
@@ -59,7 +245,18 @@ export function AssistantOverlayHost({
   const assistant = presentation.assistant;
   const visibility = presentation.visibility;
   const companionRef = useRef<HTMLDivElement>(null);
+  const companionDragRef = useRef<HTMLDivElement>(null);
   const guideRef = useRef<HTMLElement>(null);
+  const guideDragRef = useRef<HTMLDivElement>(null);
+  const companionDrag = useBoundedPointerDrag(
+    companionDragRef,
+    presentation.generation,
+  );
+  const guideDrag = useBoundedPointerDrag(
+    guideDragRef,
+    presentation.generation,
+    true,
+  );
   const measured = useMeasuredSceneLayout({
     assistant,
     beatId: presentation.beatId,
@@ -75,27 +272,28 @@ export function AssistantOverlayHost({
     effectIds,
   );
 
-  useEffect(() => {
-    if (!presentation.sceneId || visibility === "hidden-by-user") return;
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
-      presentationStore.patch((current) => ({
-        ...current,
-        visibility: "hidden-by-user",
-      }));
-    };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [presentation.sceneId, presentationStore, visibility]);
-
-  const hideGuide = () => {
+  const hideGuide = useCallback(() => {
+    companionDrag.reset();
+    guideDrag.reset();
     presentationStore.patch((current) => ({
       ...current,
       visibility: "hidden-by-user",
     }));
-  };
+  }, [companionDrag, guideDrag, presentationStore]);
+
+  useEffect(() => {
+    if (!presentation.sceneId || visibility === "hidden-by-user") return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      hideGuide();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [hideGuide, presentation.sceneId, visibility]);
 
   const resumeGuide = async () => {
+    companionDrag.reset();
+    guideDrag.reset();
     presentationStore.patch((current) => ({
       ...current,
       visibility: "transitioning",
@@ -129,15 +327,50 @@ export function AssistantOverlayHost({
   }
 
   const content = visibility === "hidden-by-user" ? (
-    <button
-      aria-label="Resume guide"
-      className="pointer-events-auto fixed bottom-4 left-4 z-50 rounded-full border border-primary/30 bg-card px-4 py-2 text-xs font-semibold text-primary shadow-floating"
+    <div
+      aria-label="Lessonique hidden guidance"
+      className="pointer-events-none fixed inset-0 z-50 overflow-hidden"
+      data-guidance-generation={presentation.generation}
       data-guidance-visibility="hidden-by-user"
-      onClick={() => void resumeGuide()}
-      type="button"
     >
-      Resume guide
-    </button>
+      {assistant.visible && !assistant.position.companionSuppressed ? (
+        <div
+          {...companionDrag.bindings}
+          aria-label="Move Lessonique companion"
+          className={cn(
+            "pointer-events-auto fixed left-0 top-0 touch-none select-none cursor-grab transition-[filter] hover:drop-shadow-[0_10px_16px_rgb(64_45_140_/_0.22)]",
+            companionDrag.dragging &&
+              "cursor-grabbing drop-shadow-[0_14px_18px_rgb(64_45_140_/_0.3)]",
+          )}
+          data-dragging={companionDrag.dragging}
+          data-manual-offset-x={companionDrag.offset.x}
+          data-manual-offset-y={companionDrag.offset.y}
+          data-slot="draggable-companion"
+          ref={companionDragRef}
+          role="group"
+          style={{
+            transform: `translate3d(${assistant.position.left + assistant.position.companionOffsetLeft + companionDrag.offset.x}px, ${assistant.position.top + assistant.position.companionOffsetTop + companionDrag.offset.y}px, 0)`,
+          }}
+        >
+          <LessoniqueCompanion
+            facing={assistant.position.facing}
+            containerRef={companionRef}
+            paused={presentation.paused}
+            stateId={assistant.stateId}
+            status={assistant.status}
+            visualState={companionVisualState}
+          />
+        </div>
+      ) : null}
+      <button
+        aria-label="Resume guide"
+        className="pointer-events-auto fixed bottom-4 left-4 rounded-full border border-primary/30 bg-card px-4 py-2 text-xs font-semibold text-primary shadow-floating transition-colors hover:bg-brand-soft"
+        onClick={() => void resumeGuide()}
+        type="button"
+      >
+        Resume guide
+      </button>
+    </div>
   ) : (
     <div
       aria-label="Lessonique visual guidance"
@@ -164,11 +397,20 @@ export function AssistantOverlayHost({
       !assistant.position.companionSuppressed ? (
         <TargetPointer
           companionLeft={
-            assistant.position.left + assistant.position.companionOffsetLeft
+            assistant.position.left +
+            assistant.position.companionOffsetLeft +
+            companionDrag.offset.x
           }
-          companionTop={assistant.position.top + assistant.position.companionOffsetTop}
+          companionTop={
+            assistant.position.top +
+            assistant.position.companionOffsetTop +
+            companionDrag.offset.y
+          }
           companionSize={measured.companionSize}
-          guideGeometry={measured.guideGeometry}
+          guideGeometry={offsetGeometry(
+            measured.guideGeometry,
+            guideDrag.offset,
+          )}
           geometry={target}
         />
       ) : null}
@@ -187,12 +429,24 @@ export function AssistantOverlayHost({
         <>
           {assistant.visible && !assistant.position.companionSuppressed ? (
             <div
-              className="lessonique-companion-presentation absolute"
+              {...companionDrag.bindings}
+              aria-label="Move Lessonique companion"
+              className={cn(
+                "lessonique-companion-presentation pointer-events-auto absolute touch-none select-none cursor-grab transition-[filter] hover:drop-shadow-[0_10px_16px_rgb(64_45_140_/_0.22)]",
+                companionDrag.dragging &&
+                  "cursor-grabbing drop-shadow-[0_14px_18px_rgb(64_45_140_/_0.3)]",
+              )}
               data-assistant-docked={assistant.position.docked}
               data-assistant-facing={assistant.position.facing}
               data-assistant-side={assistant.position.side}
+              data-dragging={companionDrag.dragging}
+              data-manual-offset-x={companionDrag.offset.x}
+              data-manual-offset-y={companionDrag.offset.y}
+              data-slot="draggable-companion"
+              ref={companionDragRef}
+              role="group"
               style={{
-                transform: `translate3d(${assistant.position.left + assistant.position.companionOffsetLeft}px, ${assistant.position.top + assistant.position.companionOffsetTop}px, 0)`,
+                transform: `translate3d(${assistant.position.left + assistant.position.companionOffsetLeft + companionDrag.offset.x}px, ${assistant.position.top + assistant.position.companionOffsetTop + companionDrag.offset.y}px, 0)`,
                 transition: "none",
                 visibility: measured.ready ? "visible" : "hidden",
               }}
@@ -213,8 +467,13 @@ export function AssistantOverlayHost({
           calloutText) ? (
             <div
               className="lessonique-guide-presentation absolute"
+              data-dragging={guideDrag.dragging}
+              data-manual-offset-x={guideDrag.offset.x}
+              data-manual-offset-y={guideDrag.offset.y}
+              data-slot="draggable-guide"
+              ref={guideDragRef}
               style={{
-                transform: `translate3d(${assistant.position.left + assistant.position.guideOffsetLeft}px, ${assistant.position.top + assistant.position.guideOffsetTop}px, 0)`,
+                transform: `translate3d(${assistant.position.left + assistant.position.guideOffsetLeft + guideDrag.offset.x}px, ${assistant.position.top + assistant.position.guideOffsetTop + guideDrag.offset.y}px, 0)`,
                 transition: "none",
                 visibility: measured.ready ? "visible" : "hidden",
               }}
@@ -224,6 +483,8 @@ export function AssistantOverlayHost({
                 caption={presentation.caption}
                 guide={presentation.guide}
                 hint={presentation.hint}
+                dragBindings={guideDrag.bindings}
+                dragging={guideDrag.dragging}
                 navigation={presentation.navigation}
                 onControl={onControl}
                 onHide={hideGuide}
@@ -437,6 +698,8 @@ function VisualGuideCard({
   caption,
   guide,
   hint,
+  dragBindings,
+  dragging,
   navigation,
   onControl,
   onHide,
@@ -448,6 +711,8 @@ function VisualGuideCard({
   caption?: string;
   guide?: { title?: string; body: string; supportingItems?: string[] };
   hint?: string;
+  dragBindings: PointerDragBindings;
+  dragging: boolean;
   navigation: {
     enabled: boolean;
     current: number;
@@ -479,12 +744,22 @@ function VisualGuideCard({
       className={cn(
         "max-h-[calc(100dvh-2rem)] w-[min(18rem,calc(100vw-9rem))] overflow-y-auto rounded-2xl border border-primary/25 bg-card/96 text-card-foreground shadow-floating backdrop-blur-md",
         "pointer-events-auto",
+        dragging && "ring-1 ring-primary/30 shadow-2xl",
         phase === "interaction" ? "max-w-72 p-3" : "p-4",
       )}
+      data-dragging={dragging}
       data-scene-phase={phase}
       data-slot="visual-guide"
     >
-      <div className="mb-2 flex items-center justify-between gap-3">
+      <div
+        {...dragBindings}
+        aria-label="Move guide panel"
+        className={cn(
+          "-m-1 mb-1 flex touch-none select-none items-center justify-between gap-3 rounded-lg p-1 transition-colors hover:bg-muted/45",
+          dragging ? "cursor-grabbing" : "cursor-grab",
+        )}
+        role="group"
+      >
         <p className="text-[0.66rem] font-bold uppercase tracking-[0.16em] text-primary">
           Lessonique guide
         </p>
@@ -555,7 +830,7 @@ function VisualGuideCard({
             title={navigation.nextBlocked ? "Complete the required interaction first." : undefined}
             type="button"
           >
-            Next
+            {navigation.current === navigation.total ? "Finish" : "Next"}
           </button>
         </div>
       ) : null}
@@ -565,72 +840,59 @@ function VisualGuideCard({
 
 function TargetSpotlight({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
   const maskId = `lessonique-spotlight-${useId().replaceAll(":", "")}`;
-  const fragments = targetFragments(geometry);
+  const block = continuousTargetBlock(geometry);
+  const fragmentCount = targetFragments(geometry).length;
   return (
     <svg
       aria-hidden="true"
       className="absolute inset-0 size-full"
+      data-guidance-fragment-count={fragmentCount}
       data-guidance-effect="spotlight"
+      data-guidance-shape="continuous"
     >
       <defs>
         <mask id={maskId}>
           <rect fill="white" height="100%" width="100%" />
-          {fragments.map((fragment, index) => (
-            <rect
-              fill="black"
-              key={index}
-              rx="6"
-              {...svgTargetRect(fragment, 6)}
-            />
-          ))}
+          <rect fill="black" rx="6" {...svgTargetRect(block, 6)} />
         </mask>
       </defs>
       <rect fill="rgb(18 16 38 / 0.46)" height="100%" mask={`url(#${maskId})`} width="100%" />
-      {fragments.map((fragment, index) => (
-        <rect
-          fill="none"
-          key={index}
-          rx="6"
-          stroke="rgb(124 92 255 / 0.8)"
-          strokeWidth="2"
-          {...svgTargetRect(fragment, 6)}
-        />
-      ))}
+      <rect
+        fill="none"
+        rx="6"
+        stroke="rgb(124 92 255 / 0.8)"
+        strokeWidth="2"
+        {...svgTargetRect(block, 6)}
+      />
     </svg>
   );
 }
 
 function TargetFocus({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
+  const block = continuousTargetBlock(geometry);
   return (
-    <>
-      {targetFragments(geometry).map((fragment, index) => (
-        <div
-          aria-hidden="true"
-          className="absolute rounded-lg border-2 border-cyan-300 shadow-[0_0_0_4px_rgb(124_92_255_/_0.22),0_0_24px_rgb(83_224_255_/_0.45)]"
-          data-guidance-effect="focus"
-          data-guidance-fragment={index}
-          key={index}
-          style={targetStyle(fragment, 4)}
-        />
-      ))}
-    </>
+    <div
+      aria-hidden="true"
+      className="absolute rounded-lg border-2 border-cyan-300 shadow-[0_0_0_4px_rgb(124_92_255_/_0.22),0_0_24px_rgb(83_224_255_/_0.45)]"
+      data-guidance-effect="focus"
+      data-guidance-fragment-count={targetFragments(geometry).length}
+      data-guidance-shape="continuous"
+      style={targetStyle(block, 4)}
+    />
   );
 }
 
 function TargetHighlight({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
+  const block = continuousTargetBlock(geometry);
   return (
-    <>
-      {targetFragments(geometry).map((fragment, index) => (
-        <div
-          aria-hidden="true"
-          className="absolute rounded-lg border-2 border-dashed border-primary bg-primary/8"
-          data-guidance-effect="highlight"
-          data-guidance-fragment={index}
-          key={index}
-          style={targetStyle(fragment, 3)}
-        />
-      ))}
-    </>
+    <div
+      aria-hidden="true"
+      className="absolute rounded-lg border border-primary/50 bg-primary/12 shadow-[0_0_0_1px_rgb(124_92_255_/_0.08),0_8px_22px_rgb(76_56_160_/_0.12)]"
+      data-guidance-effect="highlight"
+      data-guidance-fragment-count={targetFragments(geometry).length}
+      data-guidance-shape="continuous"
+      style={targetStyle(block, 3)}
+    />
   );
 }
 
@@ -943,6 +1205,32 @@ function measurementsEqual(
 
 function targetFragments(geometry: TargetGeometry): readonly TargetRectangle[] {
   return geometry.fragments?.length ? geometry.fragments : [geometry];
+}
+
+function continuousTargetBlock(geometry: TargetGeometry): TargetRectangle {
+  const fragments = targetFragments(geometry);
+  const left = Math.min(...fragments.map((fragment) => fragment.left));
+  const top = Math.min(...fragments.map((fragment) => fragment.top));
+  const right = Math.max(
+    ...fragments.map((fragment) => fragment.left + fragment.width),
+  );
+  const bottom = Math.max(
+    ...fragments.map((fragment) => fragment.top + fragment.height),
+  );
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+function offsetGeometry(
+  geometry: TargetGeometry | undefined,
+  offset: DragOffset,
+): TargetGeometry | undefined {
+  return geometry
+    ? {
+        ...geometry,
+        left: geometry.left + offset.x,
+        top: geometry.top + offset.y,
+      }
+    : undefined;
 }
 
 function targetStyle(geometry: TargetRectangle, padding: number) {

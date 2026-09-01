@@ -90,6 +90,10 @@ describe("AssistantOverlayHost", () => {
     expect(html).toContain('data-guidance-effect="highlight"');
     expect(html).not.toContain('data-guidance-effect="point"');
     expect(html).toContain("Inspect this target.");
+    expect(html).toContain('aria-label="Move Lessonique companion"');
+    expect(html).toContain('aria-label="Move guide panel"');
+    expect(html).toContain('data-slot="draggable-companion"');
+    expect(html).toContain('data-slot="draggable-guide"');
     expect(html).not.toMatch(/audio|speech|voice/iu);
   });
 
@@ -260,6 +264,35 @@ describe("AssistantOverlayHost", () => {
     expect(html).toContain("Next");
   });
 
+  it("labels the existing final forward action Finish", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      phase: "teaching",
+      navigation: {
+        enabled: true,
+        current: 4,
+        total: 4,
+        canGoPrevious: true,
+        canGoNext: true,
+        nextBlocked: false,
+        transitioning: false,
+      },
+      guide: {
+        title: "Everything together",
+        body: "Finish the guided explanation.",
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain("Step 4 of 4");
+    expect(html).toMatch(/<button[^>]*>Finish<\/button>/u);
+  });
+
   it("renders a compact interaction card with forward navigation blocked", () => {
     const store = new ScenePresentationStore();
     const current = store.getSnapshot();
@@ -381,7 +414,7 @@ describe("AssistantOverlayHost", () => {
     expect(html).not.toContain("data-guidance-effect=");
   });
 
-  it("renders multi-line guidance as independent exact fragments", () => {
+  it("renders multi-line guidance as one continuous block", () => {
     const store = new ScenePresentationStore();
     const current = store.getSnapshot();
     store.commit({
@@ -411,9 +444,11 @@ describe("AssistantOverlayHost", () => {
       <AssistantOverlayHost presentationStore={store} />,
     );
 
-    expect(html.match(/data-guidance-fragment=/gu)).toHaveLength(3);
-    expect(html).toContain("width:86px");
+    expect(html.match(/data-guidance-effect="highlight"/gu)).toHaveLength(1);
+    expect(html).toContain('data-guidance-fragment-count="3"');
+    expect(html).toContain('data-guidance-shape="continuous"');
     expect(html).toContain("width:186px");
+    expect(html).toContain("height:60px");
     expect(html).not.toContain("width:800px");
   });
 
@@ -452,6 +487,11 @@ describe("AssistantOverlayHost", () => {
       sceneId: "scene.hidden",
       beatId: "beat.4",
       visibility: "hidden-by-user",
+      assistant: {
+        ...current.assistant,
+        stateId: "assistant.explaining",
+        visible: true,
+      },
       guide: { title: "Hidden guide", body: "Keep this exact beat." },
       navigation: { ...current.navigation, current: 4, total: 9 },
     });
@@ -461,6 +501,9 @@ describe("AssistantOverlayHost", () => {
     );
 
     expect(html).toContain('aria-label="Resume guide"');
+    expect(html).toContain('aria-label="Move Lessonique companion"');
+    expect(html).toContain('data-slot="draggable-companion"');
+    expect(html).toContain("cursor-grab");
     expect(html).not.toContain("Hidden guide");
     expect(store.getSnapshot().beatId).toBe("beat.4");
   });

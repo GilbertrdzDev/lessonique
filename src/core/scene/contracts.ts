@@ -9,7 +9,10 @@ import type {
   AssistantStateId,
   SurfaceId,
 } from "@/core/platform/identifiers";
-import type { LocalWaitCondition } from "@/core/lesson/contracts";
+import type {
+  LessonStepId,
+  LocalWaitCondition,
+} from "@/core/lesson/contracts";
 
 export type SceneId = string;
 export type SceneBeatId = string;
@@ -47,6 +50,7 @@ export interface ScenePreparation {
 export interface TeachingSceneBeat {
   id: SceneBeatId;
   type?: TeachingSceneBeatType;
+  lessonStepId?: LessonStepId;
   prepare?: ScenePreparation;
   target?: TargetRef;
   targetLossRecovery?: TargetLossRecovery;
@@ -80,6 +84,7 @@ export interface SceneSnapshot {
   activeBeatId?: SceneBeatId;
   activeBeatIndex?: number;
   activeBeatType?: TeachingSceneBeatType;
+  activeLessonStepId?: LessonStepId;
   beatCount?: number;
   allowManualNavigation?: boolean;
   target?: TargetRef;

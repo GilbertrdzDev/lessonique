@@ -1,6 +1,7 @@
 import type { PlayTeachingSceneInput, TargetRefInput } from "@/core/webmcp";
 
 import {
+  RESPONSIVE_MENU_DEMO_IDS,
   RESPONSIVE_MENU_TARGET_CATALOG,
 } from "./responsive-menu-fixture";
 
@@ -24,6 +25,7 @@ export function createResponsiveMenuHtmlScene(
     beats: [
       {
         id: "beat.responsive-menu-html-plan",
+        lessonStepId: RESPONSIVE_MENU_DEMO_IDS.htmlStep,
         type: "explanation",
         target: RESPONSIVE_MENU_TARGET_CATALOG.learningPlan.target,
         assistant: {
@@ -47,6 +49,7 @@ export function createResponsiveMenuHtmlScene(
       },
       {
         id: "beat.responsive-menu-html-source",
+        lessonStepId: RESPONSIVE_MENU_DEMO_IDS.htmlStep,
         type: "explanation",
         prepare: {
           surfaceId: "editor",
@@ -82,6 +85,7 @@ export function createResponsiveMenuHtmlScene(
       },
       {
         id: "beat.responsive-menu-html-action",
+        lessonStepId: RESPONSIVE_MENU_DEMO_IDS.accessibilityStep,
         type: "interaction",
         prepare: {
           surfaceId: "preview",
@@ -135,6 +139,7 @@ export function createResponsiveMenuCssScene(
     beats: [
       {
         id: "beat.responsive-menu-css-source",
+        lessonStepId: RESPONSIVE_MENU_DEMO_IDS.cssStep,
         type: "explanation",
         prepare: {
           surfaceId: "editor",
@@ -170,6 +175,7 @@ export function createResponsiveMenuCssScene(
       },
       {
         id: "beat.responsive-menu-css-mobile",
+        lessonStepId: RESPONSIVE_MENU_DEMO_IDS.cssStep,
         type: "explanation",
         prepare: {
           surfaceId: "preview",
@@ -220,6 +226,7 @@ export function createResponsiveMenuJavascriptScene(
     beats: [
       {
         id: "beat.responsive-menu-javascript-source",
+        lessonStepId: RESPONSIVE_MENU_DEMO_IDS.javascriptStep,
         type: "explanation",
         prepare: {
           surfaceId: "editor",
@@ -255,6 +262,7 @@ export function createResponsiveMenuJavascriptScene(
       },
       {
         id: "beat.responsive-menu-javascript-preview",
+        lessonStepId: RESPONSIVE_MENU_DEMO_IDS.javascriptStep,
         type: "interaction",
         prepare: {
           surfaceId: "preview",
@@ -346,6 +354,7 @@ export function createResponsiveMenuCompletionScene(): PlayTeachingSceneInput {
     beats: [
       {
         id: "beat.responsive-menu-celebration",
+        lessonStepId: RESPONSIVE_MENU_DEMO_IDS.verificationStep,
         type: "feedback",
         prepare: {
           surfaceId: "preview",
@@ -380,6 +389,7 @@ export function createResponsiveMenuCompletionScene(): PlayTeachingSceneInput {
       },
       {
         id: "beat.responsive-menu-close",
+        lessonStepId: RESPONSIVE_MENU_DEMO_IDS.verificationStep,
         type: "feedback",
         target: RESPONSIVE_MENU_TARGET_CATALOG.learningPlan.target,
         assistant: {

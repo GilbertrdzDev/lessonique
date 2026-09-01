@@ -6,9 +6,11 @@ import type { ProviderPlatformRegistries } from "@/core/platform/registries";
 import { validateClosedJsonObjectInput } from "@/core/platform/json-schema";
 import type {
   ClassroomLifecycleService,
+  GuidanceProgressCoordinator,
   LessonState,
-  LessonStateReader,
+  LessonStoreAdapter,
 } from "@/core/lesson";
+import { GuidanceProgressCoordinator as LessonGuidanceProgressCoordinator } from "@/core/lesson";
 import type { TargetResolverFacade } from "@/core/workspace/target-resolver-facade";
 
 import type {
@@ -78,7 +80,7 @@ export class SceneTargetError extends Error {
 
 export interface SceneRunnerOptions {
   platform: ProviderPlatformRegistries;
-  lesson: LessonStateReader;
+  lesson: LessonStoreAdapter;
   lifecycle: ClassroomLifecycleService;
   targets: TargetResolverFacade;
   surfacePreparer: SceneSurfacePreparer;
@@ -106,7 +108,8 @@ type ActiveScene = {
 
 export class SceneRunner {
   readonly #platform: ProviderPlatformRegistries;
-  readonly #lesson: LessonStateReader;
+  readonly #lesson: LessonStoreAdapter;
+  readonly #guidanceProgress: GuidanceProgressCoordinator;
   readonly #lifecycle: ClassroomLifecycleService;
   readonly #targets: TargetResolverFacade;
   readonly #surfacePreparer: SceneSurfacePreparer;
@@ -128,6 +131,7 @@ export class SceneRunner {
   constructor(options: SceneRunnerOptions) {
     this.#platform = options.platform;
     this.#lesson = options.lesson;
+    this.#guidanceProgress = new LessonGuidanceProgressCoordinator(options.lesson);
     this.#lifecycle = options.lifecycle;
     this.#targets = options.targets;
     this.#surfacePreparer = options.surfacePreparer;
@@ -176,12 +180,24 @@ export class SceneRunner {
       );
     }
     const beatIds = new Set<string>();
+    let previousPlanIndex = -1;
     for (const beat of scene.beats) {
       if (beatIds.has(beat.id)) {
         throw new SceneValidationError(`Scene beat "${beat.id}" is duplicated.`);
       }
       beatIds.add(beat.id);
       this.#validateBeat(beat, lesson);
+      if (beat.lessonStepId) {
+        const planIndex = lesson.plan.steps.findIndex(
+          ({ id }) => id === beat.lessonStepId,
+        );
+        if (planIndex < previousPlanIndex) {
+          throw new SceneValidationError(
+            "Teaching scene sections must follow the Learning Plan order.",
+          );
+        }
+        previousPlanIndex = planIndex;
+      }
     }
   }
 
@@ -207,6 +223,9 @@ export class SceneRunner {
       activeBeatId: prepared.beats[0]?.id,
       activeBeatIndex: 0,
       activeBeatType: prepared.beats[0]?.type ?? "explanation",
+      ...(prepared.beats[0]?.lessonStepId
+        ? { activeLessonStepId: prepared.beats[0].lessonStepId }
+        : {}),
       beatCount: prepared.beats.length,
       allowManualNavigation: prepared.allowManualNavigation,
       assistant: {
@@ -397,6 +416,7 @@ export class SceneRunner {
         }
       }
       if (this.#active === active && !active.scope.signal.aborted) {
+        this.#guidanceProgress.completeSections(sceneLessonStepIds(active.scene));
         await active.scope.dispose();
         this.#active = undefined;
         this.#presentation.clear({ reducedMotion: this.#prefersReducedMotion() });
@@ -441,6 +461,10 @@ export class SceneRunner {
     signal: AbortSignal,
   ): Promise<() => Promise<void>> {
     const generation = ++active.generation;
+    this.#guidanceProgress.enterSection(
+      sceneLessonStepIds(active.scene),
+      beat.lessonStepId,
+    );
     const previousPresentation = this.#presentation.getSnapshot();
     const presentation = createIdlePresentationSnapshot(
       previousPresentation.assistant.reducedMotion,
@@ -481,6 +505,7 @@ export class SceneRunner {
       activeBeatId: beat.id,
       activeBeatIndex: index,
       activeBeatType: beat.type ?? "explanation",
+      ...(beat.lessonStepId ? { activeLessonStepId: beat.lessonStepId } : {}),
       beatCount: active.scene.beats.length,
       allowManualNavigation: active.scene.allowManualNavigation,
       ...(beat.target ? { target: structuredClone(beat.target) } : {}),
@@ -644,6 +669,14 @@ export class SceneRunner {
   }
 
   #validateBeat(beat: TeachingSceneBeat, lesson: LessonState): void {
+    if (
+      beat.lessonStepId &&
+      !lesson.plan.steps.some(({ id }) => id === beat.lessonStepId)
+    ) {
+      throw new SceneValidationError(
+        `Learning Plan step "${beat.lessonStepId}" is not registered in the active lesson.`,
+      );
+    }
     if (beat.type === "interaction" && !beat.wait) {
       throw new SceneValidationError(
         "Interaction beats require a registered learner wait condition.",
@@ -809,6 +842,12 @@ export class SceneRunner {
       revision: snapshot.revision ?? current.revision + 1,
     });
   }
+}
+
+function sceneLessonStepIds(scene: TeachingScene): string[] {
+  return scene.beats.flatMap(({ lessonStepId }) =>
+    lessonStepId ? [lessonStepId] : [],
+  );
 }
 
 function throwIfSceneWorkAborted(

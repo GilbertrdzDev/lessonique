@@ -1,6 +1,7 @@
 export * from "./activity";
 export * from "./bootstrap";
 export * from "./contracts";
+export * from "./guidance-progress";
 export * from "./interaction-tracker";
 export * from "./lifecycle";
 export * from "./persistence";

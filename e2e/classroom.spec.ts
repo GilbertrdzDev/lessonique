@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 test.describe("classroom shell", () => {
   test.beforeEach(async ({ page }) => {
@@ -273,7 +273,7 @@ test.describe("classroom shell", () => {
       "scene.responsive-menu-css",
     );
     expect(resumed).toEqual(expect.objectContaining({ ok: true }));
-    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByRole("button", { name: "Finish", exact: true }).click();
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
       timeout: 5_000,
     });
@@ -308,7 +308,7 @@ test.describe("classroom shell", () => {
       page.getByRole("status", { name: /Lessonique companion: warning/u }),
     ).toBeVisible({ timeout: 10_000 });
     await expect(guide).toContainText("Preview bounded warning feedback");
-    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByRole("button", { name: "Finish", exact: true }).click();
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
       timeout: 10_000,
     });
@@ -329,7 +329,7 @@ test.describe("classroom shell", () => {
     await expect(
       page.getByRole("status", { name: /Lessonique companion: idle/u }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByRole("button", { name: "Finish", exact: true }).click();
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
       timeout: 10_000,
     });
@@ -405,7 +405,7 @@ test.describe("classroom shell", () => {
     await expect(
       page.getByRole("status", { name: /Lessonique companion: success/u }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByRole("button", { name: "Finish", exact: true }).click();
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0, {
       timeout: 10_000,
     });
@@ -1444,6 +1444,233 @@ test.describe("classroom shell", () => {
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0);
   });
 
+  test("keeps guide sections, continuous highlights, Finish, resume, and drag overrides synchronized", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    const code = [
+      "// Variables store values under a name.",
+      `const studentName = "Gilbert"; // ${"wide-code ".repeat(20)}`,
+      "let completedLessons = 0;",
+      "completedLessons = completedLessons + 1;",
+      "function greetStudent(name) {",
+      "  return `Hello, ${name}!`;",
+      "}",
+      "const add = (firstNumber, secondNumber) => firstNumber + secondNumber;",
+      "const double = (number) => number * 2;",
+      "const course = {",
+      '  title: "JavaScript Foundations",',
+      '  level: "beginner",',
+      "};",
+      "console.log(greetStudent(studentName), add(2, 3), double(4), course);",
+      ...Array.from({ length: 32 }, (_, index) => `// filler ${index + 1}`),
+    ].join("\n");
+    const planSections = [
+      ["step.variables", "Variables"],
+      ["step.functions", "Functions"],
+      ["step.arrows", "Arrow functions"],
+      ["step.objects", "Object literals"],
+      ["step.together", "Everything together"],
+    ] as const;
+    const created = await invokeRegisteredTool(page, "create_guided_lesson", {
+      lessonId: "lesson.guidance-synchronization",
+      lessonMode: "explain",
+      title: "JavaScript foundations",
+      objective: "Verify synchronized visual guidance.",
+      environment: {
+        profileId: "profile.javascript-console",
+        languageIds: ["language.javascript"],
+        activeFile: "index.js",
+        activeSurfaceId: "editor",
+      },
+      files: [
+        {
+          path: "index.js",
+          languageId: "language.javascript",
+          content: code,
+          readOnly: true,
+        },
+      ],
+      steps: planSections.map(([id, title]) => ({
+        id,
+        title,
+        objective: `Understand ${title.toLowerCase()}.`,
+      })),
+    });
+    expect(created).toEqual(expect.objectContaining({ ok: true }));
+
+    const ranges = [
+      [1, 1, 1, 39, "step.variables", "Variables overview"],
+      [2, 1, 4, 43, "step.variables", "Variables in detail"],
+      [5, 1, 7, 2, "step.functions", "Function declaration"],
+      [6, 3, 6, 29, "step.functions", "Function return"],
+      [8, 1, 8, 73, "step.arrows", "Arrow function"],
+      [9, 1, 9, 40, "step.arrows", "Implicit return"],
+      [10, 1, 13, 3, "step.objects", "Object literal"],
+      [11, 3, 12, 22, "step.objects", "Object properties"],
+      [14, 1, 14, 78, "step.together", "Everything together"],
+    ] as const;
+    const started = await invokeRegisteredTool(page, "play_teaching_scene", {
+      id: "scene.guidance-synchronization",
+      cleanupPolicy: "replace",
+      allowManualNavigation: true,
+      beats: ranges.map(
+        ([startLine, startColumn, endLine, endColumn, lessonStepId, title], index) => ({
+          id: `beat.guidance-${index + 1}`,
+          lessonStepId,
+          type: "explanation",
+          prepare: {
+            surfaceId: "editor",
+            filePath: "index.js",
+            scroll: "if-needed",
+          },
+          target: {
+            resolverId: "target.code-range",
+            input: { filePath: "index.js", startLine, startColumn, endLine, endColumn },
+          },
+          assistant: {
+            stateId: "assistant.pointing",
+            placementId: "placement.near-target",
+            visible: true,
+          },
+          effects: [{ effectId: "effect.highlight" }],
+          guide: {
+            title,
+            body: `Guide micro-step ${index + 1} remains separate from the Learning Plan section count.`,
+          },
+        }),
+      ),
+    });
+    expect(started).toEqual(expect.objectContaining({ ok: true, status: "started" }));
+
+    const guide = page.getByLabel("Teaching guide");
+    const highlight = page.locator('[data-guidance-effect="highlight"]');
+    const plan = page.getByRole("region", { name: "Learning Plan" });
+    const planStep = (id: string) =>
+      page.locator(`[data-learning-plan-step-id=${JSON.stringify(id)}]`);
+    await expect(guide).toContainText("Variables overview");
+    await expect(guide).toContainText("Step 1 of 9");
+    await expect(plan).toContainText("Step 1 of 5");
+    await expect(planStep("step.variables")).toHaveAttribute(
+      "data-learning-plan-state",
+      "current",
+    );
+    await expect(highlight).toHaveCount(1);
+    await expect(highlight).toHaveAttribute("data-guidance-shape", "continuous");
+    await expect(highlight).toHaveAttribute("data-guidance-fragment-count", "1");
+
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(guide).toContainText("Variables in detail");
+    await expect(guide).toContainText("Step 2 of 9");
+    await expect(planStep("step.variables")).toHaveAttribute(
+      "data-learning-plan-state",
+      "current",
+    );
+    await expect(highlight).toHaveCount(1);
+    await expect(highlight).toHaveAttribute("data-guidance-fragment-count", "3");
+    const initialHighlightBox = await highlight.boundingBox();
+    expect(initialHighlightBox).not.toBeNull();
+    await page.locator(".monaco-scrollable-element").first().evaluate((element) => {
+      element.scrollTop += 12;
+      element.scrollLeft += 40;
+    });
+    await expect(highlight).toHaveCount(1);
+    await expect
+      .poll(async () => (await highlight.boundingBox())?.y)
+      .not.toBe(initialHighlightBox?.y);
+    await expect(highlight).toHaveAttribute("data-guidance-shape", "continuous");
+
+    const guideWrapper = page.locator('[data-slot="draggable-guide"]');
+    const guideHandle = page.getByLabel("Move guide panel");
+    const companionWrapper = page.locator('[data-slot="draggable-companion"]');
+    await expect(guideHandle).toHaveCSS("cursor", "grab");
+    await expect(companionWrapper).toHaveCSS("cursor", "grab");
+    await dragBy(page, guideHandle, 48, 36, guideWrapper);
+    await dragBy(page, companionWrapper, -44, 42, companionWrapper);
+    await expect(guideWrapper).not.toHaveAttribute("data-manual-offset-x", "0");
+    await expect(companionWrapper).not.toHaveAttribute("data-manual-offset-x", "0");
+
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(guide).toContainText("Function declaration");
+    await expect(guideWrapper).toHaveAttribute("data-manual-offset-x", "0");
+    await expect(guideWrapper).toHaveAttribute("data-manual-offset-y", "0");
+    await expect(companionWrapper).toHaveAttribute("data-manual-offset-x", "0");
+    await expect(companionWrapper).toHaveAttribute("data-manual-offset-y", "0");
+    await expect(planStep("step.variables")).toHaveAttribute(
+      "data-learning-plan-state",
+      "complete",
+    );
+    await expect(planStep("step.functions")).toHaveAttribute(
+      "data-learning-plan-state",
+      "current",
+    );
+    await expect(plan).toContainText("Step 2 of 5");
+
+    await page.getByRole("button", { name: "Hide guide" }).click();
+    await expect(page.getByLabel("Teaching guide")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Resume guide" })).toBeVisible();
+    await expect(companionWrapper).toBeVisible();
+    await dragBy(page, companionWrapper, 70, 50, companionWrapper);
+    const hiddenPetBox = await companionWrapper.boundingBox();
+    expect(hiddenPetBox).not.toBeNull();
+    expect(hiddenPetBox!.x).toBeGreaterThanOrEqual(11);
+    expect(hiddenPetBox!.y).toBeGreaterThanOrEqual(11);
+    expect(hiddenPetBox!.x + hiddenPetBox!.width).toBeLessThanOrEqual(1429);
+    expect(hiddenPetBox!.y + hiddenPetBox!.height).toBeLessThanOrEqual(889);
+    await page.getByRole("button", { name: "Resume guide" }).click();
+    await expect(guide).toContainText("Function declaration");
+    await expect(guide).toContainText("Step 3 of 9");
+    await expect(highlight).toHaveCount(1);
+    await expect(companionWrapper).toHaveAttribute("data-manual-offset-x", "0");
+    await expect(companionWrapper).toHaveAttribute("data-manual-offset-y", "0");
+
+    await dragBy(page, guideHandle, -50, 28, guideWrapper);
+    await dragBy(page, companionWrapper, 38, -30, companionWrapper);
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(guide).toContainText("Function return");
+    await expect(guideWrapper).toHaveAttribute("data-manual-offset-x", "0");
+    await expect(companionWrapper).toHaveAttribute("data-manual-offset-x", "0");
+    await dragBy(page, guideHandle, 46, -24, guideWrapper);
+    await dragBy(page, companionWrapper, -32, 30, companionWrapper);
+    await page.getByRole("button", { name: "Previous", exact: true }).click();
+    await expect(guide).toContainText("Function declaration");
+    await expect(guideWrapper).toHaveAttribute("data-manual-offset-x", "0");
+    await expect(companionWrapper).toHaveAttribute("data-manual-offset-x", "0");
+    await expect(planStep("step.functions")).toHaveAttribute(
+      "data-learning-plan-state",
+      "current",
+    );
+
+    for (const expectedTitle of [
+      "Function return",
+      "Arrow function",
+      "Implicit return",
+      "Object literal",
+      "Object properties",
+      "Everything together",
+    ]) {
+      await page.getByRole("button", { name: "Next", exact: true }).click();
+      await expect(guide).toContainText(expectedTitle);
+    }
+    await expect(guide).toContainText("Step 9 of 9");
+    await expect(plan).toContainText("Step 5 of 5");
+    await expect(planStep("step.together")).toHaveAttribute(
+      "data-learning-plan-state",
+      "current",
+    );
+    await expect(page.getByRole("button", { name: "Next", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Finish", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Finish", exact: true }).click();
+    await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0);
+    await expect(plan).toContainText("Completed");
+    for (const [id] of planSections) {
+      await expect(planStep(id)).toHaveAttribute("data-learning-plan-state", "complete");
+    }
+  });
+
   test("creates and resets the rendered classroom through the real WebMCP lifecycle", async ({
     page,
   }, testInfo) => {
@@ -2148,6 +2375,26 @@ async function guidanceTargetOverlap(page: import("@playwright/test").Page) {
       },
     };
   });
+}
+
+async function dragBy(
+  page: Page,
+  handle: Locator,
+  deltaX: number,
+  deltaY: number,
+  draggedElement: Locator,
+): Promise<void> {
+  const box = await handle.boundingBox();
+  expect(box).not.toBeNull();
+  const startX = box!.x + box!.width / 2;
+  const startY = box!.y + box!.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await expect(draggedElement).toHaveAttribute("data-dragging", "true");
+  await expect(handle).toHaveCSS("cursor", "grabbing");
+  await page.mouse.move(startX + deltaX, startY + deltaY, { steps: 6 });
+  await page.mouse.up();
+  await expect(draggedElement).toHaveAttribute("data-dragging", "false");
 }
 
 async function guidanceFocusOverlap(page: import("@playwright/test").Page) {

@@ -98,6 +98,7 @@ export function toTeachingScene(input: TeachingSceneInput): TeachingScene {
     beats: input.beats.map((beat) => ({
       id: beat.id,
       type: beat.type,
+      ...(beat.lessonStepId ? { lessonStepId: beat.lessonStepId } : {}),
       ...(beat.prepare ? { prepare: structuredClone(beat.prepare) } : {}),
       ...(beat.target
         ? {
@@ -120,6 +121,7 @@ function toSceneData(snapshot: SceneSnapshot) {
     sceneStatus: snapshot.status,
     activeBeatId: snapshot.activeBeatId ?? null,
     activeBeatIndex: snapshot.activeBeatIndex ?? null,
+    activeLessonStepId: snapshot.activeLessonStepId ?? null,
     activeTarget: snapshot.target ? structuredClone(snapshot.target) : null,
     activeWait: snapshot.wait ? structuredClone(snapshot.wait) : null,
     assistant: {

@@ -19,6 +19,7 @@ export function createArrayMapScene(
     beats: [
       {
         id: "beat.array-map-source",
+        lessonStepId: ARRAY_MAP_DEMO_IDS.mapStep,
         type: "explanation",
         prepare: {
           surfaceId: "editor",
@@ -54,6 +55,7 @@ export function createArrayMapScene(
       },
       {
         id: "beat.array-map-console-wait",
+        lessonStepId: ARRAY_MAP_DEMO_IDS.outputStep,
         type: "validation",
         prepare: {
           surfaceId: "console",
@@ -86,6 +88,7 @@ export function createArrayMapScene(
       },
       {
         id: "beat.array-map-success",
+        lessonStepId: ARRAY_MAP_DEMO_IDS.outputStep,
         type: "feedback",
         prepare: {
           surfaceId: "console",

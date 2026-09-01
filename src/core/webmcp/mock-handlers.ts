@@ -69,11 +69,11 @@ const TOOL_METADATA = {
   },
   play_teaching_scene: {
     title: "Play teaching scene",
-    description: "Start a visual teaching scene using semantic targets and registered guidance capabilities. Author one small concept per explanation beat and target the narrowest useful token or expression. Set allowManualNavigation for learner-controlled Previous and Next. Interaction beats are for learner work, must include a registered wait, and automatically remove invasive guidance; validation and feedback beats check and respond without exposing arbitrary code execution.",
+    description: "Start a visual teaching scene using semantic targets and registered guidance capabilities. Author one small concept per explanation beat, set lessonStepId to the Learning Plan section taught by each micro-step, and target the narrowest useful token or expression. Set allowManualNavigation for learner-controlled Previous, Next, and Finish. Interaction beats are for learner work, must include a registered wait, and automatically remove invasive guidance; validation and feedback beats check and respond without exposing arbitrary code execution.",
   },
   control_teaching_scene: {
     title: "Control teaching scene",
-    description: "Pause, resume, navigate, restart, or cancel the active teaching scene. Learners normally use Lessonique's local Previous and Next controls; use this tool for agent-directed recovery, remote control, restart, or cancellation, never to bypass a blocked learner interaction.",
+    description: "Pause, resume, navigate, restart, or cancel the active teaching scene. Learners normally use Lessonique's local Previous, Next, and Finish controls; use this tool for agent-directed recovery, remote control, restart, or cancellation, never to bypass a blocked learner interaction.",
   },
   evaluate_current_step: {
     title: "Evaluate current step",

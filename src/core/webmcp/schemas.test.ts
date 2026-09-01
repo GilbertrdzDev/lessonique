@@ -263,6 +263,57 @@ describe("WebMCP tool schemas", () => {
     ).toThrow();
   });
 
+  it("accepts a nine-beat scene mapped to five Learning Plan sections", () => {
+    const ranges = [
+      [1, 1, 1, 39, "step.variables", "Variables overview"],
+      [2, 1, 4, 43, "step.variables", "Variables in detail"],
+      [5, 1, 7, 2, "step.functions", "Function declaration"],
+      [6, 3, 6, 29, "step.functions", "Function return"],
+      [8, 1, 8, 73, "step.arrows", "Arrow function"],
+      [9, 1, 9, 40, "step.arrows", "Implicit return"],
+      [10, 1, 13, 3, "step.objects", "Object literal"],
+      [11, 3, 12, 22, "step.objects", "Object properties"],
+      [14, 1, 14, 78, "step.together", "Everything together"],
+    ] as const;
+    const result = playTeachingSceneInputSchema.safeParse({
+      id: "scene.guidance-synchronization",
+      cleanupPolicy: "replace",
+      allowManualNavigation: true,
+      beats: ranges.map((range, index) => ({
+        id: `beat.guidance-${index + 1}`,
+        lessonStepId: range[4],
+        type: "explanation",
+        prepare: {
+          surfaceId: "editor",
+          filePath: "index.js",
+          scroll: "if-needed",
+        },
+        target: {
+          resolverId: "target.code-range",
+          input: {
+            filePath: "index.js",
+            startLine: range[0],
+            startColumn: range[1],
+            endLine: range[2],
+            endColumn: range[3],
+          },
+        },
+        assistant: {
+          stateId: "assistant.pointing",
+          placementId: "placement.near-target",
+          visible: true,
+        },
+        effects: [{ effectId: "effect.highlight" }],
+        guide: {
+          title: range[5],
+          body: `Guide micro-step ${index + 1} remains separate from the Learning Plan section count.`,
+        },
+      })),
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("enforces file, lesson-step, file-byte, and inspection-retention limits", () => {
     const lesson = createValidLessonInput();
 

@@ -77,6 +77,73 @@ describe("SceneRunner", () => {
     await runner.control("cancel");
   });
 
+  it("synchronizes mapped Learning Plan sections independently from guide beats", async () => {
+    const { runner, lesson } = createHarness({
+      beatDurationMs: 30_000,
+      lessonStepCount: 3,
+    });
+    const mappedScene: TeachingScene = {
+      ...scene("scene.sections", 4),
+      beats: ["step.1", "step.1", "step.2", "step.3"].map(
+        (lessonStepId, index) => ({
+          id: `beat.${index + 1}`,
+          lessonStepId,
+          effects: [],
+          guide: { body: `Guide ${index + 1}` },
+        }),
+      ),
+    };
+
+    await runner.start(mappedScene);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lesson.getSnapshot().plan.steps.map(({ status }) => status)).toEqual([
+      "active",
+      "pending",
+      "pending",
+    ]);
+
+    await runner.control("next");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runner.presentation.getSnapshot().navigation.current).toBe(2);
+    expect(lesson.getSnapshot().plan.activeStepId).toBe("step.1");
+
+    await runner.control("next");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lesson.getSnapshot().plan.steps.map(({ status }) => status)).toEqual([
+      "completed",
+      "active",
+      "pending",
+    ]);
+
+    await runner.control("previous");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lesson.getSnapshot().plan.steps.map(({ status }) => status)).toEqual([
+      "active",
+      "pending",
+      "pending",
+    ]);
+
+    await runner.control("next");
+    await vi.advanceTimersByTimeAsync(0);
+    await runner.control("next");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lesson.getSnapshot().plan.steps.map(({ status }) => status)).toEqual([
+      "completed",
+      "completed",
+      "active",
+    ]);
+
+    await runner.control("next");
+    await vi.runAllTimersAsync();
+    expect(lesson.getSnapshot()).toEqual(
+      expect.objectContaining({
+        status: "completed",
+        progress: expect.objectContaining({ completedSteps: 3, percentage: 100 }),
+      }),
+    );
+    expect(lesson.getSnapshot().plan.steps.every(({ status }) => status === "completed")).toBe(true);
+  });
+
   it("tracks a semantic target and updates collision-safe presentation geometry", async () => {
     const targetHandle = new ObservableTargetHandle({
       status: "resolved",
@@ -383,6 +450,7 @@ describe("SceneRunner", () => {
 
 function createHarness(options: {
   beatDurationMs?: number;
+  lessonStepCount?: number;
   targetHandle?: ObservableTargetHandle;
   targetHandles?: ObservableTargetHandle[];
   targetRecoveryMs?: number;
@@ -396,15 +464,13 @@ function createHarness(options: {
         title: "Scene lesson",
         objective: "Exercise the scene engine.",
       },
-      [
-        {
-          id: "step.1",
-          title: "Step 1",
-          objective: "Follow the guidance.",
-          criteria: [],
-          hints: ["Try the registered target."],
-        },
-      ],
+      Array.from({ length: options.lessonStepCount ?? 1 }, (_, index) => ({
+        id: `step.${index + 1}`,
+        title: `Step ${index + 1}`,
+        objective: "Follow the guidance.",
+        criteria: [],
+        hints: ["Try the registered target."],
+      })),
     ),
   );
   const lifecycle = new ClassroomLifecycleService();
@@ -434,7 +500,7 @@ function createHarness(options: {
     beatDurationMs: options.beatDurationMs ?? 5,
     targetRecoveryMs: options.targetRecoveryMs,
   });
-  return { runner, lifecycle, targetHandle, resolveTarget };
+  return { runner, lesson, lifecycle, targetHandle, resolveTarget };
 }
 
 function scene(id: string, beatCount: number, allowManualNavigation = true): TeachingScene {

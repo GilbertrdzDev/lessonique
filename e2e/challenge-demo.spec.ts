@@ -115,7 +115,7 @@ test.describe("S007 challenge demo verification", () => {
     await expect(guide).toContainText(
       "The scene resumes only after the learner activates the highlighted control.",
     );
-    await expect(page.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Finish", exact: true })).toBeDisabled();
     await expect(page.locator("[data-guidance-effect]")).toHaveCount(0);
     const htmlGuideText = await guide.textContent();
     expect(htmlGuideText?.indexOf("The preview emits a normalized interaction")).toBeLessThan(
@@ -207,7 +207,7 @@ test.describe("S007 challenge demo verification", () => {
     await expect(guide).toBeVisible();
     await expect.poll(() => previewMenuTargetAlignmentDelta(page)).toBeLessThanOrEqual(2);
     await invokeSceneControl(page, "resume", "scene.responsive-menu-css");
-    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByRole("button", { name: "Finish", exact: true }).click();
     await expect(overlay).toHaveCount(0, { timeout: 10_000 });
 
     await runPanelStage(
