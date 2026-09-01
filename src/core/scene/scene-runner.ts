@@ -31,6 +31,7 @@ import {
 import {
   ScenePresentationStore,
   SceneStore,
+  createIdlePresentationSnapshot,
   targetGeometryFromPresentation,
 } from "./store";
 import { TargetTracker } from "./target-tracker";
@@ -99,6 +100,7 @@ type ActiveScene = {
   requestedIndex?: number;
   paused: boolean;
   beatAbort?: AbortController;
+  generation: number;
   resumeListeners: Set<() => void>;
 };
 
@@ -193,6 +195,7 @@ export class SceneRunner {
       scope,
       index: 0,
       paused: false,
+      generation: 0,
       resumeListeners: new Set(),
     };
     this.#active = active;
@@ -257,13 +260,67 @@ export class SceneRunner {
         "Complete the required learner interaction before moving to the next step.",
       );
     }
+    const navigationIndex = active.requestedIndex ?? active.index;
     active.requestedIndex =
       action === "restart"
         ? 0
         : action === "next"
-          ? Math.min(active.index + 1, active.scene.beats.length)
-          : Math.max(active.index - 1, 0);
+          ? Math.min(navigationIndex + 1, active.scene.beats.length)
+          : Math.max(navigationIndex - 1, 0);
+    this.#presentation.patch((current) => ({
+      ...current,
+      visibility:
+        current.visibility === "hidden-by-user"
+          ? "hidden-by-user"
+          : "transitioning",
+      navigation: { ...current.navigation, transitioning: true },
+    }));
     active.beatAbort?.abort();
+    return this.#store.getSnapshot();
+  }
+
+  async returnToCurrentTarget(): Promise<SceneSnapshot> {
+    const active = this.#active;
+    const beat = active?.scene.beats[active.index];
+    if (!active || !beat?.target) {
+      return this.#store.getSnapshot();
+    }
+    const generation = active.generation;
+    const signal = active.beatAbort
+      ? AbortSignal.any([active.scope.signal, active.beatAbort.signal])
+      : active.scope.signal;
+    this.#presentation.patch((current) => ({
+      ...current,
+      visibility: "transitioning",
+      navigation: { ...current.navigation, transitioning: true },
+    }));
+    await this.#targets.prepare(beat.target, signal);
+    await settleLayout(signal);
+    const handle = await this.#targets.resolve(beat.target, signal);
+    const tracker = new TargetTracker(beat.target, handle);
+    try {
+      const resolved =
+        tracker.getSnapshot().resolved.status === "resolved" ||
+        (await tracker.waitForResolved(this.#targetRecoveryMs, signal));
+      if (this.#active !== active || active.generation !== generation) {
+        throw createAbortError();
+      }
+      const snapshot = resolved
+        ? tracker.getSnapshot().resolved
+        : ({ status: "lost" } as const);
+      this.#presentation.patch((current) =>
+        current.generation !== generation
+          ? current
+          : {
+              ...current,
+              targetSnapshot: structuredClone(snapshot),
+              visibility: resolved ? "visible" : "out-of-view",
+              navigation: { ...current.navigation, transitioning: false },
+            },
+      );
+    } finally {
+      tracker.dispose();
+    }
     return this.#store.getSnapshot();
   }
 
@@ -287,8 +344,9 @@ export class SceneRunner {
         const beatAbort = new AbortController();
         active.beatAbort = beatAbort;
         const signal = AbortSignal.any([active.scope.signal, beatAbort.signal]);
-        const cleanupBeat = await this.#enterBeat(active, beat, index, signal);
+        let cleanupBeat: () => Promise<void> = async () => {};
         try {
+          cleanupBeat = await this.#enterBeat(active, beat, index, signal);
           let waitResult: WaitCoordinatorResult | undefined;
           if (beat.wait) {
             this.#setSceneStatus("waiting", beat);
@@ -326,7 +384,9 @@ export class SceneRunner {
           if (!isAbortError(error)) throw error;
         } finally {
           await cleanupBeat();
-          active.beatAbort = undefined;
+          if (active.beatAbort === beatAbort) {
+            active.beatAbort = undefined;
+          }
         }
         if (active.scope.signal.aborted) throw createAbortError();
         if (active.requestedIndex !== undefined) {
@@ -380,6 +440,41 @@ export class SceneRunner {
     index: number,
     signal: AbortSignal,
   ): Promise<() => Promise<void>> {
+    const generation = ++active.generation;
+    const previousPresentation = this.#presentation.getSnapshot();
+    const presentation = createIdlePresentationSnapshot(
+      previousPresentation.assistant.reducedMotion,
+    );
+    this.#presentation.commit({
+      ...presentation,
+      generation,
+      sceneId: active.scene.id,
+      beatId: beat.id,
+      ...(beat.target ? { target: structuredClone(beat.target) } : {}),
+      assistant: {
+        ...presentation.assistant,
+        stateId: beat.assistant?.stateId ?? "assistant.explaining",
+        ...(beat.assistant?.placementId
+          ? { placementId: beat.assistant.placementId }
+          : {}),
+        visible: beat.assistant?.visible ?? true,
+        status: "moving",
+      },
+      phase: phaseForBeatType(beat.type ?? "explanation"),
+      navigation: {
+        enabled: active.scene.allowManualNavigation,
+        current: index + 1,
+        total: active.scene.beats.length,
+        canGoPrevious: active.scene.allowManualNavigation && index > 0,
+        canGoNext: active.scene.allowManualNavigation,
+        nextBlocked: Boolean(beat.wait),
+        transitioning: true,
+      },
+      visibility:
+        previousPresentation.visibility === "hidden-by-user"
+          ? "hidden-by-user"
+          : "transitioning",
+    });
     this.#commit({
       id: active.scene.id,
       status: "preparing",
@@ -409,19 +504,8 @@ export class SceneRunner {
         }
       : beat.assistant;
     const effectiveEffects = interactionBeat ? [] : beat.effects;
-    this.#presentation.patch((current) => ({
-      ...current,
-      phase: phaseForBeatType(beatType),
-      navigation: {
-        enabled: active.scene.allowManualNavigation,
-        current: index + 1,
-        total: active.scene.beats.length,
-        canGoPrevious: active.scene.allowManualNavigation && index > 0,
-        canGoNext: active.scene.allowManualNavigation,
-        nextBlocked: Boolean(beat.wait),
-      },
-    }));
     if (beat.prepare) await this.#surfacePreparer.prepare(beat.prepare, signal);
+    throwIfSceneWorkAborted(active, generation, signal, this.#active);
 
     const cleanups: Array<() => Promise<void>> = [];
     let tracker: TargetTracker | undefined;
@@ -435,11 +519,25 @@ export class SceneRunner {
         });
         cleanups.push(disposeTarget);
         const updateTarget = () => {
+          if (
+            signal.aborted ||
+            this.#active !== active ||
+            active.generation !== generation
+          ) {
+            return;
+          }
           const tracked = tracker?.getSnapshot();
           if (!tracked) return;
           this.#presentation.patch((current) => ({
             ...current,
             targetSnapshot: structuredClone(tracked.resolved),
+            visibility:
+              current.visibility === "hidden-by-user" ||
+              current.visibility === "transitioning"
+                ? current.visibility
+                : tracked.resolved.status === "resolved"
+                  ? "visible"
+                  : "out-of-view",
           }));
           const viewport = this.#getViewport();
           const position = this.#placement.calculate({
@@ -500,6 +598,20 @@ export class SceneRunner {
       dispose: () => this.#guides.clear(),
     });
     cleanups.push(disposeGuide);
+    this.#presentation.patch((current) =>
+      current.generation !== generation
+        ? current
+        : {
+            ...current,
+            visibility:
+              current.visibility === "hidden-by-user"
+                ? "hidden-by-user"
+                : beat.target && current.targetSnapshot?.status !== "resolved"
+                  ? "out-of-view"
+                  : "visible",
+            navigation: { ...current.navigation, transitioning: false },
+          },
+    );
     return async () => {
       for (const cleanup of cleanups.reverse()) await cleanup();
     };
@@ -697,6 +809,31 @@ export class SceneRunner {
       revision: snapshot.revision ?? current.revision + 1,
     });
   }
+}
+
+function throwIfSceneWorkAborted(
+  active: ActiveScene,
+  generation: number,
+  signal: AbortSignal,
+  current: ActiveScene | undefined,
+): void {
+  if (signal.aborted || current !== active || active.generation !== generation) {
+    throw createAbortError();
+  }
+}
+
+async function settleLayout(signal: AbortSignal): Promise<void> {
+  for (let frame = 0; frame < 2; frame += 1) {
+    if (signal.aborted) throw createAbortError();
+    await new Promise<void>((resolve) => {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => resolve());
+      } else {
+        queueMicrotask(resolve);
+      }
+    });
+  }
+  if (signal.aborted) throw createAbortError();
 }
 
 function estimateGuideSize(

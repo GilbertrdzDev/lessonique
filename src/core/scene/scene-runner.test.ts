@@ -114,6 +114,80 @@ describe("SceneRunner", () => {
     await runner.control("cancel");
   });
 
+  it("suspends target-dependent presentation when a target leaves view and restores it on recovery", async () => {
+    const targetHandle = new ObservableTargetHandle({
+      status: "resolved",
+      geometry: { left: 40, top: 80, width: 120, height: 40 },
+    });
+    const { runner } = createHarness({ targetHandle, beatDurationMs: 30_000 });
+    await runner.start(targetScene());
+    await vi.advanceTimersByTimeAsync(0);
+
+    targetHandle.update({ status: "lost" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runner.presentation.getSnapshot().visibility).toBe("out-of-view");
+    targetHandle.update({
+      status: "resolved",
+      geometry: { left: 80, top: 120, width: 90, height: 24 },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runner.presentation.getSnapshot().visibility).toBe("visible");
+    expect(runner.presentation.getSnapshot().targetSnapshot).toEqual({
+      status: "resolved",
+      geometry: { left: 80, top: 120, width: 90, height: 24 },
+    });
+    await runner.control("cancel");
+  });
+
+  it("coalesces rapid navigation onto the latest requested beat and rejects stale geometry", async () => {
+    const targetHandles = [
+      new ObservableTargetHandle({
+        status: "resolved",
+        geometry: { left: 40, top: 80, width: 120, height: 40 },
+      }),
+      new ObservableTargetHandle({
+        status: "resolved",
+        geometry: { left: 240, top: 180, width: 120, height: 40 },
+      }),
+      new ObservableTargetHandle({
+        status: "resolved",
+        geometry: { left: 440, top: 280, width: 120, height: 40 },
+      }),
+    ];
+    const { runner } = createHarness({ targetHandles, beatDurationMs: 30_000 });
+    const baseBeat = targetScene().beats[0]!;
+    const rapidScene: TeachingScene = {
+      ...targetScene(),
+      id: "scene.rapid",
+      beats: [1, 2, 3].map((number) => ({
+        ...baseBeat,
+        id: `beat.${number}`,
+      })),
+    };
+    await runner.start(rapidScene);
+    await vi.advanceTimersByTimeAsync(0);
+
+    await runner.control("next");
+    await runner.control("next");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(runner.store.getSnapshot().activeBeatId).toBe("beat.3");
+    expect(runner.presentation.getSnapshot().beatId).toBe("beat.3");
+    expect(runner.presentation.getSnapshot().targetSnapshot).toEqual({
+      status: "resolved",
+      geometry: expect.objectContaining({ left: 240 }),
+    });
+    targetHandles[0]!.update({
+      status: "resolved",
+      geometry: { left: 999, top: 999, width: 1, height: 1 },
+    });
+    expect(runner.presentation.getSnapshot().targetSnapshot).toEqual({
+      status: "resolved",
+      geometry: expect.not.objectContaining({ left: 999 }),
+    });
+    await runner.control("cancel");
+  });
+
   it("runs a complete companion-assisted fixture and reacts to a local learner wait", async () => {
     let resolveWait!: (result: Awaited<ReturnType<WaitCoordinator["waitFor"]>>) => void;
     const waits = {

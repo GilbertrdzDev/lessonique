@@ -182,8 +182,12 @@ test.describe("S007 challenge demo verification", () => {
     });
     await expect(page.locator('[data-guidance-effect="focus"]')).toHaveCount(0);
     await expect(
-      page.getByRole("status", { name: /Lessonique companion:/u }).locator(".."),
-    ).toHaveAttribute("data-assistant-docked", "true");
+      page.getByRole("status", { name: /Lessonique companion:/u }),
+    ).toHaveCount(0);
+    const pausedGuide = page.getByLabel("Teaching guide paused");
+    await expect(pausedGuide).toBeVisible();
+    await expect(pausedGuide).toContainText("Step paused");
+    await expect(page.getByRole("button", { name: "Return to step" })).toBeVisible();
 
     await preview.locator("body").evaluate(() => {
       const frameWindow = window as typeof window & {
@@ -199,6 +203,8 @@ test.describe("S007 challenge demo verification", () => {
       delete frameWindow.__lessoniqueDetachedMenuTarget;
     });
     await expect(page.locator('[data-guidance-effect="focus"]')).toBeVisible();
+    await expect(pausedGuide).toHaveCount(0);
+    await expect(guide).toBeVisible();
     await expect.poll(() => previewMenuTargetAlignmentDelta(page)).toBeLessThanOrEqual(2);
     await invokeSceneControl(page, "resume", "scene.responsive-menu-css");
     await page.getByRole("button", { name: "Next", exact: true }).click();

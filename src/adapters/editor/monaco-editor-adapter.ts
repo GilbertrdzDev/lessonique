@@ -27,6 +27,7 @@ export interface MonacoEditorLike {
   focus(): void;
   updateOptions(options: editor.IEditorOptions): void;
   getDomNode(): HTMLElement | null;
+  getModel(): { getLineMaxColumn(lineNumber: number): number } | null;
   getScrolledVisiblePosition(
     position: IPosition,
   ): { top: number; left: number; height: number } | null;
@@ -39,6 +40,7 @@ export interface MonacoEditorLike {
   onDidLayoutChange(listener: () => void): IDisposable;
   onDidChangeModel(listener: () => void): IDisposable;
   onDidChangeModelContent?(listener: () => void): IDisposable;
+  onDidContentSizeChange?(listener: () => void): IDisposable;
 }
 
 export interface CodeTargetInput {
@@ -206,6 +208,12 @@ export class MonacoEditorAdapter
             this.#editor.onDidScrollChange(update),
             this.#editor.onDidLayoutChange(update),
             this.#editor.onDidChangeModel(update),
+            ...(this.#editor.onDidChangeModelContent
+              ? [this.#editor.onDidChangeModelContent(update)]
+              : []),
+            ...(this.#editor.onDidContentSizeChange
+              ? [this.#editor.onDidContentSizeChange(update)]
+              : []),
           ]
         : [];
       update();
@@ -264,26 +272,55 @@ export class MonacoEditorAdapter
       return { status: "lost" };
     }
     const domNode = editorInstance.getDomNode();
-    const start = editorInstance.getScrolledVisiblePosition({
-      lineNumber: input.startLine,
-      column: input.startColumn,
-    });
-    const end = editorInstance.getScrolledVisiblePosition({
-      lineNumber: input.endLine,
-      column: input.endColumn,
-    });
-    if (!domNode || !start || !end) {
+    const model = editorInstance.getModel();
+    if (!domNode || !model) {
       return { status: "lost" };
     }
     const editorRect = domNode.getBoundingClientRect();
+    const editorBounds = {
+      left: editorRect.left,
+      top: editorRect.top,
+      width: editorRect.width,
+      height: editorRect.height,
+    };
+    const fragments = [] as TargetGeometry[];
+    for (let lineNumber = input.startLine; lineNumber <= input.endLine; lineNumber += 1) {
+      const startColumn = lineNumber === input.startLine ? input.startColumn : 1;
+      const endColumn =
+        lineNumber === input.endLine
+          ? input.endColumn
+          : model.getLineMaxColumn(lineNumber);
+      const start = editorInstance.getScrolledVisiblePosition({
+        lineNumber,
+        column: startColumn,
+      });
+      const end = editorInstance.getScrolledVisiblePosition({
+        lineNumber,
+        column: endColumn,
+      });
+      if (!start || !end) {
+        continue;
+      }
+      const fragment = intersectRect(
+        {
+          left: editorRect.left + Math.min(start.left, end.left),
+          top: editorRect.top + start.top,
+          width: Math.max(2, Math.abs(end.left - start.left)),
+          height: Math.max(start.height, end.height),
+        },
+        editorBounds,
+      );
+      if (!fragment) {
+        continue;
+      }
+      fragments.push(fragment);
+    }
+    if (fragments.length === 0) {
+      return { status: "lost" };
+    }
     const geometry: TargetGeometry = {
-      left: editorRect.left + Math.min(start.left, end.left),
-      top: editorRect.top + start.top,
-      width:
-        input.startLine === input.endLine
-          ? Math.max(2, Math.abs(end.left - start.left))
-          : Math.max(2, editorRect.width - start.left),
-      height: Math.max(start.height, end.top + end.height - start.top),
+      ...boundingRect(fragments),
+      fragments,
     };
     return { status: "resolved", geometry };
   }
@@ -303,6 +340,31 @@ export class MonacoEditorAdapter
     };
     this.#interactionListeners.forEach((listener) => listener(event));
   }
+}
+
+function intersectRect(
+  value: TargetGeometry,
+  bounds: TargetGeometry,
+): TargetGeometry | undefined {
+  const left = Math.max(value.left, bounds.left);
+  const top = Math.max(value.top, bounds.top);
+  const right = Math.min(value.left + value.width, bounds.left + bounds.width);
+  const bottom = Math.min(value.top + value.height, bounds.top + bounds.height);
+  return right > left && bottom > top
+    ? { left, top, width: right - left, height: bottom - top }
+    : undefined;
+}
+
+function boundingRect(fragments: readonly TargetGeometry[]): TargetGeometry {
+  const left = Math.min(...fragments.map((fragment) => fragment.left));
+  const top = Math.min(...fragments.map((fragment) => fragment.top));
+  const right = Math.max(
+    ...fragments.map((fragment) => fragment.left + fragment.width),
+  );
+  const bottom = Math.max(
+    ...fragments.map((fragment) => fragment.top + fragment.height),
+  );
+  return { left, top, width: right - left, height: bottom - top };
 }
 
 function readCodeTarget(

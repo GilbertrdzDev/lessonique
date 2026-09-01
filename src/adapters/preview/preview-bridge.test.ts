@@ -90,6 +90,45 @@ describe("PreviewBridge", () => {
     );
   });
 
+  it("publishes host reflow geometry only after two settled animation frames", () => {
+    const host = createHostWindow({ deferredFrames: true });
+    const frameWindow = { postMessage: vi.fn() };
+    let framePosition = { left: 100, top: 200 };
+    const frame = {
+      contentWindow: frameWindow,
+      getBoundingClientRect: () => framePosition,
+    } as unknown as HTMLIFrameElement;
+    const bridge = new PreviewBridge(host.window);
+    bridge.attach(frame);
+    const handle = bridge.resolveAnchor(
+      "hero.button",
+      new AbortController().signal,
+    );
+    host.emitMessage(frameWindow, {
+      channel: "lessonique.preview.v1",
+      direction: "preview-to-host",
+      type: "target",
+      requestId: "preview-target-1",
+      anchorId: "hero.button",
+      status: "resolved",
+      geometry: { left: 10, top: 20, width: 80, height: 30 },
+    });
+
+    framePosition = { left: 40, top: 60 };
+    host.emit("resize");
+    expect(handle.getSnapshot()).toEqual(
+      expect.objectContaining({ geometry: expect.objectContaining({ left: 110 }) }),
+    );
+    host.flushAnimationFrame();
+    expect(handle.getSnapshot()).toEqual(
+      expect.objectContaining({ geometry: expect.objectContaining({ left: 110 }) }),
+    );
+    host.flushAnimationFrame();
+    expect(handle.getSnapshot()).toEqual(
+      expect.objectContaining({ geometry: expect.objectContaining({ left: 50 }) }),
+    );
+  });
+
   it("ignores messages from other frames and exposes no arbitrary DOM payload", () => {
     const host = createHostWindow();
     const frameWindow = { postMessage: vi.fn() };
@@ -344,8 +383,10 @@ describe("createSandpackPreviewFiles", () => {
   });
 });
 
-function createHostWindow() {
+function createHostWindow(options: { deferredFrames?: boolean } = {}) {
   const listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  const animationFrames = new Map<number, FrameRequestCallback>();
+  let animationFrameSequence = 0;
   const window = {
     addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => {
       const entries = listeners.get(type) ?? new Set();
@@ -355,6 +396,16 @@ function createHostWindow() {
     removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => {
       listeners.get(type)?.delete(listener);
     },
+    ...(options.deferredFrames
+      ? {
+          cancelAnimationFrame: (id: number) => animationFrames.delete(id),
+          requestAnimationFrame: (callback: FrameRequestCallback) => {
+            const id = ++animationFrameSequence;
+            animationFrames.set(id, callback);
+            return id;
+          },
+        }
+      : {}),
   } as unknown as Window;
   return {
     window,
@@ -374,6 +425,11 @@ function createHostWindow() {
           listener({ source, data } as MessageEvent);
         }
       });
+    },
+    flushAnimationFrame() {
+      const callbacks = [...animationFrames.values()];
+      animationFrames.clear();
+      callbacks.forEach((callback) => callback(performance.now()));
     },
   };
 }

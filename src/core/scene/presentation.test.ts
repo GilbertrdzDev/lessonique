@@ -21,6 +21,8 @@ describe("GuidanceMotionEngine", () => {
       facing: "left" as const,
       companionOffsetLeft: 0,
       companionOffsetTop: 34,
+      guideOffsetLeft: 128,
+      guideOffsetTop: 0,
     };
 
     await motion.moveTo(position, true, new AbortController().signal);
@@ -44,6 +46,8 @@ describe("GuidanceMotionEngine", () => {
         facing: "right",
         companionOffsetLeft: 316,
         companionOffsetTop: 34,
+        guideOffsetLeft: 0,
+        guideOffsetTop: 0,
       },
       false,
       controller.signal,

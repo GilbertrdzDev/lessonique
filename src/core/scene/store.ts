@@ -22,7 +22,14 @@ export type SceneNavigationSnapshot = {
   canGoPrevious: boolean;
   canGoNext: boolean;
   nextBlocked: boolean;
+  transitioning: boolean;
 };
+
+export type ScenePresentationVisibility =
+  | "visible"
+  | "out-of-view"
+  | "hidden-by-user"
+  | "transitioning";
 
 export type ScenePresentationSide = "left" | "right" | "above" | "below" | "docked";
 export type ScenePresentationFacing = "left" | "right";
@@ -35,9 +42,14 @@ export type ScenePresentationPosition = {
   facing: ScenePresentationFacing;
   companionOffsetLeft: number;
   companionOffsetTop: number;
+  guideOffsetLeft: number;
+  guideOffsetTop: number;
+  companionSuppressed?: boolean;
+  guideSuppressed?: boolean;
 };
 
 export interface ScenePresentationSnapshot {
+  generation: number;
   sceneId?: string;
   beatId?: string;
   target?: TargetRef;
@@ -57,6 +69,7 @@ export interface ScenePresentationSnapshot {
   phase: ScenePresentationPhase;
   navigation: SceneNavigationSnapshot;
   paused: boolean;
+  visibility: ScenePresentationVisibility;
 }
 
 type StoreListener = () => void;
@@ -125,6 +138,7 @@ export function createIdlePresentationSnapshot(
   reducedMotion = false,
 ): ScenePresentationSnapshot {
   return {
+    generation: 0,
     assistant: {
       stateId: IDLE_ASSISTANT_STATE_ID,
       visible: false,
@@ -137,6 +151,10 @@ export function createIdlePresentationSnapshot(
         facing: "left",
         companionOffsetLeft: 0,
         companionOffsetTop: 0,
+        guideOffsetLeft: 0,
+        guideOffsetTop: 0,
+        companionSuppressed: false,
+        guideSuppressed: false,
       },
       reducedMotion,
     },
@@ -149,8 +167,10 @@ export function createIdlePresentationSnapshot(
       canGoPrevious: false,
       canGoNext: false,
       nextBlocked: false,
+      transitioning: false,
     },
     paused: false,
+    visibility: "visible",
   };
 }
 

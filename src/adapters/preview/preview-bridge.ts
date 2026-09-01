@@ -78,12 +78,21 @@ export class PreviewBridge {
   #frame?: HTMLIFrameElement;
   #requestSequence = 0;
   #frameObserver?: ResizeObserver;
+  #hostGeometryFrame?: number;
 
   constructor(hostWindow: Window = window) {
     this.#hostWindow = hostWindow;
     this.#hostWindow.addEventListener("message", this.#handleMessage);
     this.#hostWindow.addEventListener("resize", this.#handleHostGeometryChange);
     this.#hostWindow.addEventListener("scroll", this.#handleHostGeometryChange, true);
+    this.#hostWindow.visualViewport?.addEventListener(
+      "resize",
+      this.#handleHostGeometryChange,
+    );
+    this.#hostWindow.visualViewport?.addEventListener(
+      "scroll",
+      this.#handleHostGeometryChange,
+    );
   }
 
   attach(frame: HTMLIFrameElement): () => void {
@@ -203,6 +212,18 @@ export class PreviewBridge {
       this.#handleHostGeometryChange,
       true,
     );
+    this.#hostWindow.visualViewport?.removeEventListener(
+      "resize",
+      this.#handleHostGeometryChange,
+    );
+    this.#hostWindow.visualViewport?.removeEventListener(
+      "scroll",
+      this.#handleHostGeometryChange,
+    );
+    if (this.#hostGeometryFrame !== undefined) {
+      this.#hostWindow.cancelAnimationFrame?.(this.#hostGeometryFrame);
+      this.#hostGeometryFrame = undefined;
+    }
     this.#frameObserver?.disconnect();
     this.#targets.forEach(({ handle }, requestId) => {
       this.#post({
@@ -262,6 +283,22 @@ export class PreviewBridge {
   };
 
   readonly #handleHostGeometryChange = (): void => {
+    if (typeof this.#hostWindow.requestAnimationFrame !== "function") {
+      this.#publishHostGeometry();
+      return;
+    }
+    if (this.#hostGeometryFrame !== undefined) {
+      this.#hostWindow.cancelAnimationFrame?.(this.#hostGeometryFrame);
+    }
+    this.#hostGeometryFrame = this.#hostWindow.requestAnimationFrame(() => {
+      this.#hostGeometryFrame = this.#hostWindow.requestAnimationFrame(() => {
+        this.#hostGeometryFrame = undefined;
+        this.#publishHostGeometry();
+      });
+    });
+  };
+
+  #publishHostGeometry(): void {
     this.#targets.forEach((target) => {
       if (target.localGeometry) {
         target.handle.update({
@@ -270,7 +307,7 @@ export class PreviewBridge {
         });
       }
     });
-  };
+  }
 
   #toHostGeometry(geometry: TargetGeometry): TargetGeometry {
     const frameRect = this.#frame?.getBoundingClientRect();

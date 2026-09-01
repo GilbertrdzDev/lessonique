@@ -12,6 +12,7 @@ describe("AssistantOverlayHost", () => {
   it("preserves visual guide structure, caption, hint, and semantic assistant state", () => {
     const store = new ScenePresentationStore();
     store.commit({
+      generation: 1,
       sceneId: "scene.visual",
       beatId: "beat.visual",
       target: {
@@ -35,6 +36,8 @@ describe("AssistantOverlayHost", () => {
           facing: "left",
           companionOffsetLeft: 0,
           companionOffsetTop: 34,
+          guideOffsetLeft: 128,
+          guideOffsetTop: 0,
         },
         reducedMotion: false,
       },
@@ -60,8 +63,10 @@ describe("AssistantOverlayHost", () => {
         canGoPrevious: false,
         canGoNext: false,
         nextBlocked: false,
+        transitioning: false,
       },
       paused: false,
+      visibility: "visible",
     });
 
     const html = renderToStaticMarkup(
@@ -83,7 +88,7 @@ describe("AssistantOverlayHost", () => {
     expect(html).toContain('data-guidance-effect="spotlight"');
     expect(html).toContain('data-guidance-effect="focus"');
     expect(html).toContain('data-guidance-effect="highlight"');
-    expect(html).toContain('data-guidance-effect="point"');
+    expect(html).not.toContain('data-guidance-effect="point"');
     expect(html).toContain("Inspect this target.");
     expect(html).not.toMatch(/audio|speech|voice/iu);
   });
@@ -109,6 +114,8 @@ describe("AssistantOverlayHost", () => {
           facing: "right",
           companionOffsetLeft: 316,
           companionOffsetTop: 34,
+          guideOffsetLeft: 0,
+          guideOffsetTop: 0,
         },
       },
       effects: [{ effectId: "effect.pointer" }],
@@ -124,7 +131,7 @@ describe("AssistantOverlayHost", () => {
     expect(html).toContain('data-pointing-arm="right"');
     expect(html).toContain('data-companion-visual-state="guiding"');
     expect(html).toContain('data-companion-asset="normal"');
-    expect(html).toContain("flex-row-reverse");
+    expect(html).toContain("lessonique-guide-presentation");
     expect(html).toContain("lessonique-companion-normal.png");
   });
 
@@ -235,6 +242,7 @@ describe("AssistantOverlayHost", () => {
         canGoPrevious: true,
         canGoNext: true,
         nextBlocked: false,
+        transitioning: false,
       },
       guide: {
         title: "Identifier",
@@ -265,6 +273,7 @@ describe("AssistantOverlayHost", () => {
         canGoPrevious: true,
         canGoNext: true,
         nextBlocked: true,
+        transitioning: false,
       },
       guide: {
         title: "Your turn",
@@ -370,5 +379,89 @@ describe("AssistantOverlayHost", () => {
     expect(html).toContain("Visible fallback hint");
     expect(html).not.toContain("Lessonique companion:");
     expect(html).not.toContain("data-guidance-effect=");
+  });
+
+  it("renders multi-line guidance as independent exact fragments", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      sceneId: "scene.fragments",
+      beatId: "beat.fragments",
+      visibility: "visible",
+      guide: { body: "Inspect the exact fragments." },
+      targetSnapshot: {
+        status: "resolved",
+        geometry: {
+          left: 120,
+          top: 100,
+          width: 180,
+          height: 54,
+          fragments: [
+            { left: 140, top: 100, width: 80, height: 18 },
+            { left: 120, top: 118, width: 180, height: 18 },
+            { left: 120, top: 136, width: 60, height: 18 },
+          ],
+        },
+      },
+      effects: [{ effectId: "effect.highlight" }],
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html.match(/data-guidance-fragment=/gu)).toHaveLength(3);
+    expect(html).toContain("width:86px");
+    expect(html).toContain("width:186px");
+    expect(html).not.toContain("width:800px");
+  });
+
+  it("replaces target overlays with a compact paused guide while the target is out of view", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      visibility: "out-of-view",
+      target: {
+        resolverId: "target.code-range",
+        input: { filePath: "index.js" },
+      },
+      targetSnapshot: { status: "lost" },
+      guide: { title: "Variables", body: "Explain the current variable." },
+      effects: [{ effectId: "effect.focus" }],
+      navigation: { ...current.navigation, current: 2, total: 9 },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-guidance-visibility="out-of-view"');
+    expect(html).toContain("The explained element is out of view");
+    expect(html).toContain("Return to step");
+    expect(html).not.toContain("data-guidance-effect=");
+    expect(html).not.toContain("Lessonique companion:");
+  });
+
+  it("preserves the scene behind a non-invasive resume control when hidden", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      sceneId: "scene.hidden",
+      beatId: "beat.4",
+      visibility: "hidden-by-user",
+      guide: { title: "Hidden guide", body: "Keep this exact beat." },
+      navigation: { ...current.navigation, current: 4, total: 9 },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('aria-label="Resume guide"');
+    expect(html).not.toContain("Hidden guide");
+    expect(store.getSnapshot().beatId).toBe("beat.4");
   });
 });

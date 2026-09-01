@@ -3,28 +3,45 @@
 import Image from "next/image";
 import {
   useEffect,
+  useId,
   useRef,
   useState,
   useSyncExternalStore,
   type Ref,
 } from "react";
+import { createPortal } from "react-dom";
 
 import {
   calculatePointerPath,
   PlacementEngine,
   type SceneControlAction,
+  type ScenePresentationVisibility,
   type ScenePresentationStore,
 } from "@/core/scene";
-import type { TargetGeometry } from "@/core/workspace/targeting";
+import type {
+  TargetGeometry,
+  TargetRectangle,
+} from "@/core/workspace/targeting";
 import { cn } from "@/lib/utils";
+
+const subscribeToPortalHost = () => () => undefined;
+const getPortalHost = (): HTMLElement | null => document.body;
+const getServerPortalHost = (): HTMLElement | null => null;
 
 export function AssistantOverlayHost({
   onControl,
+  onReturnToStep,
   presentationStore,
 }: Readonly<{
   onControl?: (action: Extract<SceneControlAction, "next" | "previous">) => Promise<unknown>;
+  onReturnToStep?: () => Promise<unknown>;
   presentationStore: ScenePresentationStore;
 }>) {
+  const portalHost = useSyncExternalStore(
+    subscribeToPortalHost,
+    getPortalHost,
+    getServerPortalHost,
+  );
   const presentation = useSyncExternalStore(
     presentationStore.subscribe,
     presentationStore.getSnapshot,
@@ -40,20 +57,66 @@ export function AssistantOverlayHost({
   )?.input?.text;
   const calloutText = typeof callout === "string" ? callout : undefined;
   const assistant = presentation.assistant;
+  const visibility = presentation.visibility;
   const companionRef = useRef<HTMLDivElement>(null);
   const guideRef = useRef<HTMLElement>(null);
   const measured = useMeasuredSceneLayout({
     assistant,
     beatId: presentation.beatId,
     companionRef,
+    generation: presentation.generation,
     guideRef,
     presentationStore,
     target,
+    visibility,
   });
   const companionVisualState = resolveSceneCompanionVisualState(
     assistant.stateId,
     effectIds,
   );
+
+  useEffect(() => {
+    if (!presentation.sceneId || visibility === "hidden-by-user") return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      presentationStore.patch((current) => ({
+        ...current,
+        visibility: "hidden-by-user",
+      }));
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [presentation.sceneId, presentationStore, visibility]);
+
+  const hideGuide = () => {
+    presentationStore.patch((current) => ({
+      ...current,
+      visibility: "hidden-by-user",
+    }));
+  };
+
+  const resumeGuide = async () => {
+    presentationStore.patch((current) => ({
+      ...current,
+      visibility: "transitioning",
+      navigation: { ...current.navigation, transitioning: true },
+    }));
+    try {
+      await onReturnToStep?.();
+    } finally {
+      const current = presentationStore.getSnapshot();
+      if (current.visibility === "transitioning") {
+        presentationStore.patch((snapshot) => ({
+          ...snapshot,
+          visibility:
+            snapshot.target && snapshot.targetSnapshot?.status !== "resolved"
+              ? "out-of-view"
+              : "visible",
+          navigation: { ...snapshot.navigation, transitioning: false },
+        }));
+      }
+    }
+  };
 
   if (
     !assistant.visible &&
@@ -65,26 +128,40 @@ export function AssistantOverlayHost({
     return null;
   }
 
-  return (
+  const content = visibility === "hidden-by-user" ? (
+    <button
+      aria-label="Resume guide"
+      className="pointer-events-auto fixed bottom-4 left-4 z-50 rounded-full border border-primary/30 bg-card px-4 py-2 text-xs font-semibold text-primary shadow-floating"
+      data-guidance-visibility="hidden-by-user"
+      onClick={() => void resumeGuide()}
+      type="button"
+    >
+      Resume guide
+    </button>
+  ) : (
     <div
       aria-label="Lessonique visual guidance"
       className="pointer-events-none fixed inset-0 z-40 overflow-hidden"
+      data-guidance-generation={presentation.generation}
+      data-guidance-visibility={visibility}
       data-reduced-motion={assistant.reducedMotion}
       data-scene-id={presentation.sceneId}
       data-slot="assistant-overlay-host"
     >
-      {target && effectIds.has("effect.spotlight") ? (
+      {visibility === "visible" && target && effectIds.has("effect.spotlight") ? (
         <TargetSpotlight geometry={target} />
       ) : null}
-      {target && effectIds.has("effect.focus") ? (
+      {visibility === "visible" && target && effectIds.has("effect.focus") ? (
         <TargetFocus geometry={target} />
       ) : null}
-      {target && effectIds.has("effect.highlight") ? (
+      {visibility === "visible" && target && effectIds.has("effect.highlight") ? (
         <TargetHighlight geometry={target} />
       ) : null}
-      {target &&
+      {visibility === "visible" && target &&
       (effectIds.has("effect.point") || effectIds.has("effect.pointer")) &&
-      assistant.visible ? (
+      assistant.visible &&
+      measured.ready &&
+      !assistant.position.companionSuppressed ? (
         <TargetPointer
           companionLeft={
             assistant.position.left + assistant.position.companionOffsetLeft
@@ -96,20 +173,30 @@ export function AssistantOverlayHost({
         />
       ) : null}
 
-      <div
-        className={cn(
-          "lessonique-companion-presentation absolute flex items-center gap-4",
-          assistant.position.companionOffsetLeft > 0 && "flex-row-reverse",
-          assistant.position.docked && "items-end",
-        )}
-        data-assistant-docked={assistant.position.docked}
-        data-assistant-facing={assistant.position.facing}
-        data-assistant-side={assistant.position.side}
-        style={{
-          transform: `translate3d(${assistant.position.left}px, ${assistant.position.top}px, 0)`,
-        }}
-      >
-        {assistant.visible ? (
+      {visibility === "out-of-view" ? (
+        <OutOfViewGuide
+          current={presentation.navigation.current}
+          onHide={hideGuide}
+          onReturn={() => void resumeGuide()}
+          title={presentation.guide?.title}
+          total={presentation.navigation.total}
+        />
+      ) : null}
+
+      {visibility === "visible" ? (
+        <>
+          {assistant.visible && !assistant.position.companionSuppressed ? (
+            <div
+              className="lessonique-companion-presentation absolute"
+              data-assistant-docked={assistant.position.docked}
+              data-assistant-facing={assistant.position.facing}
+              data-assistant-side={assistant.position.side}
+              style={{
+                transform: `translate3d(${assistant.position.left + assistant.position.companionOffsetLeft}px, ${assistant.position.top + assistant.position.companionOffsetTop}px, 0)`,
+                transition: "none",
+                visibility: measured.ready ? "visible" : "hidden",
+              }}
+            >
           <LessoniqueCompanion
             facing={assistant.position.facing}
             containerRef={companionRef}
@@ -118,25 +205,80 @@ export function AssistantOverlayHost({
             status={assistant.status}
             visualState={companionVisualState}
           />
-        ) : null}
-        {presentation.guide ||
-        presentation.caption ||
-        presentation.hint ||
-        calloutText ? (
-          <VisualGuideCard
-            callout={calloutText}
-            caption={presentation.caption}
-            guide={presentation.guide}
-            hint={presentation.hint}
-            navigation={presentation.navigation}
-            onControl={onControl}
-            paused={presentation.paused}
-            phase={presentation.phase}
-            ref={guideRef}
-          />
-        ) : null}
-      </div>
+            </div>
+          ) : null}
+          {!assistant.position.guideSuppressed && (presentation.guide ||
+          presentation.caption ||
+          presentation.hint ||
+          calloutText) ? (
+            <div
+              className="lessonique-guide-presentation absolute"
+              style={{
+                transform: `translate3d(${assistant.position.left + assistant.position.guideOffsetLeft}px, ${assistant.position.top + assistant.position.guideOffsetTop}px, 0)`,
+                transition: "none",
+                visibility: measured.ready ? "visible" : "hidden",
+              }}
+            >
+              <VisualGuideCard
+                callout={calloutText}
+                caption={presentation.caption}
+                guide={presentation.guide}
+                hint={presentation.hint}
+                navigation={presentation.navigation}
+                onControl={onControl}
+                onHide={hideGuide}
+                paused={presentation.paused}
+                phase={presentation.phase}
+                ref={guideRef}
+              />
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
+  );
+  return portalHost ? createPortal(content, portalHost) : content;
+}
+
+function OutOfViewGuide({
+  current,
+  onHide,
+  onReturn,
+  title,
+  total,
+}: Readonly<{
+  current: number;
+  onHide(): void;
+  onReturn(): void;
+  title?: string;
+  total: number;
+}>) {
+  return (
+    <aside
+      aria-label="Teaching guide paused"
+      className="pointer-events-auto fixed bottom-4 left-1/2 w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-warning/35 bg-card p-4 text-card-foreground shadow-floating"
+    >
+      <p className="text-[0.66rem] font-bold uppercase tracking-[0.16em] text-warning">
+        Step paused
+      </p>
+      {title ? <h2 className="mt-1 text-sm font-bold">{title}</h2> : null}
+      <p className="mt-1 text-xs text-muted-foreground">
+        The explained element is out of view. The step and progress are unchanged.
+      </p>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="text-[0.68rem] font-semibold text-muted-foreground">
+          Step {current} of {total}
+        </span>
+        <div className="flex gap-2">
+          <button className="rounded-lg border px-3 py-1.5 text-[0.7rem] font-semibold" onClick={onHide} type="button">
+            Hide guide
+          </button>
+          <button className="rounded-lg bg-primary px-3 py-1.5 text-[0.7rem] font-semibold text-primary-foreground" onClick={onReturn} type="button">
+            Return to step
+          </button>
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -297,6 +439,7 @@ function VisualGuideCard({
   hint,
   navigation,
   onControl,
+  onHide,
   paused,
   phase,
   ref,
@@ -312,14 +455,16 @@ function VisualGuideCard({
     canGoPrevious: boolean;
     canGoNext: boolean;
     nextBlocked: boolean;
+    transitioning: boolean;
   };
   onControl?: (action: "next" | "previous") => Promise<unknown>;
+  onHide(): void;
   paused: boolean;
   phase: "teaching" | "interaction" | "validating" | "feedback" | "completed";
 }> & { ref?: Ref<HTMLElement> }) {
   const [navigating, setNavigating] = useState(false);
   const navigate = async (action: "next" | "previous") => {
-    if (!onControl || navigating) return;
+    if (!onControl || navigating || navigation.transitioning) return;
     setNavigating(true);
     try {
       await onControl(action);
@@ -332,8 +477,8 @@ function VisualGuideCard({
       ref={ref}
       aria-label="Teaching guide"
       className={cn(
-        "w-[min(19rem,calc(100vw-9rem))] rounded-2xl border border-primary/25 bg-card/96 text-card-foreground shadow-floating backdrop-blur-md",
-        navigation.enabled ? "pointer-events-auto" : "pointer-events-none",
+        "max-h-[calc(100dvh-2rem)] w-[min(18rem,calc(100vw-9rem))] overflow-y-auto rounded-2xl border border-primary/25 bg-card/96 text-card-foreground shadow-floating backdrop-blur-md",
+        "pointer-events-auto",
         phase === "interaction" ? "max-w-72 p-3" : "p-4",
       )}
       data-scene-phase={phase}
@@ -343,6 +488,14 @@ function VisualGuideCard({
         <p className="text-[0.66rem] font-bold uppercase tracking-[0.16em] text-primary">
           Lessonique guide
         </p>
+        <button
+          aria-label="Hide guide"
+          className="rounded-md px-2 py-1 text-[0.65rem] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          onClick={onHide}
+          type="button"
+        >
+          Hide
+        </button>
         {paused ? (
           <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.62rem] font-semibold text-warning">
             Paused
@@ -386,7 +539,7 @@ function VisualGuideCard({
         >
           <button
             className="rounded-lg border px-2.5 py-1.5 text-[0.7rem] font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={!navigation.canGoPrevious || navigating}
+            disabled={!navigation.canGoPrevious || navigating || navigation.transitioning}
             onClick={() => void navigate("previous")}
             type="button"
           >
@@ -397,7 +550,7 @@ function VisualGuideCard({
           </span>
           <button
             className="rounded-lg bg-primary px-3 py-1.5 text-[0.7rem] font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={!navigation.canGoNext || navigation.nextBlocked || navigating}
+            disabled={!navigation.canGoNext || navigation.nextBlocked || navigating || navigation.transitioning}
             onClick={() => void navigate("next")}
             title={navigation.nextBlocked ? "Complete the required interaction first." : undefined}
             type="button"
@@ -411,35 +564,73 @@ function VisualGuideCard({
 }
 
 function TargetSpotlight({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
+  const maskId = `lessonique-spotlight-${useId().replaceAll(":", "")}`;
+  const fragments = targetFragments(geometry);
   return (
-    <div
+    <svg
       aria-hidden="true"
-      className="absolute rounded-xl border-2 border-primary/70 shadow-[0_0_0_9999px_rgb(18_16_38_/_0.46)] transition-[left,top,width,height] duration-150 motion-reduce:transition-none"
+      className="absolute inset-0 size-full"
       data-guidance-effect="spotlight"
-      style={targetStyle(geometry, 7)}
-    />
+    >
+      <defs>
+        <mask id={maskId}>
+          <rect fill="white" height="100%" width="100%" />
+          {fragments.map((fragment, index) => (
+            <rect
+              fill="black"
+              key={index}
+              rx="6"
+              {...svgTargetRect(fragment, 6)}
+            />
+          ))}
+        </mask>
+      </defs>
+      <rect fill="rgb(18 16 38 / 0.46)" height="100%" mask={`url(#${maskId})`} width="100%" />
+      {fragments.map((fragment, index) => (
+        <rect
+          fill="none"
+          key={index}
+          rx="6"
+          stroke="rgb(124 92 255 / 0.8)"
+          strokeWidth="2"
+          {...svgTargetRect(fragment, 6)}
+        />
+      ))}
+    </svg>
   );
 }
 
 function TargetFocus({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
   return (
-    <div
-      aria-hidden="true"
-      className="absolute rounded-lg border-2 border-cyan-300 shadow-[0_0_0_4px_rgb(124_92_255_/_0.22),0_0_24px_rgb(83_224_255_/_0.45)] transition-[left,top,width,height] duration-150 motion-reduce:transition-none"
-      data-guidance-effect="focus"
-      style={targetStyle(geometry, 4)}
-    />
+    <>
+      {targetFragments(geometry).map((fragment, index) => (
+        <div
+          aria-hidden="true"
+          className="absolute rounded-lg border-2 border-cyan-300 shadow-[0_0_0_4px_rgb(124_92_255_/_0.22),0_0_24px_rgb(83_224_255_/_0.45)]"
+          data-guidance-effect="focus"
+          data-guidance-fragment={index}
+          key={index}
+          style={targetStyle(fragment, 4)}
+        />
+      ))}
+    </>
   );
 }
 
 function TargetHighlight({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
   return (
-    <div
-      aria-hidden="true"
-      className="absolute rounded-lg border-2 border-dashed border-primary bg-primary/8 transition-[left,top,width,height] duration-150 motion-reduce:transition-none"
-      data-guidance-effect="highlight"
-      style={targetStyle(geometry, 3)}
-    />
+    <>
+      {targetFragments(geometry).map((fragment, index) => (
+        <div
+          aria-hidden="true"
+          className="absolute rounded-lg border-2 border-dashed border-primary bg-primary/8"
+          data-guidance-effect="highlight"
+          data-guidance-fragment={index}
+          key={index}
+          style={targetStyle(fragment, 3)}
+        />
+      ))}
+    </>
   );
 }
 
@@ -513,31 +704,54 @@ function useMeasuredSceneLayout({
   assistant,
   beatId,
   companionRef,
+  generation,
   guideRef,
   presentationStore,
   target,
+  visibility,
 }: {
   assistant: ReturnType<ScenePresentationStore["getSnapshot"]>["assistant"];
   beatId?: string;
   companionRef: { current: HTMLDivElement | null };
+  generation: number;
   guideRef: { current: HTMLElement | null };
   presentationStore: ScenePresentationStore;
   target?: TargetGeometry;
+  visibility: ScenePresentationVisibility;
 }) {
   const [measurement, setMeasurement] = useState<{
     companionSize: { width: number; height: number };
     guideGeometry?: TargetGeometry;
-  }>({ companionSize: { width: 112, height: 112 } });
+    layoutKey: string | undefined;
+  }>({ companionSize: { width: 112, height: 112 }, layoutKey: undefined });
   const targetHeight = target?.height;
   const targetLeft = target?.left;
   const targetTop = target?.top;
   const targetWidth = target?.width;
+  const layoutKey = [
+    generation,
+    beatId ?? "idle",
+    targetLeft ?? "none",
+    targetTop ?? "none",
+    targetWidth ?? "none",
+    targetHeight ?? "none",
+  ].join(":");
 
   useEffect(() => {
+    if (visibility !== "visible") return;
+    let settleFrame = 0;
     let animationFrame = 0;
     let followUpFrame = 0;
     const synchronize = () => {
       animationFrame = 0;
+      const activePresentation = presentationStore.getSnapshot();
+      if (
+        activePresentation.generation !== generation ||
+        activePresentation.beatId !== beatId ||
+        activePresentation.visibility !== "visible"
+      ) {
+        return;
+      }
       const companionRect = companionRef.current?.getBoundingClientRect();
       const guideRect = guideRef.current?.getBoundingClientRect();
       const companionSize = {
@@ -548,12 +762,14 @@ function useMeasuredSceneLayout({
         width: guideRect?.width || 0,
         height: guideRect?.height || 0,
       };
-      const obstructions = Array.from(
+      const obstructionElements = Array.from(
         document.querySelectorAll<HTMLElement>('[data-scene-obstruction="true"]'),
-      ).map((element) => {
+      ).filter((element) => element.offsetWidth > 0 && element.offsetHeight > 0);
+      const obstructions = obstructionElements.map((element) => {
         const value = element.getBoundingClientRect();
         return { left: value.left, top: value.top, width: value.width, height: value.height };
       });
+      const viewport = window.visualViewport;
       const position = overlayPlacement.calculate({
         placementId: assistant.placementId,
         ...(targetLeft !== undefined &&
@@ -569,13 +785,18 @@ function useMeasuredSceneLayout({
               },
             }
           : {}),
-        viewport: { width: window.innerWidth, height: window.innerHeight },
+        viewport: {
+          width: Math.min(window.innerWidth, viewport?.width ?? window.innerWidth),
+          height: Math.min(window.innerHeight, viewport?.height ?? window.innerHeight),
+        },
         assistantSize: companionSize,
         guideSize,
         obstructions,
       });
       presentationStore.patch((current) =>
-        positionsEqual(current.assistant.position, position)
+        current.generation !== generation || current.beatId !== beatId
+          ? current
+          : positionsEqual(current.assistant.position, position)
           ? current
           : {
               ...current,
@@ -594,9 +815,12 @@ function useMeasuredSceneLayout({
           : {
               companionSize,
               ...(nextGuideGeometry ? { guideGeometry: nextGuideGeometry } : {}),
+              layoutKey: current.layoutKey,
             },
       );
       followUpFrame = window.requestAnimationFrame(() => {
+        const active = presentationStore.getSnapshot();
+        if (active.generation !== generation || active.beatId !== beatId) return;
         const value = guideRef.current?.getBoundingClientRect();
         if (!value) return;
         const guideGeometry = {
@@ -606,25 +830,62 @@ function useMeasuredSceneLayout({
           height: value.height,
         };
         setMeasurement((current) =>
-          measurementsEqual(current, current.companionSize, guideGeometry)
+          measurementsEqual(current, current.companionSize, guideGeometry) &&
+          current.layoutKey === layoutKey
             ? current
-            : { ...current, guideGeometry },
+            : { ...current, guideGeometry, layoutKey },
         );
       });
     };
     const schedule = () => {
-      if (!animationFrame) animationFrame = window.requestAnimationFrame(synchronize);
+      if (settleFrame || animationFrame) return;
+      setMeasurement((current) =>
+        current.layoutKey === undefined
+          ? current
+          : { ...current, layoutKey: undefined },
+      );
+      settleFrame = window.requestAnimationFrame(() => {
+        settleFrame = 0;
+        animationFrame = window.requestAnimationFrame(synchronize);
+      });
     };
     const observer = new ResizeObserver(schedule);
     if (companionRef.current) observer.observe(companionRef.current);
     if (guideRef.current) observer.observe(guideRef.current);
+    document
+      .querySelectorAll<HTMLElement>('[data-scene-obstruction="true"]')
+      .forEach((element) => observer.observe(element));
+    const mutationRoot = document.querySelector<HTMLElement>('[data-slot="app-shell"]');
+    const mutationObserver = new MutationObserver((records) => {
+      const obstructionChanged = records.some((record) =>
+        [...record.addedNodes, ...record.removedNodes].some(
+          (node) =>
+            node instanceof HTMLElement &&
+            (node.matches('[data-scene-obstruction="true"]') ||
+              Boolean(node.querySelector('[data-scene-obstruction="true"]'))),
+        ),
+      );
+      if (obstructionChanged) schedule();
+    });
+    if (mutationRoot) {
+      mutationObserver.observe(mutationRoot, {
+        childList: true,
+        subtree: true,
+      });
+    }
     window.addEventListener("resize", schedule);
     window.addEventListener("scroll", schedule, true);
+    window.visualViewport?.addEventListener("resize", schedule);
+    window.visualViewport?.addEventListener("scroll", schedule);
     schedule();
     return () => {
       observer.disconnect();
+      mutationObserver.disconnect();
       window.removeEventListener("resize", schedule);
       window.removeEventListener("scroll", schedule, true);
+      window.visualViewport?.removeEventListener("resize", schedule);
+      window.visualViewport?.removeEventListener("scroll", schedule);
+      if (settleFrame) window.cancelAnimationFrame(settleFrame);
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
       if (followUpFrame) window.cancelAnimationFrame(followUpFrame);
     };
@@ -632,15 +893,18 @@ function useMeasuredSceneLayout({
     assistant.placementId,
     beatId,
     companionRef,
+    generation,
     guideRef,
+    layoutKey,
     presentationStore,
     targetHeight,
     targetLeft,
     targetTop,
     targetWidth,
+    visibility,
   ]);
 
-  return measurement;
+  return { ...measurement, ready: measurement.layoutKey === layoutKey };
 }
 
 function positionsEqual(
@@ -654,7 +918,11 @@ function positionsEqual(
     left.side === right.side &&
     left.facing === right.facing &&
     left.companionOffsetLeft === right.companionOffsetLeft &&
-    left.companionOffsetTop === right.companionOffsetTop
+    left.companionOffsetTop === right.companionOffsetTop &&
+    left.guideOffsetLeft === right.guideOffsetLeft &&
+    left.guideOffsetTop === right.guideOffsetTop &&
+    left.companionSuppressed === right.companionSuppressed &&
+    left.guideSuppressed === right.guideSuppressed
   );
 }
 
@@ -673,10 +941,23 @@ function measurementsEqual(
   );
 }
 
-function targetStyle(geometry: TargetGeometry, padding: number) {
+function targetFragments(geometry: TargetGeometry): readonly TargetRectangle[] {
+  return geometry.fragments?.length ? geometry.fragments : [geometry];
+}
+
+function targetStyle(geometry: TargetRectangle, padding: number) {
   return {
     left: geometry.left - padding,
     top: geometry.top - padding,
+    width: geometry.width + padding * 2,
+    height: geometry.height + padding * 2,
+  };
+}
+
+function svgTargetRect(geometry: TargetRectangle, padding: number) {
+  return {
+    x: geometry.left - padding,
+    y: geometry.top - padding,
     width: geometry.width + padding * 2,
     height: geometry.height + padding * 2,
   };

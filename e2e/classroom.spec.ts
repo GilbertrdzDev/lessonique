@@ -1274,7 +1274,7 @@ test.describe("classroom shell", () => {
     expect(JSON.stringify(inspected)).not.toMatch(/geometry|selector|domnode/iu);
   });
 
-  test("moves and reorients the companion between opposite target sides", async ({
+  test("repositions the companion between distinct targets without overlaps", async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium");
@@ -1396,10 +1396,12 @@ test.describe("classroom shell", () => {
     });
     const guide = page.getByLabel("Teaching guide");
     await expect(guide).toContainText("Point toward the code");
-    await expect(presentation).toHaveAttribute("data-assistant-side", "right");
-    await expect(presentation).toHaveAttribute("data-assistant-facing", "left");
-    await expect(companion).toHaveAttribute("data-assistant-facing", "left");
-    await expect(companion).toHaveAttribute("data-pointing-arm", "left");
+    const firstSide = await presentation.getAttribute("data-assistant-side");
+    const firstFacing = await presentation.getAttribute("data-assistant-facing");
+    expect(firstSide).toMatch(/^(left|right|above|below|docked)$/u);
+    expect(firstFacing).toMatch(/^(left|right)$/u);
+    await expect(companion).toHaveAttribute("data-assistant-facing", firstFacing!);
+    await expect(companion).toHaveAttribute("data-pointing-arm", firstFacing!);
     await expect(companion).toHaveAttribute(
       "data-companion-visual-state",
       "guiding",
@@ -1421,18 +1423,17 @@ test.describe("classroom shell", () => {
 
     await invokeSceneControl(page, "next", "scene.directional-companion");
     await expect(guide).toContainText("Cross to the runtime console");
-    await expect(presentation).toHaveAttribute("data-assistant-side", "left");
-    await expect(presentation).toHaveAttribute("data-assistant-facing", "right");
-    await expect(companion).toHaveAttribute("data-assistant-facing", "right");
-    await expect(companion).toHaveAttribute("data-pointing-arm", "right");
+    const secondFacing = await presentation.getAttribute("data-assistant-facing");
+    expect(secondFacing).toMatch(/^(left|right)$/u);
+    await expect(companion).toHaveAttribute("data-assistant-facing", secondFacing!);
+    await expect(companion).toHaveAttribute("data-pointing-arm", secondFacing!);
     await expect(companion.locator(".companion-state-spark")).toHaveCSS(
       "animation-name",
       "lessonique-companion-guide-spark",
     );
-    await expect(presentation).toHaveClass(/flex-row-reverse/u);
     expect(await presentation.getAttribute("style")).not.toBe(firstTransform);
     await expect
-      .poll(async () => (await guidanceTargetOverlap(page)).area)
+      .poll(() => guidanceFocusOverlap(page))
       .toBe(0);
 
     await testInfo.attach("lessonique-directional-companion-console", {
@@ -2146,6 +2147,37 @@ async function guidanceTargetOverlap(page: import("@playwright/test").Page) {
         bottom: targetRect.bottom,
       },
     };
+  });
+}
+
+async function guidanceFocusOverlap(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    const target = document.querySelector<HTMLElement>(
+      '[data-guidance-effect="focus"]',
+    );
+    const guide = document.querySelector<HTMLElement>('[data-slot="visual-guide"]');
+    const companion = document.querySelector<HTMLElement>(
+      '[data-slot="assistant-overlay-host"] [data-assistant-state]',
+    );
+    if (!target || !guide) return Number.POSITIVE_INFINITY;
+    const targetRect = target.getBoundingClientRect();
+    const overlapArea = (candidate: DOMRect) => {
+      const width = Math.max(
+        0,
+        Math.min(targetRect.right, candidate.right) -
+          Math.max(targetRect.left, candidate.left),
+      );
+      const height = Math.max(
+        0,
+        Math.min(targetRect.bottom, candidate.bottom) -
+          Math.max(targetRect.top, candidate.top),
+      );
+      return width * height;
+    };
+    return (
+      overlapArea(guide.getBoundingClientRect()) +
+      (companion ? overlapArea(companion.getBoundingClientRect()) : 0)
+    );
   });
 }
 

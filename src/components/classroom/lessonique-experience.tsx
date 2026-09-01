@@ -126,7 +126,7 @@ export function LessoniqueExperience() {
 
   return (
     <div
-      className="min-h-svh overflow-x-hidden p-2 sm:p-2.5"
+      className="flex min-h-dvh flex-col overflow-x-hidden p-2 sm:p-2.5 2xl:h-dvh 2xl:overflow-y-hidden"
       data-experience-state={experienceState}
       data-slot="lessonique-experience"
     >
@@ -140,6 +140,7 @@ export function LessoniqueExperience() {
         {experienceState === "classroom" ? (
           <motion.div
             animate={{ filter: "blur(0px)", opacity: 1, scale: 1 }}
+            className="flex min-h-0 flex-1 flex-col"
             data-slot="classroom-transition"
             initial={
               shouldReduceMotion

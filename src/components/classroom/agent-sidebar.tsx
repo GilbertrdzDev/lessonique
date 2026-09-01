@@ -669,8 +669,9 @@ export function AgentSidebar() {
     <motion.aside
       animate={{ width: isCollapsed ? COLLAPSED_PANEL_WIDTH : panelWidth }}
       aria-label="Learning agent"
-      className="relative order-3 flex h-full min-h-[42rem] shrink-0 flex-col overflow-visible rounded-[1.25rem] border bg-card text-card-foreground shadow-panel max-2xl:col-span-full max-2xl:!w-full max-2xl:min-h-0 2xl:order-none 2xl:col-span-1"
+      className="relative order-3 flex h-full min-h-0 shrink-0 flex-col overflow-visible rounded-[1.25rem] border bg-card text-card-foreground shadow-panel max-2xl:col-span-full max-2xl:!w-full 2xl:order-none 2xl:col-span-1"
       data-agent-collapsed={isCollapsed}
+      data-scene-obstruction="true"
       data-webmcp-availability={availability}
       initial={false}
       transition={

@@ -233,6 +233,10 @@
   transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.lessonique-guide-presentation {
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .experience-companion {
   top: clamp(7.5rem, 13vh, 10rem);
   left: 50%;
@@ -1368,6 +1372,7 @@
   }
 
   .lessonique-companion-presentation,
+  .lessonique-guide-presentation,
   .experience-companion,
   .experience-companion-orbit,
   .experience-companion-particle,

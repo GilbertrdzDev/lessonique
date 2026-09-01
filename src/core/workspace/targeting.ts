@@ -4,11 +4,15 @@ import type {
 } from "@/core/platform/contracts";
 import type { TargetResolverId } from "@/core/platform/identifiers";
 
-export interface TargetGeometry {
+export interface TargetRectangle {
   left: number;
   top: number;
   width: number;
   height: number;
+}
+
+export interface TargetGeometry extends TargetRectangle {
+  fragments?: readonly TargetRectangle[];
 }
 
 export type ResolvedTargetSnapshot =
@@ -78,7 +82,19 @@ function cloneTargetSnapshot(
   snapshot: ResolvedTargetSnapshot,
 ): ResolvedTargetSnapshot {
   return snapshot.status === "resolved"
-    ? { status: "resolved", geometry: { ...snapshot.geometry } }
+    ? {
+        status: "resolved",
+        geometry: {
+          ...snapshot.geometry,
+          ...(snapshot.geometry.fragments
+            ? {
+                fragments: snapshot.geometry.fragments.map((fragment) => ({
+                  ...fragment,
+                })),
+              }
+            : {}),
+        },
+      }
     : { status: "lost" };
 }
 
@@ -96,6 +112,22 @@ function targetSnapshotsEqual(
     left.geometry.left === right.geometry.left &&
     left.geometry.top === right.geometry.top &&
     left.geometry.width === right.geometry.width &&
-    left.geometry.height === right.geometry.height
+    left.geometry.height === right.geometry.height &&
+    rectanglesEqual(left.geometry.fragments, right.geometry.fragments)
+  );
+}
+
+function rectanglesEqual(
+  left: readonly TargetRectangle[] | undefined,
+  right: readonly TargetRectangle[] | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right || left.length !== right.length) return false;
+  return left.every(
+    (value, index) =>
+      value.left === right[index]?.left &&
+      value.top === right[index]?.top &&
+      value.width === right[index]?.width &&
+      value.height === right[index]?.height,
   );
 }
