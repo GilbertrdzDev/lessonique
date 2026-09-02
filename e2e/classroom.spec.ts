@@ -2492,6 +2492,9 @@ test.describe("classroom shell", () => {
     await expect(stopAutomaticExecution).toBeVisible();
     await expect(stopAutomaticExecution).toHaveAttribute("aria-pressed", "true");
     await expect(
+      page.getByRole("button", { name: "Run", exact: true }),
+    ).toHaveCount(0);
+    await expect(
       page.getByRole("button", { name: "Run workspace" }),
     ).toHaveCount(0);
 

@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  GraduationCap,
-  LoaderCircle,
-  Play,
-  RotateCcw,
-} from "lucide-react";
+import { GraduationCap, LoaderCircle, RotateCcw } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 
 import { ThemeToggle } from "@/components/classroom/theme-toggle";
@@ -14,7 +9,6 @@ import { useWebMCPRuntime } from "@/components/webmcp/webmcp-registration-provid
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import type { LessoniqueExperienceState } from "@/features/classroom/experience-state";
 import { cn } from "@/lib/utils";
-import { P0_ENVIRONMENT_ACTION_IDS } from "@/providers/p0";
 
 export function ExperienceHeader({
   experienceState,
@@ -109,19 +103,6 @@ export function ExperienceHeader({
                 {profile.displayName}
               </span>
             ) : null}
-            <Button
-              disabled={!state.profileId}
-              onClick={() =>
-                void workspace.controller.executeAction(
-                  P0_ENVIRONMENT_ACTION_IDS.run,
-                )
-              }
-              size="sm"
-              variant="secondary"
-            >
-              <Play aria-hidden="true" />
-              Run
-            </Button>
             <Button
               disabled={isResetting}
               onClick={() => void resetClassroom()}
