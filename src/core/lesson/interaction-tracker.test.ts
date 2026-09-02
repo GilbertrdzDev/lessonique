@@ -75,6 +75,19 @@ describe("InteractionTracker", () => {
     expect(store.getSnapshot().activity).toEqual([]);
   });
 
+  it("publishes accepted normalized interactions until a subscriber leaves", () => {
+    const { tracker, source } = createHarness();
+    tracker.attachSources([source]);
+    const received: string[] = [];
+    const unsubscribe = tracker.subscribe((event) => received.push(event.id));
+
+    source.emit(interaction("interaction.subscribed"));
+    unsubscribe();
+    source.emit(interaction("interaction.unsubscribed"));
+
+    expect(received).toEqual(["interaction.subscribed"]);
+  });
+
   it("promotes a wait-satisfying interaction once without exposing adapter text", async () => {
     const { tracker, store, source } = createHarness();
     tracker.attachSources([source]);

@@ -219,10 +219,12 @@ function clamp(value: number, minimum: number, maximum: number): number {
 export function AssistantOverlayHost({
   onControl,
   onReturnToStep,
+  onValidateExercise,
   presentationStore,
 }: Readonly<{
   onControl?: (action: Extract<SceneControlAction, "next" | "previous">) => Promise<unknown>;
   onReturnToStep?: () => Promise<unknown>;
+  onValidateExercise?: () => Promise<unknown>;
   presentationStore: ScenePresentationStore;
 }>) {
   const portalHost = useSyncExternalStore(
@@ -483,6 +485,7 @@ export function AssistantOverlayHost({
                 navigation={presentation.navigation}
                 onControl={onControl}
                 onHide={hideGuide}
+                onValidateExercise={onValidateExercise}
                 paused={presentation.paused}
                 phase={presentation.phase}
                 ref={guideRef}
@@ -700,6 +703,7 @@ function VisualGuideCard({
   navigation,
   onControl,
   onHide,
+  onValidateExercise,
   paused,
   phase,
   ref,
@@ -718,13 +722,19 @@ function VisualGuideCard({
     canGoNext: boolean;
     nextBlocked: boolean;
     transitioning: boolean;
+    exerciseValidation?: {
+      status: "idle" | "validating" | "passed" | "failed" | "error";
+      message?: string;
+    };
   };
   onControl?: (action: "next" | "previous") => Promise<unknown>;
   onHide(): void;
+  onValidateExercise?: () => Promise<unknown>;
   paused: boolean;
   phase: "teaching" | "interaction" | "validating" | "feedback" | "completed";
 }> & { ref?: Ref<HTMLElement> }) {
   const [navigating, setNavigating] = useState(false);
+  const [validating, setValidating] = useState(false);
   const navigate = async (action: "next" | "previous") => {
     if (!onControl || navigating || navigation.transitioning) return;
     setNavigating(true);
@@ -732,6 +742,15 @@ function VisualGuideCard({
       await onControl(action);
     } finally {
       setNavigating(false);
+    }
+  };
+  const validateExercise = async () => {
+    if (!onValidateExercise || validating || navigation.transitioning) return;
+    setValidating(true);
+    try {
+      await onValidateExercise();
+    } finally {
+      setValidating(false);
     }
   };
   return (
@@ -810,6 +829,42 @@ function VisualGuideCard({
         <p className="mt-3 border-t pt-2 text-[0.68rem] font-medium text-foreground">
           <InlineCodeText dataSlot="guide-inline-code" text={caption} />
         </p>
+      ) : null}
+      {navigation.exerciseValidation ? (
+        <div
+          className="mt-3 space-y-2 border-t pt-3"
+          data-slot="exercise-validation"
+        >
+          <button
+            className="w-full rounded-lg border border-primary/35 bg-brand-soft/70 px-3 py-2 text-[0.72rem] font-semibold text-primary transition-colors hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={
+              !onValidateExercise ||
+              validating ||
+              navigation.exerciseValidation.status === "validating" ||
+              navigation.transitioning
+            }
+            onClick={() => void validateExercise()}
+            type="button"
+          >
+            {validating || navigation.exerciseValidation.status === "validating"
+              ? "Validating..."
+              : "Validate Exercise"}
+          </button>
+          {navigation.exerciseValidation.message ? (
+            <p
+              aria-live="polite"
+              className={cn(
+                "text-[0.68rem] font-medium",
+                navigation.exerciseValidation.status === "passed"
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : "text-muted-foreground",
+              )}
+              role="status"
+            >
+              {navigation.exerciseValidation.message}
+            </p>
+          ) : null}
+        </div>
       ) : null}
       {navigation.enabled ? (
         <div

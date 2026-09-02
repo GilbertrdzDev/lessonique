@@ -1766,6 +1766,10 @@ test.describe("classroom shell", () => {
     );
     await expect(page.getByRole("button", { name: "Next", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Finish", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Finish", exact: true })).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Validate Exercise", exact: true }),
+    ).toHaveCount(0);
     await page.getByRole("button", { name: "Finish", exact: true }).click();
     await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0);
     await expect(plan).toContainText("Completed");
@@ -1808,6 +1812,175 @@ test.describe("classroom shell", () => {
     await expect(planStep("step.variables")).toHaveAttribute(
       "data-learning-plan-state",
       "current",
+    );
+  });
+
+  test("gates final Finish with automatic and manual semantic exercise validation", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    test.skip(testInfo.project.name !== "desktop-chromium");
+
+    const created = await invokeRegisteredTool(page, "create_guided_lesson", {
+      lessonId: "lesson.final-exercise-validation",
+      lessonMode: "practice",
+      title: "Final exercise validation",
+      objective: "Create and call a JavaScript function.",
+      environment: {
+        profileId: "profile.javascript-console",
+        languageIds: ["language.javascript"],
+        activeFile: "index.js",
+        activeSurfaceId: "editor",
+      },
+      files: [
+        {
+          path: "index.js",
+          languageId: "language.javascript",
+          content:
+            'const favoriteColor = "blue";\n// Create and call describeFavorite here.\n',
+        },
+      ],
+      steps: [
+        {
+          id: "step.exercise",
+          title: "Your first function",
+          objective: "Create and call describeFavorite.",
+          criteria: [
+            {
+              id: "criterion.function",
+              validatorId: "validator.javascript-function-exists",
+              input: { filePath: "index.js", name: "describeFavorite" },
+            },
+            {
+              id: "criterion.call",
+              validatorId: "validator.javascript-call-exists",
+              input: { filePath: "index.js", calleeName: "describeFavorite" },
+            },
+          ],
+        },
+      ],
+      initialScene: {
+        id: "scene.final-exercise-validation",
+        cleanupPolicy: "replace",
+        allowManualNavigation: true,
+        beats: [
+          {
+            id: "beat.exercise",
+            type: "interaction",
+            lessonStepId: "step.exercise",
+            prepare: {
+              surfaceId: "editor",
+              filePath: "index.js",
+              scroll: "if-needed",
+            },
+            target: {
+              resolverId: "target.code-range",
+              input: {
+                filePath: "index.js",
+                startLine: 2,
+                startColumn: 1,
+                endLine: 2,
+                endColumn: 43,
+              },
+            },
+            effects: [],
+            guide: {
+              title: "Small coding challenge",
+              body: "Create describeFavorite, return a sentence, and call it.",
+            },
+            wait: {
+              kind: "interaction",
+              eventTypeId: "interaction.editor-change",
+              target: {
+                resolverId: "target.code-range",
+                input: {
+                  filePath: "index.js",
+                  startLine: 2,
+                  startColumn: 1,
+                  endLine: 2,
+                  endColumn: 43,
+                },
+              },
+              timeoutMs: 300_000,
+            },
+          },
+        ],
+      },
+    });
+    expect(created).toEqual(expect.objectContaining({ ok: true }));
+
+    const guide = page.getByLabel("Teaching guide");
+    const validate = page.getByRole("button", {
+      name: "Validate Exercise",
+      exact: true,
+    });
+    const finish = page.getByRole("button", { name: "Finish", exact: true });
+    const planStep = page.locator('[data-learning-plan-step-id="step.exercise"]');
+    const editor = page.getByRole("textbox", { name: "Workspace code editor" });
+    const replaceEditor = async (content: string) => {
+      await editor.press("Control+A");
+      await page.keyboard.insertText(content);
+    };
+
+    await expect(guide).toContainText("Small coding challenge");
+    await expect(validate).toBeVisible();
+    await expect(finish).toBeDisabled();
+    await validate.click();
+    await expect(guide.getByRole("status")).toContainText(
+      "0 of 2 requirements passed.",
+    );
+    await expect(finish).toBeDisabled();
+
+    const equivalentSolution = [
+      'const favoriteColor = "green";',
+      "const describeFavorite = (color) => `I like ${color}.`;",
+      "console.log(describeFavorite(favoriteColor));",
+    ].join("\n");
+    await replaceEditor(equivalentSolution);
+    await expect(guide.getByRole("status")).toContainText(
+      "Exercise complete. Finish is now available.",
+      { timeout: 10_000 },
+    );
+    await expect(finish).toBeEnabled();
+
+    await replaceEditor(`${equivalentSolution}\n// This unrelated comment keeps the solution valid.`);
+    await expect(finish).toBeEnabled();
+    await page.waitForTimeout(700);
+    await expect(finish).toBeEnabled();
+
+    await replaceEditor(
+      'const describeFavorite = (color) => `I like ${color}.`;',
+    );
+    await expect(guide.getByRole("status")).toContainText(
+      "1 of 2 requirements passed.",
+      { timeout: 10_000 },
+    );
+    await expect(finish).toBeDisabled();
+
+    await replaceEditor(equivalentSolution);
+    await validate.click();
+    await expect(finish).toBeEnabled({ timeout: 10_000 });
+    await finish.click();
+
+    await expect(page.getByLabel("Lessonique visual guidance")).toHaveCount(0);
+    await expect(planStep).toHaveAttribute("data-learning-plan-state", "complete");
+    await expect(page.getByRole("region", { name: "Learning Plan" })).toContainText(
+      "Completed",
+    );
+    const inspection = await invokeRegisteredTool(page, "inspect_classroom", {
+      include: ["lesson", "scene"],
+    });
+    expect(inspection).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          lesson: expect.objectContaining({
+            status: "completed",
+            progress: expect.objectContaining({ percentage: 100 }),
+          }),
+          scene: expect.objectContaining({ status: "completed" }),
+        }),
+      }),
     );
   });
 

@@ -53,7 +53,7 @@ const TOOL_METADATA = {
   },
   create_guided_lesson: {
     title: "Create guided lesson",
-    description: `Create or replace a complete guided lesson transactionally. Always declare lessonMode. Use explain when the learner asks to understand, learn, see, or be shown a concept: provide complete example code and progressive explanation beats, not a workspace full of TODOs. When an initial scene teaches source code, preserve Monaco precision by giving each visual explanation beat one semantic target for the exact token, single line, or contiguous multi-line range being discussed, together with the registered highlight, spotlight, focus, or pointer effects that communicate that target. Use practice only when the learner asks for an exercise, challenge, TODO, or hands-on work. Use mixed for a demonstration followed by a small validated exercise. ${GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION}`,
+    description: `Create or replace a complete guided lesson transactionally. Always declare lessonMode. Use explain when the learner asks to understand, learn, see, or be shown a concept: provide complete example code and progressive explanation beats, not a workspace full of TODOs. When an initial scene teaches source code, preserve Monaco precision by giving each visual explanation beat one semantic target for the exact token, single line, or contiguous multi-line range being discussed, together with the registered highlight, spotlight, focus, or pointer effects that communicate that target. Use practice only when the learner asks for an exercise, challenge, TODO, or hands-on work. Use mixed for a demonstration followed by a small validated exercise. For a final coding exercise, map the last beat to a lesson step with structural validation criteria and an editor-change interaction wait; those criteria gate Finish through automatic and manual validation. ${GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION}`,
   },
   reset_classroom: {
     title: "Reset classroom",
@@ -113,6 +113,7 @@ export type EarlyWebMCPIntegrations = {
   sceneState?: SceneStore;
   validationEngine?: ValidationEngine;
   assistantIntents?: AssistantIntentMapper;
+  evaluationService?: EvaluateCurrentStepService;
   referencePanels?: ReferencePanelStore;
   referenceSurfaceModeId?: string;
 };
@@ -162,7 +163,8 @@ export function createEarlyWebMCPToolRegistry(
     ? new TeachingSceneToolService(integrations.sceneRunner)
     : undefined;
   const evaluation =
-    integrations.lessonStore &&
+    integrations.evaluationService ??
+    (integrations.lessonStore &&
     integrations.validationEngine &&
     integrations.assistantIntents
       ? new EvaluateCurrentStepService({
@@ -171,7 +173,7 @@ export function createEarlyWebMCPToolRegistry(
           registries,
           assistantIntents: integrations.assistantIntents,
         })
-      : undefined;
+      : undefined);
   const planUpdates =
     integrations.lessonStore && integrations.workspaceState
       ? new UpdateLessonPlanService({

@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ScenePresentationStore } from "@/core/scene";
 
@@ -340,6 +340,64 @@ describe("AssistantOverlayHost", () => {
 
     expect(html).toContain("Step 4 of 4");
     expect(html).toMatch(/<button[^>]*>Finish<\/button>/u);
+    expect(html).not.toContain("Validate Exercise");
+    expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Finish<\/button>/u);
+  });
+
+  it("shows independent exercise validation and keeps Finish blocked until it passes", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      phase: "interaction",
+      navigation: {
+        enabled: true,
+        current: 4,
+        total: 4,
+        canGoPrevious: true,
+        canGoNext: true,
+        nextBlocked: true,
+        transitioning: false,
+        exerciseValidation: { status: "idle" },
+      },
+      guide: {
+        title: "Your first function",
+        body: "Create and call describeFavorite.",
+      },
+    });
+
+    const blockedHtml = renderToStaticMarkup(
+      <AssistantOverlayHost
+        onValidateExercise={vi.fn(async () => undefined)}
+        presentationStore={store}
+      />,
+    );
+
+    expect(blockedHtml).toContain('data-slot="exercise-validation"');
+    expect(blockedHtml).toContain("Validate Exercise");
+    expect(blockedHtml).toMatch(/<button[^>]*disabled=""[^>]*>Finish<\/button>/u);
+
+    store.commit({
+      ...store.getSnapshot(),
+      phase: "feedback",
+      navigation: {
+        ...store.getSnapshot().navigation,
+        nextBlocked: false,
+        exerciseValidation: {
+          status: "passed",
+          message: "Exercise complete. Finish is now available.",
+        },
+      },
+    });
+    const passedHtml = renderToStaticMarkup(
+      <AssistantOverlayHost
+        onValidateExercise={vi.fn(async () => undefined)}
+        presentationStore={store}
+      />,
+    );
+
+    expect(passedHtml).toContain("Exercise complete. Finish is now available.");
+    expect(passedHtml).not.toMatch(/<button[^>]*disabled=""[^>]*>Finish<\/button>/u);
   });
 
   it("renders a compact interaction card with forward navigation blocked", () => {

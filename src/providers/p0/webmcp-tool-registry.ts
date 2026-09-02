@@ -19,6 +19,7 @@ export function createP0WebMCPToolRegistry(runtime: P0WorkspaceRuntime) {
     sceneState: runtime.scene.store,
     validationEngine: runtime.validation.engine,
     assistantIntents: runtime.assistantIntents,
+    evaluationService: runtime.evaluateCurrentStep,
     referencePanels: runtime.referencePanels,
     referenceSurfaceModeId: runtime.referenceSurfaceModeId,
   });

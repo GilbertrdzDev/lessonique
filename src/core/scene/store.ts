@@ -23,6 +23,10 @@ export type SceneNavigationSnapshot = {
   canGoNext: boolean;
   nextBlocked: boolean;
   transitioning: boolean;
+  exerciseValidation?: {
+    status: "idle" | "validating" | "passed" | "failed" | "error";
+    message?: string;
+  };
 };
 
 export type ScenePresentationVisibility =

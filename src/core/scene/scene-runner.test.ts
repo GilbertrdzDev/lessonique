@@ -13,7 +13,11 @@ import { TargetResolverFacade } from "@/core/workspace/target-resolver-facade";
 import { createP0ProviderPlatform } from "@/providers/p0";
 
 import type { TeachingScene } from "./contracts";
-import { SceneRunner } from "./scene-runner";
+import {
+  SceneRunner,
+  type SceneExerciseEvaluator,
+  type SceneInteractionObserver,
+} from "./scene-runner";
 import type { WaitCoordinator } from "./wait-coordinator";
 
 describe("SceneRunner", () => {
@@ -142,6 +146,163 @@ describe("SceneRunner", () => {
       }),
     );
     expect(lesson.getSnapshot().plan.steps.every(({ status }) => status === "completed")).toBe(true);
+  });
+
+  it("validates a final exercise manually and after relevant editor changes before Finish", async () => {
+    let passed = false;
+    let interactionListener:
+      | Parameters<SceneInteractionObserver["subscribe"]>[0]
+      | undefined;
+    const exerciseEvaluator: SceneExerciseEvaluator = {
+      evaluate: vi.fn(async () => ({
+        passed,
+        passedCriteria: passed ? 2 : 1,
+        totalCriteria: 2,
+      })),
+    };
+    const interactions: SceneInteractionObserver = {
+      subscribe: vi.fn((listener) => {
+        interactionListener = listener;
+        return () => {
+          interactionListener = undefined;
+        };
+      }),
+    };
+    const { runner, lesson } = createHarness({
+      beatDurationMs: 30_000,
+      exerciseEvaluator,
+      interactions,
+      lessonStepCount: 2,
+      finalStepCriteria: [
+        {
+          id: "criterion.function",
+          validatorId: "validator.javascript-function-exists",
+          input: { filePath: "index.js", name: "describeFavorite" },
+        },
+        {
+          id: "criterion.call",
+          validatorId: "validator.javascript-call-exists",
+          input: { filePath: "index.js", calleeName: "describeFavorite" },
+        },
+      ],
+    });
+    const exerciseScene: TeachingScene = {
+      ...scene("scene.exercise", 2),
+      beats: [
+        {
+          id: "beat.explanation",
+          lessonStepId: "step.1",
+          effects: [],
+          guide: { body: "Review the complete example." },
+        },
+        {
+          id: "beat.exercise",
+          type: "interaction",
+          lessonStepId: "step.2",
+          prepare: { surfaceId: "editor", filePath: "index.js" },
+          effects: [],
+          guide: { body: "Create and call describeFavorite." },
+          wait: {
+            kind: "interaction",
+            eventTypeId: "interaction.editor-change",
+            target: {
+              resolverId: "target.code-range",
+              input: {
+                filePath: "index.js",
+                startLine: 10,
+                startColumn: 1,
+                endLine: 12,
+                endColumn: 1,
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    await runner.start(exerciseScene);
+    await vi.advanceTimersByTimeAsync(0);
+    await runner.control("next");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(runner.presentation.getSnapshot().navigation).toMatchObject({
+      current: 2,
+      total: 2,
+      nextBlocked: true,
+      exerciseValidation: { status: "idle" },
+    });
+    await expect(runner.control("next")).rejects.toThrow(
+      /Complete the required learner interaction/u,
+    );
+
+    await runner.validateCurrentExercise();
+    expect(runner.presentation.getSnapshot().navigation).toMatchObject({
+      nextBlocked: true,
+      exerciseValidation: {
+        status: "failed",
+        message: "1 of 2 requirements passed.",
+      },
+    });
+    expect(exerciseEvaluator.evaluate).toHaveBeenLastCalledWith(
+      "step.2",
+      { recordAttempt: true },
+      expect.any(AbortSignal),
+    );
+
+    passed = true;
+    interactionListener?.({
+      id: "editor-change-1",
+      typeId: "interaction.editor-change",
+      surfaceId: "editor",
+      environmentRevision: 1,
+      occurredAt: "2026-09-02T00:00:00.000Z",
+    });
+    expect(runner.presentation.getSnapshot().navigation).toMatchObject({
+      nextBlocked: true,
+      exerciseValidation: { status: "validating" },
+    });
+    await vi.advanceTimersByTimeAsync(350);
+    expect(runner.presentation.getSnapshot().navigation).toMatchObject({
+      nextBlocked: false,
+      exerciseValidation: { status: "passed" },
+    });
+
+    interactionListener?.({
+      id: "editor-change-2",
+      typeId: "interaction.editor-change",
+      surfaceId: "editor",
+      environmentRevision: 1,
+      occurredAt: "2026-09-02T00:00:01.000Z",
+    });
+    await vi.advanceTimersByTimeAsync(350);
+    expect(runner.presentation.getSnapshot().navigation.nextBlocked).toBe(false);
+
+    passed = false;
+    interactionListener?.({
+      id: "editor-change-3",
+      typeId: "interaction.editor-change",
+      surfaceId: "editor",
+      environmentRevision: 1,
+      occurredAt: "2026-09-02T00:00:02.000Z",
+    });
+    expect(runner.presentation.getSnapshot().navigation.nextBlocked).toBe(true);
+    await vi.advanceTimersByTimeAsync(350);
+    expect(runner.presentation.getSnapshot().navigation).toMatchObject({
+      nextBlocked: true,
+      exerciseValidation: { status: "failed" },
+    });
+
+    passed = true;
+    await runner.validateCurrentExercise();
+    await runner.control("next");
+    await vi.runAllTimersAsync();
+
+    expect(runner.store.getSnapshot().status).toBe("completed");
+    expect(lesson.getSnapshot()).toMatchObject({
+      status: "completed",
+      progress: { completedSteps: 2, totalSteps: 2, percentage: 100 },
+    });
+    expect(lesson.getSnapshot().plan.steps.at(-1)?.status).toBe("completed");
   });
 
   it("replays the last completed scene from beat one only for the same lesson", async () => {
@@ -520,8 +681,12 @@ function createHarness(options: {
   targetHandles?: ObservableTargetHandle[];
   targetRecoveryMs?: number;
   waits?: WaitCoordinator;
+  exerciseEvaluator?: SceneExerciseEvaluator;
+  interactions?: SceneInteractionObserver;
+  finalStepCriteria?: Parameters<typeof createActiveLessonState>[1][number]["criteria"];
 } = {}) {
   const platform = createP0ProviderPlatform();
+  const lessonStepCount = options.lessonStepCount ?? 1;
   const lesson = new LessonStore(
     createActiveLessonState(
       {
@@ -529,11 +694,12 @@ function createHarness(options: {
         title: "Scene lesson",
         objective: "Exercise the scene engine.",
       },
-      Array.from({ length: options.lessonStepCount ?? 1 }, (_, index) => ({
+      Array.from({ length: lessonStepCount }, (_, index) => ({
         id: `step.${index + 1}`,
         title: `Step ${index + 1}`,
         objective: "Follow the guidance.",
-        criteria: [],
+        criteria:
+          index === lessonStepCount - 1 ? options.finalStepCriteria ?? [] : [],
         hints: ["Try the registered target."],
       })),
     ),
@@ -560,6 +726,9 @@ function createHarness(options: {
     targets: new TargetResolverFacade(platform.targetResolvers, [adapter]),
     surfacePreparer: { prepare: vi.fn(async () => undefined) },
     waits: options.waits ?? ({ waitFor: vi.fn() } as unknown as WaitCoordinator),
+    exerciseEvaluator: options.exerciseEvaluator,
+    exerciseInteractionTypeIds: ["interaction.editor-change"],
+    interactions: options.interactions,
     getViewport: () => ({ width: 1280, height: 800 }),
     prefersReducedMotion: () => true,
     beatDurationMs: options.beatDurationMs ?? 5,
