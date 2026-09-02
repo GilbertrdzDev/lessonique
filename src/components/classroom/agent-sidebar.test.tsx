@@ -1,0 +1,44 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+
+import { WorkspaceRuntimeProvider } from "@/components/workspace/workspace-runtime-provider";
+import { WebMCPRegistrationProvider } from "@/components/webmcp/webmcp-registration-provider";
+
+import { AgentSidebar } from "./agent-sidebar";
+
+describe("AgentSidebar", () => {
+  it("renders the expanded learning-agent contract", () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        WorkspaceRuntimeProvider,
+        null,
+        createElement(
+          WebMCPRegistrationProvider,
+          null,
+          createElement(AgentSidebar),
+        ),
+      ),
+    );
+
+    expect(markup).toContain('aria-label="Learning agent"');
+    expect(markup).toContain('aria-label="Resize learning agent panel"');
+    expect(markup).toContain('data-tooltip="Resize learning agent"');
+    expect(markup).toContain('data-tooltip="Collapse learning agent"');
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain("Learning Plan");
+    expect(markup).toContain("Live Activity");
+    expect(markup).toContain('data-webmcp-availability="detecting"');
+    expect(markup).toContain("Detecting WebMCP");
+    expect(markup).toContain(
+      "ChatGPT has not added any learning steps to this session yet.",
+    );
+    expect(markup).not.toContain("WebMCP Ready");
+    expect(markup).not.toContain("Connected through WebMCP");
+    expect(markup).not.toContain("Understand the objective");
+    expect(markup).toContain("WebMCP Dev Panel");
+    expect(markup).toContain("13 tools");
+    expect(markup).toContain('data-interaction-anchor="anchor.learning-plan"');
+    expect(markup).toContain('data-interaction-anchor="anchor.live-activity"');
+  });
+});

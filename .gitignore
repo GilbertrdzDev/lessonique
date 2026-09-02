@@ -2,9 +2,16 @@
 node_modules/
 
 # Build and test output
+.next/
+out/
 dist/
 build/
 coverage/
+playwright-report/
+test-results/
+public/vendor/monaco/
+*.tsbuildinfo
+next-env.d.ts
 
 # Local environment files
 .env
@@ -19,4 +26,3 @@ coverage/
 .vscode/
 .DS_Store
 Thumbs.db
-

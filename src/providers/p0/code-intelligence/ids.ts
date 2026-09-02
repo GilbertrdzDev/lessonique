@@ -1,0 +1,30 @@
+export const P0_SOURCE_LOCATOR_IDS = {
+  htmlElement: "locator.html.element",
+  htmlAttribute: "locator.html.attribute",
+  htmlClass: "locator.html.class",
+  cssRule: "locator.css.rule",
+  cssProperty: "locator.css.property",
+  cssMediaQuery: "locator.css.media-query",
+  javascriptIdentifier: "locator.javascript.identifier",
+  javascriptFunction: "locator.javascript.function",
+  javascriptCall: "locator.javascript.call",
+  javascriptEventListener: "locator.javascript.event-listener",
+} as const;
+
+export const P0_VALIDATOR_IDS = {
+  fileExists: "validator.file-exists",
+  textExists: "validator.text-exists",
+  htmlElementExists: "validator.html-element-exists",
+  htmlAttributeExists: "validator.html-attribute-exists",
+  htmlClassExists: "validator.html-class-exists",
+  cssRuleExists: "validator.css-rule-exists",
+  cssPropertyExists: "validator.css-property-exists",
+  cssMediaQueryExists: "validator.css-media-query-exists",
+  javascriptIdentifierExists: "validator.javascript-identifier-exists",
+  javascriptFunctionExists: "validator.javascript-function-exists",
+  javascriptCallExists: "validator.javascript-call-exists",
+  javascriptEventListenerExists: "validator.javascript-event-listener-exists",
+  previewElementExists: "validator.preview-element-exists",
+  consoleOutputMatches: "validator.console-output-matches",
+  noConsoleErrors: "validator.no-console-errors",
+} as const;

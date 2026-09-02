@@ -1,0 +1,101 @@
+import { describe, expect, it, vi } from "vitest";
+
+import { WorkspaceStore } from "./store";
+
+describe("WorkspaceStore", () => {
+  it("starts in an idle provider-neutral state", () => {
+    const store = new WorkspaceStore();
+
+    expect(store.getSnapshot()).toEqual({
+      status: "idle",
+      languageIds: [],
+      files: [],
+      directories: [],
+      surfaces: [],
+      consoleEntries: [],
+      interactionEvents: [],
+      runtime: { status: "idle", revision: 0 },
+      environmentRevision: 0,
+    });
+  });
+
+  it("stores generic provider IDs and emits one notification per commit", () => {
+    const store = new WorkspaceStore();
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.commit({
+      ...store.getSnapshot(),
+      status: "ready",
+      profileId: "profile.fake",
+      runtimeProviderId: "runtime.fake",
+      languageIds: ["language.fake"],
+      environmentRevision: 1,
+      runtime: {
+        providerId: "runtime.fake",
+        status: "ready",
+        revision: 1,
+      },
+    });
+
+    expect(store.getSnapshot()).toEqual(
+      expect.objectContaining({
+        profileId: "profile.fake",
+        runtimeProviderId: "runtime.fake",
+        languageIds: ["language.fake"],
+        environmentRevision: 1,
+      }),
+    );
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it("clones committed collections before exposing state", () => {
+    const store = new WorkspaceStore();
+    const languageIds = ["language.fake"];
+
+    store.commit({
+      ...store.getSnapshot(),
+      languageIds,
+    });
+    languageIds.push("language.changed-after-commit");
+
+    expect(store.getSnapshot().languageIds).toEqual(["language.fake"]);
+  });
+
+  it("retains the file collection identity for unrelated state commits", () => {
+    const store = new WorkspaceStore();
+    store.commit({
+      ...store.getSnapshot(),
+      files: [
+        {
+          path: "script.js",
+          languageId: "language.javascript",
+          content: "console.log('ready');",
+          visible: true,
+        },
+      ],
+    });
+    const files = store.getSnapshot().files;
+
+    store.commit({
+      ...store.getSnapshot(),
+      consoleEntries: [
+        {
+          id: "console.1",
+          kind: "log",
+          message: "ready",
+          occurredAt: "2026-08-30T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(store.getSnapshot().files).toBe(files);
+
+    store.commit({
+      ...store.getSnapshot(),
+      files: [{ ...files[0]!, content: "console.log('changed');" }],
+    });
+
+    expect(store.getSnapshot().files).not.toBe(files);
+  });
+});

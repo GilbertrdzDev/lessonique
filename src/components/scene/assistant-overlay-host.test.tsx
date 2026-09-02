@@ -1,0 +1,648 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+
+import { ScenePresentationStore } from "@/core/scene";
+
+import {
+  AssistantOverlayHost,
+  LessoniqueCompanion,
+} from "./assistant-overlay-host";
+
+describe("AssistantOverlayHost", () => {
+  it("preserves visual guide structure, caption, hint, and semantic assistant state", () => {
+    const store = new ScenePresentationStore();
+    store.commit({
+      generation: 1,
+      sceneId: "scene.visual",
+      beatId: "beat.visual",
+      target: {
+        resolverId: "target.surface-anchor",
+        input: { anchorId: "anchor.learning-plan" },
+      },
+      targetSnapshot: {
+        status: "resolved",
+        geometry: { left: 100, top: 80, width: 220, height: 90 },
+      },
+      assistant: {
+        stateId: "assistant.success",
+        placementId: "placement.near-target",
+        visible: true,
+        status: "presenting",
+        position: {
+          left: 350,
+          top: 90,
+          docked: false,
+          side: "right",
+          facing: "left",
+          companionOffsetLeft: 0,
+          companionOffsetTop: 34,
+          guideOffsetLeft: 128,
+          guideOffsetTop: 0,
+        },
+        reducedMotion: false,
+      },
+      effects: [
+        { effectId: "effect.focus" },
+        { effectId: "effect.spotlight" },
+        { effectId: "effect.highlight" },
+        { effectId: "effect.pointer" },
+        { effectId: "effect.callout", input: { text: "Inspect this target." } },
+      ],
+      guide: {
+        title: "Responsive navigation",
+        body: "Keep this line.\nKeep the next line.",
+        supportingItems: ["First supporting item", "Second supporting item"],
+      },
+      caption: "Visible caption",
+      hint: "Use a semantic element.",
+      phase: "teaching",
+      navigation: {
+        enabled: false,
+        current: 1,
+        total: 1,
+        canGoPrevious: false,
+        canGoNext: false,
+        nextBlocked: false,
+        transitioning: false,
+      },
+      paused: false,
+      visibility: "visible",
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain("Lessonique companion: success");
+    expect(html).toContain('data-assistant-state="assistant.success"');
+    expect(html).toContain('data-companion-visual-state="success"');
+    expect(html).toContain('data-assistant-side="right"');
+    expect(html).toContain('data-assistant-facing="left"');
+    expect(html).toContain("Responsive navigation");
+    expect(html).toContain("Keep this line.\nKeep the next line.");
+    expect(html.indexOf("First supporting item")).toBeLessThan(
+      html.indexOf("Second supporting item"),
+    );
+    expect(html).toContain("Visible caption");
+    expect(html).toContain("Use a semantic element.");
+    expect(html).toContain('data-guidance-effect="spotlight"');
+    expect(html).toContain('data-guidance-spotlight-outline="none"');
+    expect(html).toContain('data-guidance-effect="focus"');
+    expect(html).toContain('data-guidance-effect="highlight"');
+    expect(html).toContain('data-guidance-highlight-appearance="spotlight"');
+    expect(html).toContain('data-guidance-highlight-padding="0"');
+    expect(html).toContain("border-0 bg-transparent shadow-none");
+    expect(html).not.toContain('data-guidance-effect="point"');
+    expect(html).toContain("Inspect this target.");
+    expect(html).toContain('aria-label="Move Lessonique companion"');
+    expect(html).toContain('aria-label="Move guide panel"');
+    expect(html).toContain('data-slot="draggable-companion"');
+    expect(html).toContain('data-slot="draggable-guide"');
+    expect(html).not.toMatch(/audio|speech|voice/iu);
+  });
+
+  it("renders backtick-delimited code consistently across guide prose", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      effects: [
+        {
+          effectId: "effect.callout",
+          input: { text: "Inspect `getUser()`." },
+        },
+      ],
+      guide: {
+        title: "Declare with `const`",
+        body: "Use `let` for reassignment.\nRender `<section>` as text.",
+        supportingItems: ["The value has type `string`."],
+      },
+      caption: "The initial value is `42`.",
+      hint: "Check arrays with `Array.isArray()`.",
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html.match(/data-slot="guide-inline-code"/gu)).toHaveLength(7);
+    for (const code of [
+      "const",
+      "let",
+      "&lt;section&gt;",
+      "string",
+      "getUser()",
+      "Array.isArray()",
+      "42",
+    ]) {
+      expect(html).toContain(`data-slot="guide-inline-code">${code}</code>`);
+    }
+    expect(html).toContain("Use ");
+    expect(html).toContain(" for reassignment.\nRender ");
+    expect(html).not.toContain("`const`");
+  });
+
+  it("reflows the guide and points with the target-facing arm on the left side", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      targetSnapshot: {
+        status: "resolved",
+        geometry: { left: 960, top: 180, width: 160, height: 48 },
+      },
+      assistant: {
+        ...current.assistant,
+        stateId: "assistant.pointing",
+        visible: true,
+        position: {
+          left: 516,
+          top: 148,
+          docked: false,
+          side: "left",
+          facing: "right",
+          companionOffsetLeft: 316,
+          companionOffsetTop: 34,
+          guideOffsetLeft: 0,
+          guideOffsetTop: 0,
+        },
+      },
+      effects: [{ effectId: "effect.pointer" }],
+      guide: { body: "The guide stays outside the active target." },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-assistant-side="left"');
+    expect(html).toContain('data-assistant-facing="right"');
+    expect(html).toContain('data-pointing-arm="right"');
+    expect(html).toContain('data-companion-visual-state="guiding"');
+    expect(html).toContain('data-companion-asset="normal"');
+    expect(html).toContain("lessonique-guide-presentation");
+    expect(html).toContain("lessonique-companion-normal.png");
+  });
+
+  it("renders untrusted guidance as inert text instead of HTML", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      effects: [
+        {
+          effectId: "effect.callout",
+          input: { text: '<img src=x onerror="globalThis.compromised=true">' },
+        },
+      ],
+      guide: {
+        title: "Untrusted guide",
+        body: "<script>globalThis.compromised=true</script>",
+        supportingItems: [
+          "<strong>Keep this literal</strong>",
+          "Keep unmatched `token literal.",
+        ],
+      },
+      caption: "<iframe srcdoc=unsafe></iframe>",
+      hint: "<svg onload=unsafe></svg>",
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain("&lt;script&gt;globalThis.compromised=true&lt;/script&gt;");
+    expect(html).toContain("&lt;strong&gt;Keep this literal&lt;/strong&gt;");
+    expect(html).toContain("&lt;img src=x onerror=&quot;");
+    expect(html).toContain("&lt;iframe srcdoc=unsafe&gt;&lt;/iframe&gt;");
+    expect(html).toContain("&lt;svg onload=unsafe&gt;&lt;/svg&gt;");
+    expect(html).toContain("Keep unmatched `token literal.");
+    expect(html).not.toMatch(/<(?:script|strong|img|iframe|svg)\b/iu);
+  });
+
+  it.each([
+    "assistant.idle",
+    "assistant.explaining",
+    "assistant.pointing",
+    "assistant.thinking",
+    "assistant.success",
+    "assistant.warning",
+  ])("renders the accessible %s state", (stateId) => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      assistant: {
+        ...current.assistant,
+        stateId,
+        visible: true,
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain(`data-assistant-state="${stateId}"`);
+    expect(html).toContain(`Lessonique companion: ${stateId.replace("assistant.", "")}`);
+  });
+
+  it("keeps the same companion identity while rendering WebMCP incompatibility", () => {
+    const html = renderToStaticMarkup(
+      <LessoniqueCompanion
+        facing="right"
+        paused={false}
+        stateId="assistant.warning"
+        status="unsupported"
+        visualState="incompatible"
+      />,
+    );
+
+    expect(html).toContain('data-companion-visual-state="incompatible"');
+    expect(html).toContain('data-companion-asset="incompatible"');
+    expect(html).toContain("lessonique-companion-incompatible.png");
+    [
+      "companion-ground-shadow",
+      "companion-hover-ring-upper",
+      "companion-hover-ring-lower",
+      "companion-hover-spark",
+      "companion-limb-left",
+      "companion-limb-right",
+      "body-glitch-slice-a",
+      "body-glitch-slice-b",
+      "body-glitch-slice-c",
+      "companion-eye-glimmer-left",
+      "companion-eye-glimmer-right",
+      "interference-a",
+      "interference-b",
+      "interference-c",
+      "interference-d",
+      "companion-signal-fragment",
+    ].forEach((className) => expect(html).toContain(className));
+    expect(html).not.toContain("Connected through WebMCP");
+  });
+
+  it("renders local Previous and Next navigation for a manual micro-step scene", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      phase: "teaching",
+      navigation: {
+        enabled: true,
+        current: 2,
+        total: 4,
+        canGoPrevious: true,
+        canGoNext: true,
+        nextBlocked: false,
+        transitioning: false,
+      },
+      guide: {
+        title: "Identifier",
+        body: "This micro-step explains one token.",
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-slot="scene-navigation"');
+    expect(html).toContain("Previous");
+    expect(html).toContain("Step 2 of 4");
+    expect(html).toContain("Next");
+  });
+
+  it("labels the existing final forward action Finish", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      phase: "teaching",
+      navigation: {
+        enabled: true,
+        current: 4,
+        total: 4,
+        canGoPrevious: true,
+        canGoNext: true,
+        nextBlocked: false,
+        transitioning: false,
+      },
+      guide: {
+        title: "Everything together",
+        body: "Finish the guided explanation.",
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain("Step 4 of 4");
+    expect(html).toMatch(/<button[^>]*>Finish<\/button>/u);
+    expect(html).not.toContain("Validate Exercise");
+    expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Finish<\/button>/u);
+  });
+
+  it("shows independent exercise validation and keeps Finish blocked until it passes", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      phase: "interaction",
+      navigation: {
+        enabled: true,
+        current: 4,
+        total: 4,
+        canGoPrevious: true,
+        canGoNext: true,
+        nextBlocked: true,
+        transitioning: false,
+        exerciseValidation: { status: "idle" },
+      },
+      guide: {
+        title: "Your first function",
+        body: "Create and call describeFavorite.",
+      },
+    });
+
+    const blockedHtml = renderToStaticMarkup(
+      <AssistantOverlayHost
+        onValidateExercise={vi.fn(async () => undefined)}
+        presentationStore={store}
+      />,
+    );
+
+    expect(blockedHtml).toContain('data-slot="exercise-validation"');
+    expect(blockedHtml).toContain("Validate Exercise");
+    expect(blockedHtml).toMatch(/<button[^>]*disabled=""[^>]*>Finish<\/button>/u);
+
+    store.commit({
+      ...store.getSnapshot(),
+      phase: "feedback",
+      navigation: {
+        ...store.getSnapshot().navigation,
+        nextBlocked: false,
+        exerciseValidation: {
+          status: "passed",
+          message: "Exercise complete. Finish is now available.",
+        },
+      },
+    });
+    const passedHtml = renderToStaticMarkup(
+      <AssistantOverlayHost
+        onValidateExercise={vi.fn(async () => undefined)}
+        presentationStore={store}
+      />,
+    );
+
+    expect(passedHtml).toContain("Exercise complete. Finish is now available.");
+    expect(passedHtml).not.toMatch(/<button[^>]*disabled=""[^>]*>Finish<\/button>/u);
+  });
+
+  it("renders a compact interaction card with forward navigation blocked", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      phase: "interaction",
+      navigation: {
+        enabled: true,
+        current: 3,
+        total: 4,
+        canGoPrevious: true,
+        canGoNext: true,
+        nextBlocked: true,
+        transitioning: false,
+      },
+      guide: {
+        title: "Your turn",
+        body: "Create courseName using const.",
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-scene-phase="interaction"');
+    expect(html).toContain("max-w-72");
+    expect(html).toContain("Complete the required interaction first.");
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>Next<\/button>/u);
+  });
+
+  it("uses the focusing treatment without creating a second character renderer", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      assistant: {
+        ...current.assistant,
+        stateId: "assistant.explaining",
+        visible: true,
+      },
+      effects: [{ effectId: "effect.focus" }],
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-companion-visual-state="focusing"');
+    expect(html).toContain('data-companion-asset="normal"');
+    expect(html.match(/class="lessonique-companion /gu)).toHaveLength(1);
+  });
+
+  it("keeps the full visual meaning in reduced-motion mode", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      assistant: {
+        ...current.assistant,
+        stateId: "assistant.explaining",
+        visible: true,
+        reducedMotion: true,
+      },
+      guide: {
+        title: "Reduced motion guide",
+        body: "The explanation remains visible without animated travel.",
+        supportingItems: ["Focus remains available."],
+      },
+      caption: "Motion is optional; meaning is not.",
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-reduced-motion="true"');
+    expect(html).toContain("Reduced motion guide");
+    expect(html).toContain("Focus remains available.");
+    expect(html).toContain("Motion is optional; meaning is not.");
+  });
+
+  it("keeps structured guidance visible when the target and assistant renderer are unavailable", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      targetSnapshot: { status: "lost" },
+      assistant: {
+        ...current.assistant,
+        visible: false,
+        reducedMotion: true,
+      },
+      effects: [
+        { effectId: "effect.focus" },
+        { effectId: "effect.pointer" },
+        { effectId: "effect.callout", input: { text: "Fallback callout" } },
+      ],
+      guide: {
+        title: "Fallback guide",
+        body: "The lesson remains readable without a rendered companion.",
+        supportingItems: ["Structured support remains available."],
+      },
+      caption: "Visible fallback caption",
+      hint: "Visible fallback hint",
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('aria-label="Teaching guide"');
+    expect(html).toContain("Fallback guide");
+    expect(html).toContain("Structured support remains available.");
+    expect(html).toContain("Fallback callout");
+    expect(html).toContain("Visible fallback caption");
+    expect(html).toContain("Visible fallback hint");
+    expect(html).not.toContain("Lessonique companion:");
+    expect(html).not.toContain("data-guidance-effect=");
+  });
+
+  it("renders multi-line guidance as one continuous block", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      sceneId: "scene.fragments",
+      beatId: "beat.fragments",
+      visibility: "visible",
+      guide: { body: "Inspect the exact fragments." },
+      targetSnapshot: {
+        status: "resolved",
+        geometry: {
+          left: 120,
+          top: 100,
+          width: 180,
+          height: 54,
+          fragments: [
+            { left: 140, top: 100, width: 80, height: 18 },
+            { left: 120, top: 118, width: 180, height: 18 },
+            { left: 120, top: 136, width: 60, height: 18 },
+          ],
+        },
+      },
+      effects: [{ effectId: "effect.highlight" }],
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html.match(/data-guidance-effect="highlight"/gu)).toHaveLength(1);
+    expect(html).toContain('data-guidance-fragment-count="3"');
+    expect(html).toContain('data-guidance-shape="continuous"');
+    expect(html).toContain('data-guidance-highlight-appearance="standalone"');
+    expect(html).toContain("width:188px");
+    expect(html).toContain("height:62px");
+    expect(html).not.toContain("width:800px");
+  });
+
+  it("keeps an exact token highlight tight, readable, and visually defined", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      sceneId: "scene.token-highlight",
+      beatId: "beat.const",
+      visibility: "visible",
+      guide: { title: "The `const` keyword", body: "Only `const` is active." },
+      targetSnapshot: {
+        status: "resolved",
+        geometry: { left: 100, top: 100, width: 42, height: 19 },
+      },
+      effects: [{ effectId: "effect.highlight" }],
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-guidance-highlight-appearance="standalone"');
+    expect(html).toContain('data-guidance-highlight-padding="4"');
+    expect(html).toContain("left:96px");
+    expect(html).toContain("width:50px");
+    expect(html).toContain("height:27px");
+    expect(html).toContain("border-primary/85");
+    expect(html).toContain("bg-primary/10");
+    expect(html).toContain('data-slot="guide-inline-code"');
+  });
+
+  it("replaces target overlays with a compact paused guide while the target is out of view", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      visibility: "out-of-view",
+      target: {
+        resolverId: "target.code-range",
+        input: { filePath: "index.js" },
+      },
+      targetSnapshot: { status: "lost" },
+      guide: { title: "Variables", body: "Explain the current variable." },
+      effects: [{ effectId: "effect.focus" }],
+      navigation: { ...current.navigation, current: 2, total: 9 },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-guidance-visibility="out-of-view"');
+    expect(html).toContain("The explained element is out of view");
+    expect(html).toContain("Return to step");
+    expect(html).not.toContain("data-guidance-effect=");
+    expect(html).not.toContain("Lessonique companion:");
+  });
+
+  it("preserves the scene behind a non-invasive resume control when hidden", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      sceneId: "scene.hidden",
+      beatId: "beat.4",
+      visibility: "hidden-by-user",
+      assistant: {
+        ...current.assistant,
+        stateId: "assistant.explaining",
+        visible: true,
+      },
+      guide: { title: "Hidden guide", body: "Keep this exact beat." },
+      navigation: { ...current.navigation, current: 4, total: 9 },
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('aria-label="Resume guide"');
+    expect(html).toContain('aria-label="Move Lessonique companion"');
+    expect(html).toContain('data-slot="draggable-companion"');
+    expect(html).toContain("cursor-grab");
+    expect(html).not.toContain("Hidden guide");
+    expect(store.getSnapshot().beatId).toBe("beat.4");
+  });
+});
