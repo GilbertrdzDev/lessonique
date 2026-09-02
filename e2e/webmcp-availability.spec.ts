@@ -72,7 +72,7 @@ test.describe("Lessonique WebMCP experience states", () => {
     await expectNoClassroom(page);
   });
 
-  test("renders live guide build stages with one coherent construction companion", async ({
+  test("renders the isolated 16-frame construction sprite across live build stages", async ({
     page,
   }) => {
     await installCapturedWebMCP(page);
@@ -91,11 +91,18 @@ test.describe("Lessonique WebMCP experience states", () => {
 
     expect(understanding).toEqual(expect.objectContaining({ ok: true }));
     await expectExperienceState(page, "building-guide");
-    await expectCompanionVisualState(page, "building", "building");
-    await expect(persistentCompanion(page)).toHaveAttribute(
+    const companion = persistentCompanionHost(page);
+    const constructionPet = companion.locator('[data-slot="construction-pet"]');
+    await expect(companion).toHaveAttribute(
+      "data-companion-renderer",
+      "construction-sprite",
+    );
+    await expect(constructionPet).toHaveAttribute(
       "data-builder-step",
       "1",
     );
+    await expect(constructionPet).toHaveAttribute("data-frame-count", "16");
+    await expect(constructionPet).toHaveAttribute("data-animation-mode", "loop");
     await expect(
       page.getByRole("heading", { name: "Building your AI guide..." }),
     ).toBeVisible();
@@ -105,15 +112,42 @@ test.describe("Lessonique WebMCP experience states", () => {
     await expect(
       page.locator('[data-build-stage-state="active"]'),
     ).toContainText("Understanding your goal");
-    await expect(
-      persistentCompanion(page).locator(".companion-character-image"),
-    ).toHaveAttribute("src", /lessonique-companion-building-body\.png/u);
-    await expect(
-      persistentCompanion(page).locator(".companion-limb-right"),
-    ).toHaveCSS(
+    await expect(constructionPet).toHaveCSS(
       "background-image",
-      /lessonique-companion-building-hammer\.png/u,
+      /construction-pet-sprite\.webp/u,
     );
+    const observedFrames = await constructionPet.evaluate(
+      (element) =>
+        new Promise<number[]>((resolve) => {
+          const frames: number[] = [];
+          let timeout = 0;
+          const observer = new MutationObserver(capture);
+
+          function finish() {
+            window.clearTimeout(timeout);
+            observer.disconnect();
+            resolve(frames);
+          }
+
+          function capture() {
+            const frame = Number(
+              (element as HTMLElement).dataset.spriteFrame ?? "-1",
+            );
+            if (frames.at(-1) !== frame) frames.push(frame);
+            if (new Set(frames).size === 16 && frame === 0) finish();
+          }
+
+          timeout = window.setTimeout(finish, 8_000);
+          observer.observe(element, {
+            attributeFilter: ["data-sprite-frame"],
+            attributes: true,
+          });
+          capture();
+        }),
+    );
+    expect(new Set(observedFrames)).toEqual(new Set([...Array(16).keys()]));
+
+    const originalConstructionNode = await constructionPet.elementHandle();
 
     const preparing = await invokeRegisteredTool(
       page,
@@ -126,7 +160,10 @@ test.describe("Lessonique WebMCP experience states", () => {
     );
 
     expect(preparing).toEqual(expect.objectContaining({ ok: true }));
-    await expect(persistentCompanion(page)).toHaveAttribute(
+    expect(
+      await originalConstructionNode?.evaluate((element) => element.isConnected),
+    ).toBe(true);
+    await expect(constructionPet).toHaveAttribute(
       "data-builder-step",
       "2",
     );
@@ -151,7 +188,10 @@ test.describe("Lessonique WebMCP experience states", () => {
     );
 
     expect(settingUp).toEqual(expect.objectContaining({ ok: true }));
-    await expect(persistentCompanion(page)).toHaveAttribute(
+    expect(
+      await originalConstructionNode?.evaluate((element) => element.isConnected),
+    ).toBe(true);
+    await expect(constructionPet).toHaveAttribute(
       "data-builder-step",
       "3",
     );
@@ -168,12 +208,92 @@ test.describe("Lessonique WebMCP experience states", () => {
     ).toBe(true);
   });
 
+  test("keeps the construction sprite static with reduced motion", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await installCapturedWebMCP(page);
+    await page.goto("/");
+    await expectRegisteredToolCount(page, 13);
+    await invokeRegisteredTool(page, "set_guide_build_status", {
+      status: "building",
+      stage: "understanding-goal",
+    });
+
+    const constructionPet = persistentCompanionHost(page).locator(
+      '[data-slot="construction-pet"]',
+    );
+    await expect(constructionPet).toHaveAttribute("data-animation-mode", "static");
+    await expect(constructionPet).toHaveAttribute("data-sprite-frame", "0");
+    await page.waitForTimeout(700);
+    await expect(constructionPet).toHaveAttribute("data-sprite-frame", "0");
+  });
+
+  test("unmounts the construction sprite when classroom creation fails", async ({
+    page,
+  }) => {
+    await installCapturedWebMCP(page);
+    await page.goto("/");
+    await expectRegisteredToolCount(page, 13);
+    await invokeRegisteredTool(page, "set_guide_build_status", {
+      status: "building",
+      stage: "understanding-goal",
+    });
+    await expect(page.locator('[data-slot="construction-pet"]')).toHaveCount(1);
+
+    const result = await invokeRegisteredTool(page, "create_guided_lesson", {
+      lessonId: "lesson.invalid-construction",
+      lessonMode: "explain",
+      title: "Invalid construction lesson",
+      objective: "Verify that failed classroom setup stops construction motion.",
+      environment: {
+        profileId: "profile.javascript-console",
+        languageIds: ["language.javascript"],
+        activeFile: "script.js",
+        activeSurfaceId: "editor",
+        surfaces: [
+          {
+            id: "editor",
+            options: [{ optionId: "editor.font-size", value: 200 }],
+          },
+        ],
+      },
+      files: [
+        {
+          path: "script.js",
+          languageId: "language.javascript",
+          content: "const invalidConstruction = true;",
+        },
+      ],
+      steps: [
+        {
+          id: "step.invalid-construction",
+          title: "Trigger rollback",
+          objective: "Keep the previous or idle classroom valid.",
+        },
+      ],
+    });
+
+    expect(result).toEqual(expect.objectContaining({ ok: false }));
+    await expectExperienceState(page, "guide-build-error");
+    await expect(page.locator('[data-slot="construction-pet"]')).toHaveCount(0);
+    await expect(persistentCompanionHost(page)).toHaveAttribute(
+      "data-companion-renderer",
+      "standard",
+    );
+  });
+
   test("builds the classroom in the same root document after ChatGPT starts a lesson", async ({
     page,
   }) => {
     await installCapturedWebMCP(page);
     await page.goto("/");
     await expectRegisteredToolCount(page, 13);
+    await invokeRegisteredTool(page, "set_guide_build_status", {
+      status: "building",
+      stage: "understanding-goal",
+    });
+    await expect(page.locator('[data-slot="construction-pet"]')).toHaveCount(1);
 
     const result = await invokeRegisteredTool(page, "create_guided_lesson", {
       lessonId: "lesson.root-transition",
@@ -204,7 +324,7 @@ test.describe("Lessonique WebMCP experience states", () => {
 
     expect(result).toEqual(expect.objectContaining({ ok: true }));
     await expectExperienceState(page, "starting-session");
-    await expectCompanionVisualState(page, "building", "building");
+    await expect(page.locator('[data-slot="construction-pet"]')).toHaveCount(0);
     await expectExperienceState(page, "classroom", 10_000);
     await expectCompanionVisualState(page, "idle", "normal");
     await expect(page).toHaveURL(/\/$/u);
@@ -445,6 +565,10 @@ function persistentCompanion(page: Page) {
   );
 }
 
+function persistentCompanionHost(page: Page) {
+  return page.locator('[data-slot="persistent-companion"]');
+}
+
 async function expectIndependentIncompatibleMotion(page: Page): Promise<void> {
   const companion = persistentCompanion(page);
   const animationContracts = [
@@ -493,7 +617,7 @@ async function expectSharedHoverWaveAndNormalShadow(
 async function expectCompanionVisualState(
   page: Page,
   visualState: string,
-  asset: "normal" | "building" | "incompatible",
+  asset: "normal" | "incompatible",
 ): Promise<void> {
   const companion = persistentCompanion(page);
   await expect(companion).toHaveAttribute(

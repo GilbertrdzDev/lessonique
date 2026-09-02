@@ -315,6 +315,11 @@
   animation: none;
 }
 
+[data-companion-renderer="construction-sprite"]
+  .experience-companion-orbit {
+  display: none;
+}
+
 [data-companion-experience-state="unsupported"] {
   filter: saturate(0.72) brightness(0.96);
 }
@@ -389,11 +394,6 @@
   --companion-layer-asset: url("/images/companion/lessonique-companion-incompatible.png");
 }
 
-.lessonique-companion[data-companion-visual-state="building"] {
-  --companion-layer-asset: url("/images/companion/lessonique-companion-building-body.png");
-  --companion-builder-tool-asset: url("/images/companion/lessonique-companion-building-hammer.png");
-}
-
 .lessonique-companion[data-assistant-facing="left"] {
   --companion-facing: -1;
 }
@@ -462,14 +462,6 @@
   );
   filter: drop-shadow(0 0.55rem 0.8rem rgb(91 72 205 / 0.22));
   transition: filter 260ms ease;
-}
-
-.lessonique-companion[data-companion-visual-state="building"]
-  .companion-character-image {
-  clip-path: none;
-  filter: drop-shadow(0 0.55rem 0.8rem rgb(91 72 205 / 0.2));
-  transform-origin: 50% 66%;
-  will-change: transform;
 }
 
 .lessonique-companion
@@ -545,177 +537,6 @@
 
 .lessonique-companion .companion-limb-layer {
   opacity: 1;
-}
-
-.lessonique-companion .companion-builder-target {
-  position: absolute;
-  top: 44%;
-  right: -2%;
-  z-index: 2;
-  display: block;
-  width: 18%;
-  height: 12%;
-  border: 1px solid rgb(117 226 255 / 0.9);
-  border-radius: 18%;
-  background:
-    linear-gradient(135deg, rgb(101 84 255 / 0.46), rgb(79 230 255 / 0.3)),
-    rgb(233 245 255 / 0.72);
-  box-shadow:
-    inset 0 0 0.35rem rgb(202 249 255 / 0.5),
-    0 0.2rem 0.7rem rgb(99 96 231 / 0.22);
-  opacity: 0;
-  transform: perspective(4rem) rotateX(46deg) rotateZ(-10deg) scale(0.94);
-  transform-origin: center;
-}
-
-.lessonique-companion .companion-builder-target::before,
-.lessonique-companion .companion-builder-target::after,
-.lessonique-companion .companion-builder-target-core {
-  position: absolute;
-  display: block;
-  content: "";
-}
-
-.lessonique-companion .companion-builder-target::before {
-  inset: 27% 18%;
-  border: 1px solid rgb(204 252 255 / 0.88);
-  border-radius: 22%;
-}
-
-.lessonique-companion .companion-builder-target::after {
-  top: 48%;
-  left: 50%;
-  width: 38%;
-  height: 1px;
-  background: rgb(211 252 255 / 0.82);
-  box-shadow: 0 0 0.35rem rgb(113 230 255 / 0.82);
-  transform: translate(-50%, -50%) rotate(90deg);
-}
-
-.lessonique-companion .companion-builder-target-core {
-  top: 50%;
-  left: 50%;
-  width: 38%;
-  height: 1px;
-  background: rgb(211 252 255 / 0.82);
-  box-shadow: 0 0 0.35rem rgb(113 230 255 / 0.82);
-  transform: translate(-50%, -50%);
-}
-
-.lessonique-companion .companion-work-spark {
-  position: absolute;
-  top: -15%;
-  left: -8%;
-  z-index: 4;
-  width: 0.55rem;
-  height: 0.55rem;
-  border: 2px solid rgb(215 251 255 / 0.95);
-  border-radius: 50%;
-  box-shadow: 0 0 0.8rem rgb(90 231 255 / 0.85);
-  opacity: 0;
-  transform: scale(0.4);
-}
-
-.lessonique-companion[data-companion-visual-state="building"]
-  .companion-ground-shadow {
-  visibility: visible;
-  background-image: var(--companion-layer-asset);
-  clip-path: inset(86% 7% 0);
-  opacity: 0.78;
-}
-
-.lessonique-companion[data-companion-visual-state="building"]
-  .companion-hover-system {
-  visibility: visible;
-}
-
-.lessonique-companion[data-companion-visual-state="building"]
-  .companion-limb-layer {
-  visibility: visible;
-  opacity: 1;
-  will-change: transform;
-}
-
-.lessonique-companion[data-companion-visual-state="building"]
-  .companion-limb-left {
-  visibility: hidden;
-  opacity: 0;
-  animation: none;
-}
-
-.lessonique-companion[data-companion-visual-state="building"]
-  .companion-limb-right {
-  background-image: var(--companion-builder-tool-asset);
-  clip-path: none;
-  z-index: 3;
-  transform-origin: 80% 55%;
-  animation: lessonique-builder-work-cycle 2.6s cubic-bezier(0.45, 0, 0.25, 1)
-    infinite;
-}
-
-.lessonique-companion[data-companion-visual-state="building"]
-  .companion-builder-target {
-  opacity: 0.78;
-  animation: lessonique-builder-target-cycle 2.6s ease-in-out infinite;
-}
-
-.lessonique-companion[data-companion-visual-state="building"]
-  .companion-work-spark {
-  animation: lessonique-builder-impact-spark 2.6s ease-out infinite;
-}
-
-.lessonique-companion[data-companion-visual-state="building"]
-  .companion-ground-shadow {
-  animation: lessonique-builder-shadow-cycle 2.6s ease-in-out infinite;
-}
-
-.lessonique-companion[data-companion-visual-state="building"]
-  .companion-character-image {
-  animation: lessonique-builder-body-cycle 2.6s ease-in-out infinite;
-}
-
-.lessonique-companion[data-companion-visual-state="building"][data-builder-step="2"]
-  :is(
-    .companion-character-image,
-    .companion-ground-shadow,
-    .companion-limb-right,
-    .companion-builder-target,
-    .companion-work-spark
-  ) {
-  animation-duration: 2.25s;
-}
-
-.lessonique-companion[data-companion-visual-state="building"][data-builder-step="1"]
-  .companion-body-shell {
-  animation: lessonique-builder-progress-one 420ms cubic-bezier(0.22, 1, 0.36, 1)
-    both;
-}
-
-.lessonique-companion[data-companion-visual-state="building"][data-builder-step="2"]
-  .companion-body-shell {
-  animation: lessonique-builder-progress-two 460ms cubic-bezier(0.22, 1, 0.36, 1)
-    both;
-}
-
-.lessonique-companion[data-companion-visual-state="building"][data-builder-step="3"]
-  .companion-body-shell {
-  animation: lessonique-builder-progress-three 540ms
-    cubic-bezier(0.175, 0.885, 0.32, 1.15) both;
-}
-
-.lessonique-companion[data-companion-visual-state="building"][data-builder-step="3"][data-working-motion="focus"]
-  .companion-limb-right {
-  animation: lessonique-builder-finish-cycle 3.6s ease-in-out infinite;
-}
-
-.lessonique-companion[data-companion-visual-state="building"][data-builder-step="3"]
-  :is(
-    .companion-character-image,
-    .companion-ground-shadow,
-    .companion-builder-target,
-    .companion-work-spark
-  ) {
-  animation-duration: 3.6s;
 }
 
 .lessonique-companion .companion-interference-slice {
@@ -1156,165 +977,6 @@
   50% {
     opacity: 0.9;
     transform: translateY(-0.25rem) scale(1);
-  }
-}
-
-@keyframes lessonique-builder-progress-one {
-  0% {
-    transform: translateY(1px) scale(0.985);
-  }
-  58% {
-    transform: translateY(-1px) scale(1.015);
-  }
-  100% {
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes lessonique-builder-progress-two {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  42% {
-    transform: translateY(-2px) scale(1.022);
-  }
-  72% {
-    transform: translateY(0.5px) scale(0.995);
-  }
-}
-
-@keyframes lessonique-builder-progress-three {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  38% {
-    transform: translateY(-2.5px) scale(1.028);
-  }
-  66% {
-    transform: translateY(0.75px) scale(0.992);
-  }
-}
-
-@keyframes lessonique-builder-work-cycle {
-  0%,
-  100% {
-    transform: rotate(-1deg);
-  }
-  18% {
-    transform: rotate(-7deg);
-  }
-  31% {
-    transform: rotate(-9deg);
-  }
-  43% {
-    transform: rotate(9deg);
-  }
-  49% {
-    transform: rotate(11deg);
-  }
-  58% {
-    transform: rotate(3deg);
-  }
-  76% {
-    transform: rotate(-1deg);
-  }
-}
-
-@keyframes lessonique-builder-body-cycle {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  31% {
-    transform: translateY(-0.4px) scale(1.001);
-  }
-  43% {
-    transform: translateY(0.7px) scale(1.003, 0.997);
-  }
-  54% {
-    transform: translateY(-0.15px) scale(0.999, 1.001);
-  }
-}
-
-@keyframes lessonique-builder-shadow-cycle {
-  0%,
-  100% {
-    opacity: 0.76;
-    transform: scaleX(1);
-  }
-  31% {
-    opacity: 0.72;
-    transform: scaleX(0.985);
-  }
-  43% {
-    opacity: 0.83;
-    transform: scaleX(1.025);
-  }
-  56% {
-    opacity: 0.76;
-    transform: scaleX(1);
-  }
-}
-
-@keyframes lessonique-builder-target-cycle {
-  0%,
-  31%,
-  100% {
-    opacity: 0.72;
-    filter: brightness(1);
-    transform: perspective(4rem) rotateX(46deg) rotateZ(-10deg) scale(0.94);
-  }
-  43% {
-    opacity: 1;
-    filter: brightness(1.12);
-    transform: perspective(4rem) rotateX(46deg) rotateZ(-10deg) scale(1.035);
-  }
-  56% {
-    opacity: 0.82;
-    filter: brightness(1.03);
-    transform: perspective(4rem) rotateX(46deg) rotateZ(-10deg) scale(0.98);
-  }
-}
-
-@keyframes lessonique-builder-impact-spark {
-  0%,
-  40%,
-  58%,
-  100% {
-    opacity: 0;
-    transform: translate(0, 0) scale(0.35);
-  }
-  43% {
-    opacity: 0.95;
-    transform: translate(-0.08rem, -0.08rem) scale(1);
-  }
-  52% {
-    opacity: 0.08;
-    transform: translate(0.2rem, -0.28rem) scale(1.55);
-  }
-}
-
-@keyframes lessonique-builder-finish-cycle {
-  0%,
-  100% {
-    transform: rotate(-2deg);
-  }
-  12% {
-    transform: rotate(-6deg);
-  }
-  27% {
-    transform: rotate(7deg);
-  }
-  36% {
-    transform: rotate(1deg);
-  }
-  58% {
-    transform: rotate(-4deg);
-  }
-  74% {
-    transform: rotate(-3deg);
   }
 }
 
@@ -1791,8 +1453,6 @@
   .lessonique-companion .companion-hover-ring,
   .lessonique-companion .companion-hover-spark,
   .lessonique-companion .companion-limb-layer,
-  .lessonique-companion .companion-builder-target,
-  .lessonique-companion .companion-work-spark,
   .lessonique-companion .companion-body-glitch-slice,
   .lessonique-companion .companion-eye-glimmer,
   .lessonique-companion .companion-expression-glow,

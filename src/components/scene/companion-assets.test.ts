@@ -5,9 +5,6 @@ import { describe, expect, it } from "vitest";
 
 const ASSETS = [
   "lessonique-companion-normal.png",
-  "lessonique-companion-building.png",
-  "lessonique-companion-building-body.png",
-  "lessonique-companion-building-hammer.png",
   "lessonique-companion-incompatible.png",
 ] as const;
 const STYLESHEET = readFileSync(
@@ -44,48 +41,11 @@ describe("Lessonique companion assets", () => {
         "public",
         "images",
         "companion",
-        ASSETS[4],
+        ASSETS[1],
       ),
     );
 
     expect(normal.equals(incompatible)).toBe(false);
-  });
-
-  it("rigs the original construction art into independent lightweight layers", () => {
-    expect(COMPACT_STYLESHEET).toContain(
-      '--companion-layer-asset: url("/images/companion/lessonique-companion-building-body.png")',
-    );
-    expect(COMPACT_STYLESHEET).toContain(
-      '--companion-builder-tool-asset: url("/images/companion/lessonique-companion-building-hammer.png")',
-    );
-    [
-      "lessonique-builder-work-cycle 2.6s",
-      "lessonique-builder-target-cycle 2.6s",
-      "lessonique-builder-impact-spark 2.6s",
-      "lessonique-builder-shadow-cycle 2.6s",
-      "lessonique-builder-body-cycle 2.6s",
-      "lessonique-builder-finish-cycle 3.6s",
-    ].forEach((animation) => {
-      expect(COMPACT_STYLESHEET).toContain(`animation: ${animation}`);
-    });
-    expect(COMPACT_STYLESHEET).toContain(
-      ".companion-limb-right { background-image: var(--companion-builder-tool-asset); clip-path: none;",
-    );
-    expect(COMPACT_STYLESHEET).toContain(
-      ".companion-character-image { clip-path: none;",
-    );
-    expect(COMPACT_STYLESHEET).toContain(
-      '[data-builder-step="1"] .companion-body-shell',
-    );
-    expect(COMPACT_STYLESHEET).toContain(
-      '[data-builder-step="2"] .companion-body-shell',
-    );
-    expect(COMPACT_STYLESHEET).toContain(
-      '[data-builder-step="3"] .companion-body-shell',
-    );
-    expect(COMPACT_STYLESHEET).not.toContain(
-      '[data-working-motion="tap"] .companion-character-image { animation: lessonique-companion-build-tap',
-    );
   });
 
   it("times the incompatible character layers independently", () => {
@@ -145,7 +105,6 @@ describe("Lessonique companion assets", () => {
       ".companion-ground-shadow",
       ".companion-hover-ring",
       ".companion-limb-layer",
-      ".companion-builder-target",
       ".companion-body-glitch-slice",
       ".companion-eye-glimmer",
       ".companion-interference-slice",
