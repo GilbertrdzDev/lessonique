@@ -72,7 +72,7 @@ test.describe("Lessonique WebMCP experience states", () => {
     await expectNoClassroom(page);
   });
 
-  test("renders the isolated 16-frame construction sprite across live build stages", async ({
+  test("renders the isolated 32-frame construction sprite across live build stages", async ({
     page,
   }) => {
     await installCapturedWebMCP(page);
@@ -101,7 +101,7 @@ test.describe("Lessonique WebMCP experience states", () => {
       "data-builder-step",
       "1",
     );
-    await expect(constructionPet).toHaveAttribute("data-frame-count", "16");
+    await expect(constructionPet).toHaveAttribute("data-frame-count", "32");
     await expect(constructionPet).toHaveAttribute("data-animation-mode", "loop");
     await expect(
       page.getByRole("heading", { name: "Building your AI guide..." }),
@@ -114,8 +114,19 @@ test.describe("Lessonique WebMCP experience states", () => {
     ).toContainText("Understanding your goal");
     await expect(constructionPet).toHaveCSS(
       "background-image",
-      /construction-pet-sprite\.webp/u,
+      /construction-pet-sprite-32f\.webp/u,
     );
+    expect(
+      await page.evaluate(() =>
+        performance
+          .getEntriesByType("resource")
+          .some(
+            (entry) =>
+              new URL(entry.name).pathname ===
+              "/images/companion/construction-pet-sprite.webp",
+          ),
+      ),
+    ).toBe(false);
     const observedFrames = await constructionPet.evaluate(
       (element) =>
         new Promise<number[]>((resolve) => {
@@ -134,7 +145,7 @@ test.describe("Lessonique WebMCP experience states", () => {
               (element as HTMLElement).dataset.spriteFrame ?? "-1",
             );
             if (frames.at(-1) !== frame) frames.push(frame);
-            if (new Set(frames).size === 16 && frame === 0) finish();
+            if (new Set(frames).size === 32 && frame === 0) finish();
           }
 
           timeout = window.setTimeout(finish, 8_000);
@@ -145,9 +156,26 @@ test.describe("Lessonique WebMCP experience states", () => {
           capture();
         }),
     );
-    expect(new Set(observedFrames)).toEqual(new Set([...Array(16).keys()]));
+    const uniqueFrames = new Set(observedFrames);
+    expect(uniqueFrames.size).toBeGreaterThanOrEqual(30);
+    expect([...uniqueFrames].every((frame) => frame >= 0 && frame < 32)).toBe(
+      true,
+    );
+    expect([...uniqueFrames]).toEqual(
+      expect.arrayContaining([0, 7, 15, 20, 21, 22, 31]),
+    );
 
     const originalConstructionNode = await constructionPet.elementHandle();
+    await page.waitForFunction(() => {
+      const frame = Number(
+        document.querySelector<HTMLElement>('[data-slot="construction-pet"]')
+          ?.dataset.spriteFrame ?? "-1",
+      );
+      return frame >= 5 && frame <= 10;
+    });
+    const frameBeforePreparing = Number(
+      await constructionPet.getAttribute("data-sprite-frame"),
+    );
 
     const preparing = await invokeRegisteredTool(
       page,
@@ -163,6 +191,9 @@ test.describe("Lessonique WebMCP experience states", () => {
     expect(
       await originalConstructionNode?.evaluate((element) => element.isConnected),
     ).toBe(true);
+    expect(Number(await constructionPet.getAttribute("data-sprite-frame"))).toBeGreaterThanOrEqual(
+      frameBeforePreparing,
+    );
     await expect(constructionPet).toHaveAttribute(
       "data-builder-step",
       "2",
@@ -176,6 +207,16 @@ test.describe("Lessonique WebMCP experience states", () => {
     await expect(
       page.locator('[data-build-stage-state="pending"]'),
     ).toContainText("Setting up the classroom");
+    await page.waitForFunction(() => {
+      const frame = Number(
+        document.querySelector<HTMLElement>('[data-slot="construction-pet"]')
+          ?.dataset.spriteFrame ?? "-1",
+      );
+      return frame >= 12 && frame <= 18;
+    });
+    const frameBeforeSettingUp = Number(
+      await constructionPet.getAttribute("data-sprite-frame"),
+    );
 
     const settingUp = await invokeRegisteredTool(
       page,
@@ -191,6 +232,9 @@ test.describe("Lessonique WebMCP experience states", () => {
     expect(
       await originalConstructionNode?.evaluate((element) => element.isConnected),
     ).toBe(true);
+    expect(Number(await constructionPet.getAttribute("data-sprite-frame"))).toBeGreaterThanOrEqual(
+      frameBeforeSettingUp,
+    );
     await expect(constructionPet).toHaveAttribute(
       "data-builder-step",
       "3",
@@ -206,6 +250,46 @@ test.describe("Lessonique WebMCP experience states", () => {
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
     ).toBe(true);
+  });
+
+  test("keeps the construction sprite clipped across four viewport classes", async ({
+    page,
+  }) => {
+    await installCapturedWebMCP(page);
+    await page.goto("/");
+    await expectRegisteredToolCount(page, 13);
+    await invokeRegisteredTool(page, "set_guide_build_status", {
+      status: "building",
+      stage: "understanding-goal",
+    });
+
+    const constructionPet = persistentCompanionHost(page).locator(
+      '[data-slot="construction-pet"]',
+    );
+    const viewports = [
+      { height: 1_080, label: "desktop", width: 1_728 },
+      { height: 768, label: "laptop", width: 1_366 },
+      { height: 1_024, label: "tablet", width: 768 },
+      { height: 844, label: "mobile", width: 390 },
+    ] as const;
+
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await expect(constructionPet, viewport.label).toBeVisible();
+      const box = await constructionPet.boundingBox();
+      expect(box, viewport.label).not.toBeNull();
+      expect(box!.width / box!.height, viewport.label).toBeCloseTo(362 / 320, 2);
+      await expect(constructionPet, viewport.label).toHaveCSS(
+        "background-size",
+        "800% 400%",
+      );
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+        viewport.label,
+      ).toBe(true);
+    }
   });
 
   test("keeps the construction sprite static with reduced motion", async ({

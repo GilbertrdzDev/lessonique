@@ -6,11 +6,12 @@
   overflow: hidden;
   contain: layout paint style;
   isolation: isolate;
-  background-image: url("/images/companion/construction-pet-sprite.webp");
+  background-image: var(--construction-sprite-url);
   background-repeat: no-repeat;
   background-position: var(--construction-frame-x, 0%)
     var(--construction-frame-y, 0%);
-  background-size: 400% 400%;
+  background-size: var(--construction-sheet-width)
+    var(--construction-sheet-height);
   image-rendering: auto;
   will-change: background-position;
 }

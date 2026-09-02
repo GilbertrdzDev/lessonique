@@ -1,11 +1,9 @@
 export type SpriteSheetFrameListener = (frameIndex: number) => void;
 
 export type SpriteSheetScheduler = Readonly<{
-  clearTimeout(handle: ReturnType<typeof setTimeout>): void;
-  setTimeout(
-    callback: () => void,
-    delayMs: number,
-  ): ReturnType<typeof setTimeout>;
+  cancelFrame(handle: number): void;
+  now(): number;
+  requestFrame(callback: FrameRequestCallback): number;
 }>;
 
 type SpriteSheetAnimatorOptions = Readonly<{
@@ -15,8 +13,9 @@ type SpriteSheetAnimatorOptions = Readonly<{
 }>;
 
 const DEFAULT_SCHEDULER: SpriteSheetScheduler = {
-  clearTimeout: (handle) => clearTimeout(handle),
-  setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+  cancelFrame: (handle) => cancelAnimationFrame(handle),
+  now: () => performance.now(),
+  requestFrame: (callback) => requestAnimationFrame(callback),
 };
 
 export class SpriteSheetAnimator {
@@ -24,9 +23,11 @@ export class SpriteSheetAnimator {
   readonly #onFrame: SpriteSheetFrameListener;
   readonly #scheduler: SpriteSheetScheduler;
   #frameIndex = 0;
+  #elapsedInFrameMs = 0;
+  #frameHandle?: number;
+  #lastTimestampMs = 0;
   #running = false;
   #paused = false;
-  #timer?: ReturnType<typeof setTimeout>;
 
   constructor(options: SpriteSheetAnimatorOptions) {
     validateFrameDurations(options.frameDurationsMs);
@@ -53,49 +54,65 @@ export class SpriteSheetAnimator {
       frameIndex,
       this.#frameDurationsMs.length,
     );
+    this.#elapsedInFrameMs = 0;
+    this.#lastTimestampMs = this.#scheduler.now();
     this.#running = true;
     this.#paused = false;
     this.#onFrame(this.#frameIndex);
-    this.#scheduleCurrentFrame();
+    this.#requestNextFrame();
   }
 
   pause(): void {
     if (!this.#running || this.#paused) return;
     this.#paused = true;
-    this.#clearTimer();
+    this.#cancelFrame();
   }
 
   resume(): void {
     if (!this.#running || !this.#paused) return;
     this.#paused = false;
-    this.#scheduleCurrentFrame();
+    this.#lastTimestampMs = this.#scheduler.now();
+    this.#requestNextFrame();
   }
 
   stop(): void {
-    this.#clearTimer();
+    this.#cancelFrame();
     this.#running = false;
     this.#paused = false;
+    this.#elapsedInFrameMs = 0;
   }
 
-  #advance = (): void => {
+  #advance = (timestampMs: number): void => {
+    this.#frameHandle = undefined;
     if (!this.#running || this.#paused) return;
-    this.#frameIndex = (this.#frameIndex + 1) % this.#frameDurationsMs.length;
-    this.#onFrame(this.#frameIndex);
-    this.#scheduleCurrentFrame();
+    this.#elapsedInFrameMs += Math.max(
+      0,
+      timestampMs - this.#lastTimestampMs,
+    );
+    this.#lastTimestampMs = timestampMs;
+
+    let frameChanged = false;
+    while (
+      this.#elapsedInFrameMs >= this.#frameDurationsMs[this.#frameIndex]
+    ) {
+      this.#elapsedInFrameMs -= this.#frameDurationsMs[this.#frameIndex];
+      this.#frameIndex =
+        (this.#frameIndex + 1) % this.#frameDurationsMs.length;
+      frameChanged = true;
+    }
+    if (frameChanged) this.#onFrame(this.#frameIndex);
+    this.#requestNextFrame();
   };
 
-  #clearTimer(): void {
-    if (this.#timer === undefined) return;
-    this.#scheduler.clearTimeout(this.#timer);
-    this.#timer = undefined;
+  #cancelFrame(): void {
+    if (this.#frameHandle === undefined) return;
+    this.#scheduler.cancelFrame(this.#frameHandle);
+    this.#frameHandle = undefined;
   }
 
-  #scheduleCurrentFrame(): void {
-    this.#clearTimer();
-    this.#timer = this.#scheduler.setTimeout(
-      this.#advance,
-      this.#frameDurationsMs[this.#frameIndex],
-    );
+  #requestNextFrame(): void {
+    this.#cancelFrame();
+    this.#frameHandle = this.#scheduler.requestFrame(this.#advance);
   }
 }
 

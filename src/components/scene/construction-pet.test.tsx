@@ -4,24 +4,41 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
-  CONSTRUCTION_PET_FRAME_COUNT,
+  CONSTRUCTION_PET_16_FRAME_CONFIG,
+  CONSTRUCTION_PET_32_FRAME_CONFIG,
+  CONSTRUCTION_PET_CONFIG,
   CONSTRUCTION_PET_FRAME_DURATIONS_MS,
-  CONSTRUCTION_PET_SPRITE_SRC,
   ConstructionPet,
 } from "./construction-pet";
 
 describe("ConstructionPet", () => {
-  it("renders one isolated 4-by-4 sprite surface", () => {
+  it("renders one isolated 8-by-4 sprite surface", () => {
     const html = renderToStaticMarkup(
       <ConstructionPet builderStep={2} reducedMotion={false} />,
     );
 
     expect(html).toContain('data-slot="construction-pet"');
     expect(html).toContain('data-builder-step="2"');
-    expect(html).toContain('data-frame-count="16"');
+    expect(html).toContain('data-frame-count="32"');
     expect(html).toContain('data-animation-mode="loop"');
     expect(html).not.toContain("<img");
     expect((html.match(/<span/gu) ?? [])).toHaveLength(1);
+    expect(html).toContain("--construction-sheet-width:800%");
+    expect(html).toContain("construction-pet-sprite-32f.webp");
+  });
+
+  it("can reactivate the preserved 4-by-4 sprite through configuration", () => {
+    const html = renderToStaticMarkup(
+      <ConstructionPet
+        builderStep={2}
+        reducedMotion={false}
+        spriteConfig={CONSTRUCTION_PET_16_FRAME_CONFIG}
+      />,
+    );
+
+    expect(html).toContain('data-frame-count="16"');
+    expect(html).toContain("--construction-sheet-width:400%");
+    expect(html).toContain("construction-pet-sprite.webp");
   });
 
   it("keeps reduced motion on the representative static frame", () => {
@@ -33,33 +50,30 @@ describe("ConstructionPet", () => {
     expect(html).toContain('data-sprite-frame="0"');
   });
 
-  it("declares a complete, naturally timed 16-frame cycle", () => {
-    expect(CONSTRUCTION_PET_FRAME_COUNT).toBe(16);
-    expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS).toHaveLength(16);
-    expect(new Set(CONSTRUCTION_PET_FRAME_DURATIONS_MS).size).toBeGreaterThan(8);
+  it("declares a complete, naturally timed 32-frame cycle", () => {
+    expect(CONSTRUCTION_PET_CONFIG.frameCount).toBe(32);
+    expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS).toHaveLength(32);
+    expect(new Set(CONSTRUCTION_PET_FRAME_DURATIONS_MS).size).toBeGreaterThan(18);
     expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS[0]).toBeGreaterThan(
-      CONSTRUCTION_PET_FRAME_DURATIONS_MS[6],
+      CONSTRUCTION_PET_FRAME_DURATIONS_MS[18],
     );
-    expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS[8]).toBeGreaterThan(
-      CONSTRUCTION_PET_FRAME_DURATIONS_MS[6],
+    expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS[21]).toBeGreaterThan(
+      CONSTRUCTION_PET_FRAME_DURATIONS_MS[19],
     );
+    expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS.reduce((sum, value) => sum + value, 0)).toBe(3_875);
   });
 
-  it("ships one bounded WebP sprite asset", () => {
-    const path = join(
-      process.cwd(),
-      "public",
-      CONSTRUCTION_PET_SPRITE_SRC.slice(1),
-    );
-    const bytes = readFileSync(path);
-    const dimensions = readLosslessWebPDimensions(bytes);
-
-    expect(bytes.subarray(0, 4).toString("ascii")).toBe("RIFF");
-    expect(bytes.subarray(8, 12).toString("ascii")).toBe("WEBP");
-    expect(dimensions).toEqual({ height: 1_280, width: 1_448 });
-    expect(dimensions.width / 4).toBe(362);
-    expect(dimensions.height / 4).toBe(320);
-    expect(statSync(path).size).toBeLessThan(850_000);
+  it("ships both bounded, cell-aligned WebP sprite presets", () => {
+    assertSpriteAsset(CONSTRUCTION_PET_16_FRAME_CONFIG, {
+      height: 1_280,
+      maximumBytes: 850_000,
+      width: 1_448,
+    });
+    assertSpriteAsset(CONSTRUCTION_PET_32_FRAME_CONFIG, {
+      height: 1_280,
+      maximumBytes: 1_700_000,
+      width: 2_896,
+    });
   });
 
   it("clips one responsive cell without interpolating neighboring frames", () => {
@@ -70,10 +84,26 @@ describe("ConstructionPet", () => {
 
     expect(stylesheet).toContain("aspect-ratio: 362 / 320");
     expect(stylesheet).toContain("overflow: hidden");
-    expect(stylesheet).toContain("background-size: 400% 400%");
-    expect(stylesheet).toContain("construction-pet-sprite.webp");
+    expect(stylesheet).toContain("background-size: var(--construction-sheet-width) var(--construction-sheet-height)");
+    expect(stylesheet).toContain("background-image: var(--construction-sprite-url)");
   });
 });
+
+function assertSpriteAsset(
+  config: typeof CONSTRUCTION_PET_16_FRAME_CONFIG | typeof CONSTRUCTION_PET_32_FRAME_CONFIG,
+  expected: Readonly<{ height: number; maximumBytes: number; width: number }>,
+): void {
+  const path = join(process.cwd(), "public", config.spriteSrc.slice(1));
+  const bytes = readFileSync(path);
+  const dimensions = readLosslessWebPDimensions(bytes);
+
+  expect(bytes.subarray(0, 4).toString("ascii")).toBe("RIFF");
+  expect(bytes.subarray(8, 12).toString("ascii")).toBe("WEBP");
+  expect(dimensions).toEqual({ height: expected.height, width: expected.width });
+  expect(dimensions.width / config.columns).toBe(config.cellWidth);
+  expect(dimensions.height / config.rows).toBe(config.cellHeight);
+  expect(statSync(path).size).toBeLessThan(expected.maximumBytes);
+}
 
 function readLosslessWebPDimensions(bytes: Buffer): {
   height: number;
