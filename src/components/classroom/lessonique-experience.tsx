@@ -317,7 +317,7 @@ function PersistentCompanion({
           {constructionActive ? (
             <ConstructionPet
               builderStep={resolveBuilderStep(buildStage)}
-              className="w-44 sm:w-56"
+              className="w-[16.5rem] sm:w-[21rem]"
               reducedMotion={Boolean(shouldReduceMotion)}
             />
           ) : completionTransitionActive ? null : (

@@ -72,7 +72,7 @@ test.describe("Lessonique WebMCP experience states", () => {
     await expectNoClassroom(page);
   });
 
-  test("renders the isolated 32-frame construction sprite across live build stages", async ({
+  test("renders the isolated 16-frame construction sprite across live build stages", async ({
     page,
   }) => {
     await installCapturedWebMCP(page);
@@ -101,7 +101,7 @@ test.describe("Lessonique WebMCP experience states", () => {
       "data-builder-step",
       "1",
     );
-    await expect(constructionPet).toHaveAttribute("data-frame-count", "32");
+    await expect(constructionPet).toHaveAttribute("data-frame-count", "16");
     await expect(constructionPet).toHaveAttribute("data-animation-mode", "loop");
     await expect(
       page.getByRole("heading", { name: "Building your AI guide..." }),
@@ -114,7 +114,7 @@ test.describe("Lessonique WebMCP experience states", () => {
     ).toContainText("Understanding your goal");
     await expect(constructionPet).toHaveCSS(
       "background-image",
-      /construction-pet-sprite-32f\.webp/u,
+      /construction-pet-sprite\.webp/u,
     );
     expect(
       await page.evaluate(() =>
@@ -123,7 +123,7 @@ test.describe("Lessonique WebMCP experience states", () => {
           .some(
             (entry) =>
               new URL(entry.name).pathname ===
-              "/images/companion/construction-pet-sprite.webp",
+              "/images/companion/construction-pet-sprite-32f.webp",
           ),
       ),
     ).toBe(false);
@@ -145,7 +145,7 @@ test.describe("Lessonique WebMCP experience states", () => {
               (element as HTMLElement).dataset.spriteFrame ?? "-1",
             );
             if (frames.at(-1) !== frame) frames.push(frame);
-            if (new Set(frames).size === 32 && frame === 0) finish();
+            if (new Set(frames).size === 16 && frame === 0) finish();
           }
 
           timeout = window.setTimeout(finish, 8_000);
@@ -157,12 +157,12 @@ test.describe("Lessonique WebMCP experience states", () => {
         }),
     );
     const uniqueFrames = new Set(observedFrames);
-    expect(uniqueFrames.size).toBeGreaterThanOrEqual(30);
-    expect([...uniqueFrames].every((frame) => frame >= 0 && frame < 32)).toBe(
+    expect(uniqueFrames.size).toBeGreaterThanOrEqual(15);
+    expect([...uniqueFrames].every((frame) => frame >= 0 && frame < 16)).toBe(
       true,
     );
     expect([...uniqueFrames]).toEqual(
-      expect.arrayContaining([0, 7, 15, 20, 21, 22, 31]),
+      expect.arrayContaining([0, 3, 6, 7, 8, 12, 15]),
     );
 
     const originalConstructionNode = await constructionPet.elementHandle();
@@ -171,7 +171,7 @@ test.describe("Lessonique WebMCP experience states", () => {
         document.querySelector<HTMLElement>('[data-slot="construction-pet"]')
           ?.dataset.spriteFrame ?? "-1",
       );
-      return frame >= 5 && frame <= 10;
+      return frame >= 3 && frame <= 6;
     });
     const frameBeforePreparing = Number(
       await constructionPet.getAttribute("data-sprite-frame"),
@@ -212,7 +212,7 @@ test.describe("Lessonique WebMCP experience states", () => {
         document.querySelector<HTMLElement>('[data-slot="construction-pet"]')
           ?.dataset.spriteFrame ?? "-1",
       );
-      return frame >= 12 && frame <= 18;
+      return frame >= 9 && frame <= 12;
     });
     const frameBeforeSettingUp = Number(
       await constructionPet.getAttribute("data-sprite-frame"),
@@ -267,10 +267,10 @@ test.describe("Lessonique WebMCP experience states", () => {
       '[data-slot="construction-pet"]',
     );
     const viewports = [
-      { height: 1_080, label: "desktop", width: 1_728 },
-      { height: 768, label: "laptop", width: 1_366 },
-      { height: 1_024, label: "tablet", width: 768 },
-      { height: 844, label: "mobile", width: 390 },
+      { expectedPetWidth: 336, height: 1_080, label: "desktop", width: 1_728 },
+      { expectedPetWidth: 336, height: 768, label: "laptop", width: 1_366 },
+      { expectedPetWidth: 336, height: 1_024, label: "tablet", width: 768 },
+      { expectedPetWidth: 264, height: 844, label: "mobile", width: 390 },
     ] as const;
 
     for (const viewport of viewports) {
@@ -278,10 +278,14 @@ test.describe("Lessonique WebMCP experience states", () => {
       await expect(constructionPet, viewport.label).toBeVisible();
       const box = await constructionPet.boundingBox();
       expect(box, viewport.label).not.toBeNull();
+      expect(box!.width, viewport.label).toBeCloseTo(
+        viewport.expectedPetWidth,
+        0,
+      );
       expect(box!.width / box!.height, viewport.label).toBeCloseTo(362 / 320, 2);
       await expect(constructionPet, viewport.label).toHaveCSS(
         "background-size",
-        "800% 400%",
+        "400% 400%",
       );
       expect(
         await page.evaluate(

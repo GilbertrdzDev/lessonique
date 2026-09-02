@@ -12,33 +12,33 @@ import {
 } from "./construction-pet";
 
 describe("ConstructionPet", () => {
-  it("renders one isolated 8-by-4 sprite surface", () => {
+  it("renders the approved 4-by-4 sprite surface by default", () => {
     const html = renderToStaticMarkup(
       <ConstructionPet builderStep={2} reducedMotion={false} />,
     );
 
     expect(html).toContain('data-slot="construction-pet"');
     expect(html).toContain('data-builder-step="2"');
-    expect(html).toContain('data-frame-count="32"');
+    expect(html).toContain('data-frame-count="16"');
     expect(html).toContain('data-animation-mode="loop"');
     expect(html).not.toContain("<img");
     expect((html.match(/<span/gu) ?? [])).toHaveLength(1);
-    expect(html).toContain("--construction-sheet-width:800%");
-    expect(html).toContain("construction-pet-sprite-32f.webp");
+    expect(html).toContain("--construction-sheet-width:400%");
+    expect(html).toContain("construction-pet-sprite.webp");
   });
 
-  it("can reactivate the preserved 4-by-4 sprite through configuration", () => {
+  it("retains the 8-by-4 sprite for explicit reactivation", () => {
     const html = renderToStaticMarkup(
       <ConstructionPet
         builderStep={2}
         reducedMotion={false}
-        spriteConfig={CONSTRUCTION_PET_16_FRAME_CONFIG}
+        spriteConfig={CONSTRUCTION_PET_32_FRAME_CONFIG}
       />,
     );
 
-    expect(html).toContain('data-frame-count="16"');
-    expect(html).toContain("--construction-sheet-width:400%");
-    expect(html).toContain("construction-pet-sprite.webp");
+    expect(html).toContain('data-frame-count="32"');
+    expect(html).toContain("--construction-sheet-width:800%");
+    expect(html).toContain("construction-pet-sprite-32f.webp");
   });
 
   it("keeps reduced motion on the representative static frame", () => {
@@ -50,17 +50,22 @@ describe("ConstructionPet", () => {
     expect(html).toContain('data-sprite-frame="0"');
   });
 
-  it("declares a complete, naturally timed 32-frame cycle", () => {
-    expect(CONSTRUCTION_PET_CONFIG.frameCount).toBe(32);
-    expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS).toHaveLength(32);
-    expect(new Set(CONSTRUCTION_PET_FRAME_DURATIONS_MS).size).toBeGreaterThan(18);
+  it("declares the complete approved 16-frame timing cycle by default", () => {
+    expect(CONSTRUCTION_PET_CONFIG.frameCount).toBe(16);
+    expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS).toHaveLength(16);
+    expect(new Set(CONSTRUCTION_PET_FRAME_DURATIONS_MS).size).toBeGreaterThan(8);
     expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS[0]).toBeGreaterThan(
-      CONSTRUCTION_PET_FRAME_DURATIONS_MS[18],
+      CONSTRUCTION_PET_FRAME_DURATIONS_MS[6],
     );
-    expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS[21]).toBeGreaterThan(
-      CONSTRUCTION_PET_FRAME_DURATIONS_MS[19],
+    expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS[8]).toBeGreaterThan(
+      CONSTRUCTION_PET_FRAME_DURATIONS_MS[6],
     );
-    expect(CONSTRUCTION_PET_FRAME_DURATIONS_MS.reduce((sum, value) => sum + value, 0)).toBe(3_875);
+    expect(
+      CONSTRUCTION_PET_FRAME_DURATIONS_MS.reduce(
+        (sum, value) => sum + value,
+        0,
+      ),
+    ).toBe(3_245);
   });
 
   it("ships both bounded, cell-aligned WebP sprite presets", () => {
