@@ -8,10 +8,16 @@ import type {
   WorkspaceFile,
   WorkspaceFileOperation,
 } from "@/core/workspace/contracts";
-import type { RuntimeAdapter } from "@/core/workspace/runtime-adapter";
+import type {
+  RuntimeAdapter,
+  RuntimeFileSynchronizationOptions,
+} from "@/core/workspace/runtime-adapter";
 
 export interface SandpackRuntimeHost {
-  replaceFiles(files: Readonly<Record<string, string>>): Promise<void>;
+  replaceFiles(
+    files: Readonly<Record<string, string>>,
+    automaticExecutionEnabled: boolean,
+  ): Promise<void>;
   run(): Promise<void>;
   stop(): Promise<void>;
   restart(): Promise<void>;
@@ -31,6 +37,7 @@ export class SandpackRuntimeAdapter implements RuntimeAdapter {
   #host?: SandpackRuntimeHost;
   #files: WorkspaceFile[] = [];
   #status: RuntimeSnapshot["status"] = "idle";
+  #automaticExecutionEnabled = true;
   #revision = 0;
   #errorMessage?: string;
 
@@ -52,16 +59,24 @@ export class SandpackRuntimeAdapter implements RuntimeAdapter {
     };
   }
 
-  async replaceFiles(files: readonly WorkspaceFile[]): Promise<void> {
+  async replaceFiles(
+    files: readonly WorkspaceFile[],
+    options: RuntimeFileSynchronizationOptions = {},
+  ): Promise<void> {
     const previousFiles = this.#files;
+    const previousAutomaticExecutionEnabled = this.#automaticExecutionEnabled;
     this.#files = files.map((file) => ({ ...file }));
+    if (options.automaticExecutionEnabled !== undefined) {
+      this.#automaticExecutionEnabled = options.automaticExecutionEnabled;
+    }
     try {
       await this.#syncHostFiles();
-      this.#status = "ready";
+      this.#status = this.#automaticExecutionEnabled ? "ready" : "stopped";
       this.#revision += 1;
       this.#errorMessage = undefined;
     } catch (error) {
       this.#files = previousFiles;
+      this.#automaticExecutionEnabled = previousAutomaticExecutionEnabled;
       this.#status = "error";
       this.#errorMessage = getErrorMessage(error);
       throw error;
@@ -104,16 +119,18 @@ export class SandpackRuntimeAdapter implements RuntimeAdapter {
     }
     try {
       if (actionId === this.#actionIds.run) {
+        this.#automaticExecutionEnabled = true;
         this.#status = "running";
         await host.run();
         this.#status = "ready";
       } else if (actionId === this.#actionIds.stop) {
+        this.#automaticExecutionEnabled = false;
         await host.stop();
         this.#status = "stopped";
       } else if (actionId === this.#actionIds.restart) {
         this.#status = "preparing";
         await host.restart();
-        this.#status = "ready";
+        this.#status = this.#automaticExecutionEnabled ? "ready" : "stopped";
       } else if (actionId === this.#actionIds.clearConsole) {
         await host.clearConsole();
       } else {
@@ -143,6 +160,7 @@ export class SandpackRuntimeAdapter implements RuntimeAdapter {
       status: this.#status,
       revision: this.#revision,
       files: this.#files.map((file) => ({ ...file })),
+      automaticExecutionEnabled: this.#automaticExecutionEnabled,
       ...(this.#errorMessage ? { errorMessage: this.#errorMessage } : {}),
     };
   }
@@ -152,6 +170,7 @@ export class SandpackRuntimeAdapter implements RuntimeAdapter {
       await this.#host.stop();
       await this.#host.clearConsole();
     }
+    this.#automaticExecutionEnabled = true;
     this.#status = "stopped";
     this.#revision += 1;
     this.#errorMessage = undefined;
@@ -159,6 +178,7 @@ export class SandpackRuntimeAdapter implements RuntimeAdapter {
 
   async dispose(): Promise<void> {
     this.#host = undefined;
+    this.#automaticExecutionEnabled = true;
     this.#status = "stopped";
   }
 
@@ -168,6 +188,7 @@ export class SandpackRuntimeAdapter implements RuntimeAdapter {
     }
     await this.#host.replaceFiles(
       Object.fromEntries(this.#files.map(({ path, content }) => [`/${path}`, content])),
+      this.#automaticExecutionEnabled,
     );
   }
 }

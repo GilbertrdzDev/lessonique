@@ -21,6 +21,9 @@ import { cn } from "@/lib/utils";
 
 export type PreviewViewport = "desktop" | "tablet" | "mobile";
 
+const AUTOMATIC_EXECUTION_DEBOUNCE_MS = 250;
+const INITIAL_RUNTIME_RETRY_MS = 100;
+
 export type SandpackRuntimeViewProps = Readonly<{
   files: readonly WorkspaceFile[];
   onConsoleEntriesChange(entries: readonly ConsoleEntry[]): void;
@@ -45,9 +48,7 @@ export function SandpackRuntimeView({
       activeFile: files.find(({ path }) => path === "index.html")
         ? "/index.html"
         : undefined,
-      autorun: true,
-      recompileMode: "delayed" as const,
-      recompileDelay: 250,
+      autorun: false,
       visibleFiles: files.map(({ path }) => `/${path}`),
     },
   }));
@@ -144,31 +145,74 @@ function SandpackRuntimeBinding({
   const sandpackRef = useRef(sandpack);
   const dispatchRef = useRef(dispatch);
   const resetConsoleRef = useRef(reset);
+  const onConsoleEntriesChangeRef = useRef(onConsoleEntriesChange);
   const consoleEntryTimestampsRef = useRef(new Map<string, string>());
   const managedRuntimePathsRef = useRef<Set<string> | undefined>(undefined);
   const scheduledRunRef = useRef<number | undefined>(undefined);
+  const runGenerationRef = useRef(0);
+  const automaticExecutionEnabledRef = useRef(true);
 
   useEffect(() => {
     sandpackRef.current = sandpack;
     dispatchRef.current = dispatch;
     resetConsoleRef.current = reset;
-  }, [dispatch, reset, sandpack]);
+    onConsoleEntriesChangeRef.current = onConsoleEntriesChange;
+  }, [dispatch, onConsoleEntriesChange, reset, sandpack]);
 
   useEffect(() => {
-    const cancelScheduledRun = () => {
+    const clearScheduledRun = () => {
       if (scheduledRunRef.current !== undefined) {
         window.clearTimeout(scheduledRunRef.current);
         scheduledRunRef.current = undefined;
       }
     };
+    const cancelScheduledRun = () => {
+      clearScheduledRun();
+      runGenerationRef.current += 1;
+    };
+    const clearConsole = () => {
+      consoleEntryTimestampsRef.current.clear();
+      resetConsoleRef.current();
+      onConsoleEntriesChangeRef.current([]);
+    };
+    const runCurrentFiles = async (
+      generation: number,
+      retryInitialRun: boolean,
+    ) => {
+      if (
+        generation !== runGenerationRef.current ||
+        !automaticExecutionEnabledRef.current
+      ) {
+        return;
+      }
+      clearScheduledRun();
+      const current = sandpackRef.current;
+      const needsInitialRetry = retryInitialRun && current.status === "initial";
+      clearConsole();
+      await current.runSandpack();
+      if (
+        needsInitialRetry &&
+        generation === runGenerationRef.current &&
+        automaticExecutionEnabledRef.current
+      ) {
+        scheduledRunRef.current = window.setTimeout(() => {
+          scheduledRunRef.current = undefined;
+          void runCurrentFiles(generation, false);
+        }, INITIAL_RUNTIME_RETRY_MS);
+      }
+    };
     const scheduleRun = () => {
       cancelScheduledRun();
+      const generation = runGenerationRef.current;
       scheduledRunRef.current = window.setTimeout(() => {
         scheduledRunRef.current = undefined;
-        void sandpackRef.current.runSandpack();
-      }, 350);
+        void runCurrentFiles(generation, true);
+      }, AUTOMATIC_EXECUTION_DEBOUNCE_MS);
     };
-    const replaceRuntimeFiles = (files: Readonly<Record<string, string>>) => {
+    const replaceRuntimeFiles = (
+      files: Readonly<Record<string, string>>,
+      automaticExecutionEnabled: boolean,
+    ) => {
       const nextFiles = createSandpackPreviewFilesFromRuntime(files);
       const nextPaths = new Set(Object.keys(nextFiles));
       const current = sandpackRef.current;
@@ -184,31 +228,42 @@ function SandpackRuntimeBinding({
       removedPaths.forEach((path) => current.deleteFile(path, false));
       if (hasChanges) {
         current.updateFile(nextFiles, undefined, false);
+      }
+      automaticExecutionEnabledRef.current = automaticExecutionEnabled;
+      if (automaticExecutionEnabled) {
         scheduleRun();
+      } else if (!automaticExecutionEnabled) {
+        cancelScheduledRun();
       }
       managedRuntimePathsRef.current = nextPaths;
     };
     const detachRuntime = runtime.attachHost({
-      replaceFiles: async (files) => {
-        replaceRuntimeFiles(files);
+      replaceFiles: async (files, automaticExecutionEnabled) => {
+        replaceRuntimeFiles(files, automaticExecutionEnabled);
       },
       run: async () => {
+        automaticExecutionEnabledRef.current = true;
         cancelScheduledRun();
-        await sandpackRef.current.runSandpack();
+        await runCurrentFiles(runGenerationRef.current, true);
       },
-      stop: async () => cancelScheduledRun(),
+      stop: async () => {
+        automaticExecutionEnabledRef.current = false;
+        cancelScheduledRun();
+      },
       restart: async () => {
         cancelScheduledRun();
+        clearConsole();
         dispatchRef.current({ type: "refresh" });
       },
       clearConsole: async () => {
-        resetConsoleRef.current();
+        clearConsole();
       },
     });
     const detachPreview = previewAdapter.attachRuntimeHost({
       reload: async () => dispatchRef.current({ type: "refresh" }),
     });
     return () => {
+      automaticExecutionEnabledRef.current = false;
       cancelScheduledRun();
       detachPreview();
       detachRuntime();

@@ -329,6 +329,40 @@ describe("WorkspaceController", () => {
     expect(store.getSnapshot()).toEqual(previousState);
     expect(runtime.getSnapshot().files).toEqual(previousRuntimeFiles);
   });
+
+  it("resynchronizes identical files when a new environment enables automatic execution", async () => {
+    const { controller, runtime, store } = createHarness();
+    await controller.activateProfile("profile.javascript-console");
+    const state = store.getSnapshot();
+    vi.mocked(runtime.replaceFiles).mockClear();
+
+    await controller.configureEnvironment({
+      profileId: state.profileId!,
+      runtimeProviderId: state.runtimeProviderId!,
+      languageIds: state.languageIds,
+      files: state.files,
+      surfaces: state.surfaces.map((surface) => ({
+        id: surface.id,
+        visible: surface.visible,
+        order: surface.order,
+        placementId: surface.placementId,
+        modeId: surface.modeId,
+        options: Object.entries(surface.options).map(([optionId, value]) => ({
+          optionId,
+          value,
+        })),
+      })),
+      activeFilePath: state.activeFilePath,
+      activeSurfaceId: state.activeSurfaceId,
+      clearConsole: true,
+      automaticExecutionEnabled: true,
+    });
+
+    expect(runtime.replaceFiles).toHaveBeenCalledOnce();
+    expect(runtime.replaceFiles).toHaveBeenCalledWith(state.files, {
+      automaticExecutionEnabled: true,
+    });
+  });
 });
 
 function createHarness() {

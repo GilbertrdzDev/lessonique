@@ -65,6 +65,7 @@ export interface RuntimeState {
   providerId?: RuntimeProviderId;
   status: RuntimeStatus;
   revision: number;
+  automaticExecutionEnabled?: boolean;
   errorMessage?: string;
 }
 
@@ -96,6 +97,7 @@ export interface WorkspaceEnvironmentConfiguration {
   activeSurfaceId?: SurfaceId;
   focusActiveSurface?: boolean;
   clearConsole?: boolean;
+  automaticExecutionEnabled?: boolean;
 }
 
 export type WorkspaceFileOperation =
@@ -108,6 +110,7 @@ export type RuntimeSnapshot = {
   status: RuntimeStatus;
   revision: number;
   files: readonly WorkspaceFile[];
+  automaticExecutionEnabled?: boolean;
   errorMessage?: string;
 };
 

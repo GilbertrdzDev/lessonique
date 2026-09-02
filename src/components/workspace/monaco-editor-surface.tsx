@@ -91,6 +91,9 @@ export function MonacoEditorSurface({
     } else {
       editorInstance.setModel(null);
     }
+    adapter.setActiveFileReadOnly(
+      isWorkspaceFileReadOnly(filesRef.current, activePath),
+    );
     synchronizingRef.current = false;
     syncDiagnosticMarkers(monaco, registry, filesRef.current, diagnostics);
     const detachAdapter = adapter.attach(editorInstance);
@@ -125,10 +128,13 @@ export function MonacoEditorSurface({
     } else {
       editorInstance.setModel(null);
     }
+    adapter.setActiveFileReadOnly(
+      isWorkspaceFileReadOnly(files, activeFilePath),
+    );
     synchronizingRef.current = false;
     const monaco = monacoRef.current;
     if (monaco) syncDiagnosticMarkers(monaco, registry, files, diagnostics);
-  }, [activeFilePath, diagnostics, files]);
+  }, [activeFilePath, adapter, diagnostics, files]);
 
   useEffect(
     () =>
@@ -183,6 +189,13 @@ export function MonacoEditorSurface({
       />
     </div>
   );
+}
+
+function isWorkspaceFileReadOnly(
+  files: readonly WorkspaceFile[],
+  activeFilePath: string | undefined,
+): boolean {
+  return files.find(({ path }) => path === activeFilePath)?.readOnly === true;
 }
 
 function syncDiagnosticMarkers(

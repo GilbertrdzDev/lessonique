@@ -251,6 +251,8 @@ export function ClassroomWorkspace() {
   const editorVisible = isSurfaceVisible(state.surfaces, P0_SURFACE_IDS.editor);
   const previewVisible = isSurfaceVisible(state.surfaces, P0_SURFACE_IDS.preview);
   const consoleVisible = isSurfaceVisible(state.surfaces, P0_SURFACE_IDS.console);
+  const automaticExecutionEnabled =
+    state.runtime.automaticExecutionEnabled ?? false;
   const openFiles = useMemo(
     () =>
       openFilePaths
@@ -579,14 +581,18 @@ export function ClassroomWorkspace() {
               }
             />
             <WorkspaceAction
-              icon={Play}
-              label="Run workspace"
-              onClick={() => void executeAction(P0_ENVIRONMENT_ACTION_IDS.run)}
-            />
-            <WorkspaceAction
-              icon={Square}
-              label="Stop workspace"
-              onClick={() => void executeAction(P0_ENVIRONMENT_ACTION_IDS.stop)}
+              active={automaticExecutionEnabled}
+              icon={automaticExecutionEnabled ? Square : Play}
+              label={
+                automaticExecutionEnabled ? "Stop workspace" : "Run workspace"
+              }
+              onClick={() =>
+                void executeAction(
+                  automaticExecutionEnabled
+                    ? P0_ENVIRONMENT_ACTION_IDS.stop
+                    : P0_ENVIRONMENT_ACTION_IDS.run,
+                )
+              }
             />
             <WorkspaceAction
               icon={RotateCcw}
@@ -813,12 +819,14 @@ export function ClassroomWorkspace() {
 }
 
 function WorkspaceAction({
+  active,
   controls,
   expanded,
   icon: Icon,
   label,
   onClick,
 }: Readonly<{
+  active?: boolean;
   controls?: string;
   expanded?: boolean;
   icon: typeof Play;
@@ -830,7 +838,12 @@ function WorkspaceAction({
       aria-controls={controls}
       aria-expanded={expanded}
       aria-label={label}
-      className="rounded-lg border bg-background/70 p-2 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+      aria-pressed={active}
+      className={`rounded-lg border p-2 transition-colors ${
+        active
+          ? "border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+          : "bg-background/70 text-muted-foreground hover:border-primary/40 hover:text-primary"
+      }`}
       onClick={onClick}
       title={label}
       type="button"

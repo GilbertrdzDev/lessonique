@@ -10,9 +10,16 @@ import type {
   WorkspaceFileOperation,
 } from "./contracts";
 
+export interface RuntimeFileSynchronizationOptions {
+  automaticExecutionEnabled?: boolean;
+}
+
 export interface RuntimeAdapter {
   readonly providerId: RuntimeProviderId;
-  replaceFiles(files: readonly WorkspaceFile[]): Promise<void>;
+  replaceFiles(
+    files: readonly WorkspaceFile[],
+    options?: RuntimeFileSynchronizationOptions,
+  ): Promise<void>;
   applyOperations(operations: readonly WorkspaceFileOperation[]): Promise<void>;
   executeAction(
     actionId: EnvironmentActionId,

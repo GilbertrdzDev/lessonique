@@ -379,7 +379,13 @@ describe("createSandpackPreviewFiles", () => {
 
     expect(result["/script.js"]?.code).toBe("console.log('test');");
     expect(result["/index.html"]?.code).toContain("/script.js");
+    expect(
+      result["/index.html"]?.code.indexOf(PREVIEW_BRIDGE_RUNTIME_PATH),
+    ).toBeLessThan(result["/index.html"]?.code.indexOf("/script.js") ?? -1);
     expect(result[PREVIEW_BRIDGE_RUNTIME_PATH]?.hidden).toBe(true);
+    expect(result[PREVIEW_BRIDGE_RUNTIME_PATH]?.code).toContain(
+      'addEventListener("unhandledrejection"',
+    );
   });
 });
 

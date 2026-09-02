@@ -39,6 +39,32 @@ describe("MonacoEditorAdapter", () => {
     expect(result.accepted).toBe(true);
   });
 
+  it("keeps a read-only workspace file aligned with the Monaco editing state", async () => {
+    const editor = createEditor();
+    const adapter = createAdapter();
+    adapter.setActiveFileReadOnly(true);
+    adapter.attach(editor);
+
+    await adapter.configure(EDITOR_CONFIGURATION);
+
+    expect(editor.updateOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ readOnly: true }),
+    );
+
+    adapter.setActiveFileReadOnly(false);
+
+    expect(editor.updateOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ readOnly: false }),
+    );
+
+    await adapter.configure({ ...EDITOR_CONFIGURATION, modeId: "read_only" });
+    adapter.setActiveFileReadOnly(false);
+
+    expect(editor.updateOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ readOnly: true }),
+    );
+  });
+
   it("opens and measures semantic code targets without accepting selectors", async () => {
     let activeFilePath = "styles.css";
     const openFile = vi.fn(async (path: string) => {

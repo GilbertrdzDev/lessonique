@@ -2473,7 +2473,7 @@ test.describe("classroom shell", () => {
     );
   });
 
-  test("runs one console log per edit without resizing the workspace", async ({
+  test("toggles automatic execution and keeps only the latest console result", async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium");
@@ -2484,7 +2484,16 @@ test.describe("classroom shell", () => {
     const consoleEntries = page
       .getByRole("log", { name: "Runtime console" })
       .locator("[data-console-entry-id]");
+    const runtimeConsole = page.getByRole("log", { name: "Runtime console" });
     await expect(editor).toBeVisible({ timeout: 15_000 });
+    const stopAutomaticExecution = page.getByRole("button", {
+      name: "Stop workspace",
+    });
+    await expect(stopAutomaticExecution).toBeVisible();
+    await expect(stopAutomaticExecution).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.getByRole("button", { name: "Run workspace" }),
+    ).toHaveCount(0);
 
     const initialEditorHeight = await editorPanel.evaluate(
       (element) => element.getBoundingClientRect().height,
@@ -2496,13 +2505,49 @@ test.describe("classroom shell", () => {
     await page.getByRole("button", { name: "Clear console" }).click();
     await getWorkspaceTab(page, "script.js").click();
     await editor.press("Control+A");
-    await page.keyboard.insertText("console.log('test');");
+    await page.keyboard.insertText("console.log('stale');");
+    await editor.press("Control+A");
+    await page.keyboard.insertText("console.log('latest');");
 
     await expect(consoleEntries).toHaveCount(1, { timeout: 20_000 });
-    await expect(consoleEntries.first()).toContainText("test");
-    await page.waitForTimeout(2_000);
+    await expect(consoleEntries.first()).toContainText("latest");
+    await expect(runtimeConsole).not.toContainText("stale");
+    await page.waitForTimeout(1_000);
 
     await expect(consoleEntries).toHaveCount(1);
+    await stopAutomaticExecution.click();
+    const runAutomaticExecution = page.getByRole("button", {
+      name: "Run workspace",
+    });
+    await expect(runAutomaticExecution).toBeVisible();
+    await expect(runAutomaticExecution).toHaveAttribute("aria-pressed", "false");
+    await expect(stopAutomaticExecution).toHaveCount(0);
+
+    await editor.press("Control+A");
+    await page.keyboard.insertText("console.log('paused change');");
+    await page.waitForTimeout(750);
+    await expect(consoleEntries).toHaveCount(1);
+    await expect(consoleEntries.first()).toContainText("latest");
+    await expect(runtimeConsole).not.toContainText("paused change");
+
+    await runAutomaticExecution.click();
+    await expect(stopAutomaticExecution).toBeVisible();
+    await expect(stopAutomaticExecution).toHaveAttribute("aria-pressed", "true");
+    await expect(runAutomaticExecution).toHaveCount(0);
+    await expect(consoleEntries).toHaveCount(1, { timeout: 20_000 });
+    await expect(consoleEntries.first()).toContainText("paused change");
+    await expect(runtimeConsole).not.toContainText("latest");
+
+    await editor.press("Control+A");
+    await page.keyboard.insertText("throw new Error('latest runtime failure');");
+    await expect(runtimeConsole).toContainText("latest runtime failure", {
+      timeout: 20_000,
+    });
+    await expect(runtimeConsole).not.toContainText("paused change");
+
+    await page.getByRole("button", { name: "Clear console" }).click();
+    await expect(consoleEntries).toHaveCount(0);
+    await expect(stopAutomaticExecution).toBeVisible();
     expect(
       await editorPanel.evaluate(
         (element) => element.getBoundingClientRect().height,
@@ -2513,6 +2558,78 @@ test.describe("classroom shell", () => {
         (element) => element.getBoundingClientRect().height,
       ),
     ).toBe(initialClassroomHeight);
+  });
+
+  test("reruns identical lesson source after reset and honors read-only files", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+
+    const lessonInput = {
+      lessonId: "lesson.same-source-runtime",
+      lessonMode: "explain",
+      title: "Same-source runtime verification",
+      objective: "Verify reset execution and workspace file permissions.",
+      replaceExisting: true,
+      environment: {
+        profileId: "profile.javascript-console",
+        languageIds: ["language.javascript"],
+        activeFile: "variables.js",
+        activeSurfaceId: "editor",
+      },
+      files: [
+        {
+          path: "variables.js",
+          languageId: "language.javascript",
+          content: "console.log('same-source-run');",
+        },
+      ],
+      steps: [
+        {
+          id: "step.same-source-runtime",
+          title: "Inspect the current run",
+          objective: "Confirm that the current source executes exactly once.",
+        },
+      ],
+    };
+    const runtimeConsole = page.getByRole("log", { name: "Runtime console" });
+    const consoleEntries = runtimeConsole.locator("[data-console-entry-id]");
+    await expect(
+      page.getByRole("textbox", { name: "Workspace code editor" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    for (let replacement = 0; replacement < 2; replacement += 1) {
+      const result = await invokeRegisteredTool(
+        page,
+        "create_guided_lesson",
+        lessonInput,
+      );
+      expect(result).toEqual(expect.objectContaining({ ok: true }));
+      await expect(consoleEntries).toHaveCount(1, { timeout: 20_000 });
+      await expect(consoleEntries.first()).toContainText("same-source-run");
+    }
+
+    const readOnlyResult = await invokeRegisteredTool(
+      page,
+      "create_guided_lesson",
+      {
+        ...lessonInput,
+        files: lessonInput.files.map((file) => ({ ...file, readOnly: true })),
+      },
+    );
+    expect(readOnlyResult).toEqual(expect.objectContaining({ ok: true }));
+    await expect(consoleEntries).toHaveCount(1, { timeout: 20_000 });
+
+    const editor = page.getByRole("textbox", { name: "Workspace code editor" });
+    await editor.press("Control+A");
+    await page.keyboard.insertText("console.log('forbidden-visible-edit');");
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      "same-source-run",
+    );
+    await expect(page.locator(".monaco-editor .view-lines")).not.toContainText(
+      "forbidden-visible-edit",
+    );
+    await expect(runtimeConsole).not.toContainText("forbidden-visible-edit");
   });
 
   test("resizes editor and console precisely while the empty console fills its track", async ({
@@ -2742,7 +2859,9 @@ test.describe("classroom shell", () => {
       'document.querySelector("#lessonique-demo").textContent = "Preview updated"; console.log("workspace-ready");',
     );
     await expect(page.locator(".monaco-editor .squiggly-error")).toHaveCount(0);
-    await page.getByRole("button", { name: "Run workspace" }).click();
+    await expect(
+      page.getByRole("button", { name: "Stop workspace" }),
+    ).toBeVisible();
 
     const preview = page.frameLocator("[data-preview-viewport]:visible iframe");
     const button = preview.getByRole("button", { name: "Preview updated" });

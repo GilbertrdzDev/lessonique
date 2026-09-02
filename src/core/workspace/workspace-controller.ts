@@ -123,6 +123,7 @@ export class WorkspaceController {
         ({ visible }) => visible !== false,
       )?.path,
       clearConsole: true,
+      automaticExecutionEnabled: true,
     });
   }
 
@@ -162,18 +163,41 @@ export class WorkspaceController {
       configuration.activeSurfaceId,
     );
     const nextRuntime = this.#runtimeAdapters.get(configuration.runtimeProviderId);
+    const nextRuntimeSnapshot = nextRuntime.getSnapshot();
     const filesChanged =
       nextRuntime !== previousRuntime ||
       !workspaceFilesEqual(previousState.files, configuration.files);
+    const automaticRuntimeNeedsSynchronization =
+      nextRuntime === previousRuntime &&
+      nextRuntimeSnapshot.status === "stopped" &&
+      nextRuntimeSnapshot.automaticExecutionEnabled === true;
+    const synchronizeRuntimeFiles =
+      filesChanged ||
+      automaticRuntimeNeedsSynchronization ||
+      configuration.automaticExecutionEnabled !== undefined;
 
-    if (filesChanged) {
-      await nextRuntime.replaceFiles(configuration.files);
+    if (synchronizeRuntimeFiles) {
+      await nextRuntime.replaceFiles(configuration.files, {
+        ...(configuration.automaticExecutionEnabled !== undefined
+          ? {
+              automaticExecutionEnabled:
+                configuration.automaticExecutionEnabled,
+            }
+          : {}),
+      });
     }
     try {
       await this.#applySurfaceTransaction(surfaces, previousState.surfaces);
     } catch (error) {
-      if (filesChanged && nextRuntime === previousRuntime) {
-        await nextRuntime.replaceFiles(previousState.files);
+      if (synchronizeRuntimeFiles && nextRuntime === previousRuntime) {
+        await nextRuntime.replaceFiles(previousState.files, {
+          ...(nextRuntimeSnapshot.automaticExecutionEnabled !== undefined
+            ? {
+                automaticExecutionEnabled:
+                  nextRuntimeSnapshot.automaticExecutionEnabled,
+              }
+            : {}),
+        });
       } else if (nextRuntime !== previousRuntime) {
         await nextRuntime.dispose();
       }
@@ -204,6 +228,12 @@ export class WorkspaceController {
         providerId: runtimeSnapshot.providerId,
         status: runtimeSnapshot.status,
         revision: runtimeSnapshot.revision,
+        ...(runtimeSnapshot.automaticExecutionEnabled !== undefined
+          ? {
+              automaticExecutionEnabled:
+                runtimeSnapshot.automaticExecutionEnabled,
+            }
+          : {}),
         ...(runtimeSnapshot.errorMessage
           ? { errorMessage: runtimeSnapshot.errorMessage }
           : {}),
@@ -586,6 +616,12 @@ export class WorkspaceController {
         providerId: nextRuntime.providerId,
         status: nextRuntime.getSnapshot().status,
         revision: nextRuntime.getSnapshot().revision,
+        ...(nextRuntime.getSnapshot().automaticExecutionEnabled !== undefined
+          ? {
+              automaticExecutionEnabled:
+                nextRuntime.getSnapshot().automaticExecutionEnabled,
+            }
+          : {}),
       },
       environmentRevision: Math.max(1, state.environmentRevision),
     });
@@ -607,6 +643,12 @@ export class WorkspaceController {
             providerId: runtimeSnapshot.providerId,
             status: "stopped",
             revision: runtimeSnapshot.revision,
+            ...(runtimeSnapshot.automaticExecutionEnabled !== undefined
+              ? {
+                  automaticExecutionEnabled:
+                    runtimeSnapshot.automaticExecutionEnabled,
+                }
+              : {}),
           }
         : {
             status: "idle",
@@ -948,6 +990,12 @@ export class WorkspaceController {
             providerId: runtimeSnapshot.providerId,
             status: runtimeSnapshot.status,
             revision: runtimeSnapshot.revision,
+            ...(runtimeSnapshot.automaticExecutionEnabled !== undefined
+              ? {
+                  automaticExecutionEnabled:
+                    runtimeSnapshot.automaticExecutionEnabled,
+                }
+              : {}),
             ...(runtimeSnapshot.errorMessage
               ? { errorMessage: runtimeSnapshot.errorMessage }
               : {}),
@@ -970,6 +1018,11 @@ export class WorkspaceController {
         providerId: snapshot.providerId,
         status: snapshot.status,
         revision: snapshot.revision,
+        ...(snapshot.automaticExecutionEnabled !== undefined
+          ? {
+              automaticExecutionEnabled: snapshot.automaticExecutionEnabled,
+            }
+          : {}),
         ...(snapshot.errorMessage
           ? { errorMessage: snapshot.errorMessage }
           : {}),

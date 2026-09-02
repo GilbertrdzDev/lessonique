@@ -79,6 +79,7 @@ export class MonacoEditorAdapter
   #contentSubscription?: IDisposable;
   #eventSequence = 0;
   #configuration?: SurfaceState;
+  #activeFileReadOnly = false;
   #focusRequested = false;
 
   constructor(options: MonacoEditorAdapterOptions) {
@@ -131,6 +132,11 @@ export class MonacoEditorAdapter
       ...configuration,
       options: { ...configuration.options },
     };
+    this.#applyEditorOptions();
+  }
+
+  setActiveFileReadOnly(readOnly: boolean): void {
+    this.#activeFileReadOnly = readOnly;
     this.#applyEditorOptions();
   }
 
@@ -262,7 +268,8 @@ export class MonacoEditorAdapter
       ...(typeof options["editor.font-size"] === "number"
         ? { fontSize: options["editor.font-size"] }
         : {}),
-      readOnly: this.#configuration.modeId === "read_only",
+      readOnly:
+        this.#configuration.modeId === "read_only" || this.#activeFileReadOnly,
     });
   }
 

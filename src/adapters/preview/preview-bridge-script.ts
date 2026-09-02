@@ -104,6 +104,23 @@ export const PREVIEW_BRIDGE_SCRIPT = String.raw`(() => {
     }
   }
 
+  function describeRuntimeFailure(value, fallback) {
+    if (value instanceof Error) {
+      return value.name + ": " + value.message;
+    }
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+    return fallback;
+  }
+
+  addEventListener("error", (event) => {
+    console.error(describeRuntimeFailure(event.error, event.message || "Runtime error"));
+  });
+  addEventListener("unhandledrejection", (event) => {
+    console.error(describeRuntimeFailure(event.reason, "Unhandled promise rejection"));
+  });
+
   addEventListener("message", (event) => {
     const message = event.data;
     if (!message || message.channel !== channel || message.direction !== "host-to-preview") {
@@ -214,9 +231,7 @@ function addPreviewBridge(result: SandpackPreviewFiles): SandpackPreviewFiles {
     const bridgeTag = `<script src="${PREVIEW_BRIDGE_RUNTIME_PATH}"></script>`;
     const html = result[htmlPath]?.code ?? "";
     result[htmlPath] = {
-      code: /<\/body\s*>/iu.test(html)
-        ? html.replace(/<\/body\s*>/iu, `${bridgeTag}</body>`)
-        : `${html}\n${bridgeTag}\n`,
+      code: injectBridgeBeforeUserScripts(html, bridgeTag),
     };
   }
   result[PREVIEW_BRIDGE_RUNTIME_PATH] = {
@@ -224,4 +239,18 @@ function addPreviewBridge(result: SandpackPreviewFiles): SandpackPreviewFiles {
     hidden: true,
   };
   return result;
+}
+
+function injectBridgeBeforeUserScripts(html: string, bridgeTag: string): string {
+  if (/<head(?:\s[^>]*)?>/iu.test(html)) {
+    return html.replace(/<head(?:\s[^>]*)?>/iu, (openingTag) =>
+      `${openingTag}${bridgeTag}`,
+    );
+  }
+  if (/<body(?:\s[^>]*)?>/iu.test(html)) {
+    return html.replace(/<body(?:\s[^>]*)?>/iu, (openingTag) =>
+      `${openingTag}${bridgeTag}`,
+    );
+  }
+  return `${bridgeTag}\n${html}`;
 }

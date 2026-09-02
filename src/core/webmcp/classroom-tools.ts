@@ -189,6 +189,7 @@ export class ClassroomToolService {
       ...(activeSurfaceId ? { activeSurfaceId } : {}),
       focusActiveSurface: true,
       clearConsole: true,
+      automaticExecutionEnabled: true,
     };
     try {
       this.#workspace.validateEnvironmentConfiguration(environment);
