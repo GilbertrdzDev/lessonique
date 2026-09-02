@@ -86,8 +86,12 @@ describe("AssistantOverlayHost", () => {
     expect(html).toContain("Visible caption");
     expect(html).toContain("Use a semantic element.");
     expect(html).toContain('data-guidance-effect="spotlight"');
+    expect(html).toContain('data-guidance-spotlight-outline="none"');
     expect(html).toContain('data-guidance-effect="focus"');
     expect(html).toContain('data-guidance-effect="highlight"');
+    expect(html).toContain('data-guidance-highlight-appearance="spotlight"');
+    expect(html).toContain('data-guidance-highlight-padding="0"');
+    expect(html).toContain("border-0 bg-transparent shadow-none");
     expect(html).not.toContain('data-guidance-effect="point"');
     expect(html).toContain("Inspect this target.");
     expect(html).toContain('aria-label="Move Lessonique companion"');
@@ -492,8 +496,9 @@ describe("AssistantOverlayHost", () => {
     expect(html.match(/data-guidance-effect="highlight"/gu)).toHaveLength(1);
     expect(html).toContain('data-guidance-fragment-count="3"');
     expect(html).toContain('data-guidance-shape="continuous"');
-    expect(html).toContain("width:184px");
-    expect(html).toContain("height:58px");
+    expect(html).toContain('data-guidance-highlight-appearance="standalone"');
+    expect(html).toContain("width:188px");
+    expect(html).toContain("height:62px");
     expect(html).not.toContain("width:800px");
   });
 
@@ -517,10 +522,11 @@ describe("AssistantOverlayHost", () => {
       <AssistantOverlayHost presentationStore={store} />,
     );
 
-    expect(html).toContain('data-guidance-highlight-padding="2"');
-    expect(html).toContain("left:98px");
-    expect(html).toContain("width:46px");
-    expect(html).toContain("height:23px");
+    expect(html).toContain('data-guidance-highlight-appearance="standalone"');
+    expect(html).toContain('data-guidance-highlight-padding="4"');
+    expect(html).toContain("left:96px");
+    expect(html).toContain("width:50px");
+    expect(html).toContain("height:27px");
     expect(html).toContain("border-primary/85");
     expect(html).toContain("bg-primary/10");
     expect(html).toContain('data-slot="guide-inline-code"');

@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { TargetGeometry } from "@/core/workspace/targeting";
 
-import { calculatePointerPath, PlacementEngine } from "./placement";
+import {
+  calculatePointerPath,
+  createRoundedConnectorPath,
+  PlacementEngine,
+} from "./placement";
 import type { ScenePresentationPosition } from "./store";
 
 describe("PlacementEngine", () => {
@@ -10,6 +14,15 @@ describe("PlacementEngine", () => {
     const target = { left: 100, top: 120, width: 200, height: 80 };
     const placement = calculate({ target });
     assertSafePlacement(placement, target, { width: 1200, height: 800 });
+    assertCompanionBesideGuideOuterEdge(placement, target);
+  });
+
+  it("keeps the companion beside the guide on the target-opposite edge", () => {
+    const target = { left: 980, top: 300, width: 80, height: 32 };
+    const placement = calculate({ target });
+
+    assertSafePlacement(placement, target, { width: 1200, height: 800 });
+    assertCompanionBesideGuideOuterEdge(placement, target);
   });
 
   it("suppresses the companion when a small viewport cannot fit every element safely", () => {
@@ -118,6 +131,17 @@ describe("PlacementEngine", () => {
     expectOrthogonalPath(points);
   });
 
+  it("converts orthogonal connector points into rounded elbows", () => {
+    expect(
+      createRoundedConnectorPath([
+        { x: 0, y: 0 },
+        { x: 20, y: 0 },
+        { x: 20, y: 20 },
+        { x: 40, y: 20 },
+      ]),
+    ).toBe("M 0 0 L 12 0 Q 20 0 20 8 L 20 12 Q 20 20 28 20 L 40 20");
+  });
+
   it("avoids registered interface obstructions when another safe candidate exists", () => {
     const target = { left: 450, top: 260, width: 100, height: 30 };
     const obstruction = { left: 566, top: 160, width: 430, height: 300 };
@@ -206,6 +230,41 @@ function rectForGuide(
     left: placement.left + placement.guideOffsetLeft,
     top: placement.top + placement.guideOffsetTop,
     ...size,
+  };
+}
+
+function assertCompanionBesideGuideOuterEdge(
+  placement: ScenePresentationPosition,
+  target: TargetGeometry,
+  guideSize = { width: 300, height: 180 },
+): void {
+  const companion = rectForCompanion(placement);
+  const guide = rectForGuide(placement, guideSize);
+  const targetCenter = center(target);
+  const guideCenter = center(guide);
+  const horizontal = Math.abs(guideCenter.x - targetCenter.x) >=
+    Math.abs(guideCenter.y - targetCenter.y);
+
+  if (horizontal) {
+    if (guideCenter.x >= targetCenter.x) {
+      expect(companion.left).toBe(guide.left + guide.width + 12);
+    } else {
+      expect(companion.left + companion.width + 12).toBe(guide.left);
+    }
+    return;
+  }
+
+  if (guideCenter.y >= targetCenter.y) {
+    expect(companion.top).toBe(guide.top + guide.height + 12);
+  } else {
+    expect(companion.top + companion.height + 12).toBe(guide.top);
+  }
+}
+
+function center(value: TargetGeometry): { x: number; y: number } {
+  return {
+    x: value.left + value.width / 2,
+    y: value.top + value.height / 2,
   };
 }
 

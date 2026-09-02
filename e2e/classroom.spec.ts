@@ -1656,6 +1656,14 @@ test.describe("classroom shell", () => {
     await expect(highlight).toHaveCount(1);
     await expect(highlight).toHaveAttribute("data-guidance-shape", "continuous");
     await expect(highlight).toHaveAttribute("data-guidance-fragment-count", "1");
+    await expect(highlight).toHaveAttribute(
+      "data-guidance-highlight-appearance",
+      "standalone",
+    );
+    await expect(highlight).toHaveAttribute("data-guidance-highlight-padding", "4");
+    await expect(highlight).toHaveCSS("border-top-width", "2px");
+    await expect(highlight).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(highlight).not.toHaveCSS("box-shadow", "none");
 
     await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(guide).toContainText("Variables in detail");
@@ -1938,6 +1946,9 @@ test.describe("classroom shell", () => {
     const targetEndpoint = pointer.locator(
       '[data-guidance-connector-endpoint="target"]',
     );
+    const connectorLine = pointer.locator(
+      '[data-guidance-connector-line="true"]',
+    );
     const editorScroller = page.locator(".monaco-scrollable-element").first();
     const editorRegion = page.locator(
       '[data-interaction-anchor="anchor.workspace-editor"]',
@@ -1954,17 +1965,29 @@ test.describe("classroom shell", () => {
         String(fragmentCount),
       );
       await expect(spotlight).toHaveCount(1);
+      await expect(spotlight).toHaveAttribute(
+        "data-guidance-spotlight-outline",
+        "none",
+      );
+      await expect(highlight).toHaveAttribute(
+        "data-guidance-highlight-appearance",
+        "spotlight",
+      );
+      await expect(highlight).toHaveAttribute("data-guidance-highlight-padding", "0");
       await expect(pointer).toHaveCount(1);
       await expect(pointer).toHaveAttribute(
         "data-guidance-presentation",
         "guide-connector",
       );
       await expect(targetEndpoint).toHaveCount(1);
+      await expect(connectorLine).toHaveAttribute("stroke-dasharray", "2 5");
       await expect.poll(() => codeGuidanceIsSafe(page)).toBe(true);
       await expect.poll(() => codeConnectorIsSafe(page)).toBe(true);
     };
 
     await expectBeat("One exact line", 1);
+    await expect(connectorLine).toHaveAttribute("d", /\bQ\b/u);
+    await expect.poll(() => companionIsBesideGuideOuterEdge(page)).toBe(true);
     const lineBox = await highlight.boundingBox();
     expect(lineBox).not.toBeNull();
 
@@ -1979,15 +2002,16 @@ test.describe("classroom shell", () => {
     const constBox = await highlight.boundingBox();
     expect(constBox).not.toBeNull();
     expect(constBox!.width).toBeLessThan(lineBox!.width / 3);
-    await expect(highlight).toHaveCSS("border-top-width", "2px");
-    await expect(highlight).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    await expect(highlight).not.toHaveCSS("box-shadow", "none");
+    await expect(highlight).toHaveCSS("border-top-width", "0px");
+    await expect(highlight).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(highlight).toHaveClass(/shadow-none/u);
     await expect(guide.getByRole("button", { name: "Hide guide" })).toHaveText(
       "Hide",
     );
     await expect(guide.locator('code[data-slot="guide-inline-code"]')).toContainText(
       "const",
     );
+    await expect.poll(() => companionIsBesideGuideOuterEdge(page)).toBe(true);
 
     await editorScroller.evaluate((element) => {
       element.scrollTop = 0;
@@ -2975,7 +2999,7 @@ async function codeConnectorIsSafe(page: Page): Promise<boolean> {
     const connector = document.querySelector<SVGSVGElement>(
       '[data-guidance-presentation="guide-connector"]',
     );
-    const line = connector?.querySelector<SVGPolylineElement>(
+    const line = connector?.querySelector<SVGPathElement>(
       '[data-guidance-connector-line="true"]',
     );
     const endpoint = connector?.querySelector<SVGCircleElement>(
@@ -2989,7 +3013,7 @@ async function codeConnectorIsSafe(page: Page): Promise<boolean> {
     };
     const targetPoint = parsePoint(connector.getAttribute("data-connector-target"));
     const guidePoint = parsePoint(connector.getAttribute("data-connector-guide"));
-    const linePoints = (line.getAttribute("points") ?? "")
+    const linePoints = (line.getAttribute("data-guidance-connector-points") ?? "")
       .trim()
       .split(/\s+/u)
       .filter(Boolean)
@@ -3069,6 +3093,31 @@ async function codeConnectorIsSafe(page: Page): Promise<boolean> {
       return true;
     });
     const highlightStyle = getComputedStyle(highlight);
+    const shadowColors = [
+      ...highlightStyle.boxShadow.matchAll(/rgba?\(([^)]+)\)/gu),
+    ];
+    const hasVisibleBoxShadow =
+      highlightStyle.boxShadow !== "none" &&
+      (shadowColors.length === 0 ||
+        shadowColors.some(([, channels]) => {
+          const values = channels!
+            .split(/[,/\s]+/u)
+            .filter(Boolean)
+            .map(Number);
+          return values.length < 4 || values.at(-1)! > 0;
+        }));
+    const highlightAppearance = highlight.getAttribute(
+      "data-guidance-highlight-appearance",
+    );
+    const highlightPresentationIsValid =
+      highlightAppearance === "spotlight"
+        ? parseFloat(highlightStyle.borderTopWidth) === 0 &&
+          highlightStyle.backgroundColor === "rgba(0, 0, 0, 0)" &&
+          !hasVisibleBoxShadow
+        : highlightAppearance === "standalone" &&
+          parseFloat(highlightStyle.borderTopWidth) >= 2 &&
+          highlightStyle.backgroundColor !== "rgba(0, 0, 0, 0)" &&
+          hasVisibleBoxShadow;
 
     return (
       samePoint(linePoints[0]!, targetPoint) &&
@@ -3081,10 +3130,47 @@ async function codeConnectorIsSafe(page: Page): Promise<boolean> {
       guidePointWithinBounds &&
       orthogonal &&
       !crossesHighlight &&
-      parseFloat(highlightStyle.borderTopWidth) >= 2 &&
-      highlightStyle.backgroundColor !== "rgba(0, 0, 0, 0)" &&
-      highlightStyle.boxShadow !== "none"
+      highlightPresentationIsValid
     );
+  });
+}
+
+async function companionIsBesideGuideOuterEdge(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const target = document.querySelector<HTMLElement>(
+      '[data-guidance-effect="highlight"]',
+    );
+    const guide = document.querySelector<HTMLElement>('[data-slot="visual-guide"]');
+    const companion = document.querySelector<HTMLElement>(
+      '[data-slot="draggable-companion"]',
+    );
+    if (!target || !guide || !companion) return false;
+
+    const targetRect = target.getBoundingClientRect();
+    const guideRect = guide.getBoundingClientRect();
+    const companionRect = companion.getBoundingClientRect();
+    const targetCenter = {
+      x: targetRect.left + targetRect.width / 2,
+      y: targetRect.top + targetRect.height / 2,
+    };
+    const guideCenter = {
+      x: guideRect.left + guideRect.width / 2,
+      y: guideRect.top + guideRect.height / 2,
+    };
+    const horizontal = Math.abs(guideCenter.x - targetCenter.x) >=
+      Math.abs(guideCenter.y - targetCenter.y);
+
+    if (horizontal) {
+      const gap = guideCenter.x >= targetCenter.x
+        ? companionRect.left - guideRect.right
+        : guideRect.left - companionRect.right;
+      return gap >= 10 && gap <= 14;
+    }
+
+    const gap = guideCenter.y >= targetCenter.y
+      ? companionRect.top - guideRect.bottom
+      : guideRect.top - companionRect.bottom;
+    return gap >= 10 && gap <= 14;
   });
 }
 
@@ -3104,7 +3190,7 @@ async function codeGuidanceGeometry(page: Page): Promise<CodeGuidanceGeometry> {
     const connector = document.querySelector<SVGSVGElement>(
       '[data-guidance-presentation="guide-connector"]',
     );
-    const line = connector?.querySelector<SVGPolylineElement>(
+    const line = connector?.querySelector<SVGPathElement>(
       '[data-guidance-connector-line="true"]',
     );
     const endpoint = connector?.querySelector<SVGCircleElement>(
@@ -3116,7 +3202,7 @@ async function codeGuidanceGeometry(page: Page): Promise<CodeGuidanceGeometry> {
     const highlightRect = highlight.getBoundingClientRect();
     const guideRect = guide.getBoundingClientRect();
     const endpointRect = endpoint.getBoundingClientRect();
-    const linePoints = (line.getAttribute("points") ?? "")
+    const linePoints = (line.getAttribute("data-guidance-connector-points") ?? "")
       .trim()
       .split(/[\s,]+/u)
       .filter(Boolean)

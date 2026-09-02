@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 
 import {
   calculatePointerPath,
+  createRoundedConnectorPath,
   PlacementEngine,
   type SceneControlAction,
   type ScenePresentationVisibility,
@@ -393,7 +394,10 @@ export function AssistantOverlayHost({
         <TargetFocus geometry={target} />
       ) : null}
       {visibility === "visible" && target && effectIds.has("effect.highlight") ? (
-        <TargetHighlight geometry={target} />
+        <TargetHighlight
+          geometry={target}
+          spotlightActive={effectIds.has("effect.spotlight")}
+        />
       ) : null}
       {visibility === "visible" && target &&
       (effectIds.has("effect.point") || effectIds.has("effect.pointer")) &&
@@ -850,6 +854,7 @@ function TargetSpotlight({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
       className="absolute inset-0 size-full"
       data-guidance-fragment-count={fragmentCount}
       data-guidance-effect="spotlight"
+      data-guidance-spotlight-outline="none"
       data-guidance-shape="continuous"
     >
       <defs>
@@ -859,13 +864,6 @@ function TargetSpotlight({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
         </mask>
       </defs>
       <rect fill="rgb(18 16 38 / 0.46)" height="100%" mask={`url(#${maskId})`} width="100%" />
-      <rect
-        fill="none"
-        rx="6"
-        stroke="rgb(124 92 255 / 0.8)"
-        strokeWidth="2"
-        {...svgTargetRect(block, 6)}
-      />
     </svg>
   );
 }
@@ -884,17 +882,29 @@ function TargetFocus({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
   );
 }
 
-function TargetHighlight({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
+function TargetHighlight({
+  geometry,
+  spotlightActive,
+}: Readonly<{ geometry: TargetGeometry; spotlightActive: boolean }>) {
   const block = continuousTargetBlock(geometry);
+  const padding = spotlightActive ? 0 : 4;
   return (
     <div
       aria-hidden="true"
-      className="absolute rounded-md border-2 border-primary/85 bg-primary/10 shadow-[0_0_0_1px_rgb(255_255_255_/_0.72),0_0_14px_rgb(124_92_255_/_0.42)]"
+      className={cn(
+        "absolute rounded-md",
+        spotlightActive
+          ? "border-0 bg-transparent shadow-none"
+          : "border-2 border-primary/85 bg-primary/10 shadow-[0_0_0_1px_rgb(255_255_255_/_0.72),0_0_14px_rgb(124_92_255_/_0.42)]",
+      )}
       data-guidance-effect="highlight"
       data-guidance-fragment-count={targetFragments(geometry).length}
-      data-guidance-highlight-padding="2"
+      data-guidance-highlight-appearance={
+        spotlightActive ? "spotlight" : "standalone"
+      }
+      data-guidance-highlight-padding={padding}
       data-guidance-shape="continuous"
-      style={targetStyle(block, 2)}
+      style={targetStyle(block, padding)}
     />
   );
 }
@@ -911,6 +921,7 @@ function TargetPointer({
     target: geometry,
   });
   const serializedPoints = points.map(({ x, y }) => `${x},${y}`).join(" ");
+  const connectorPath = createRoundedConnectorPath(points);
   const targetPoint = points[0]!;
   const guidePoint = points.at(-1)!;
   return (
@@ -924,11 +935,13 @@ function TargetPointer({
       data-pointer-end={`${guidePoint.x},${guidePoint.y}`}
       data-pointer-start={`${targetPoint.x},${targetPoint.y}`}
     >
-      <polyline
+      <path
+        d={connectorPath}
         data-guidance-connector-line="true"
+        data-guidance-connector-points={serializedPoints}
         fill="none"
-        points={serializedPoints}
         stroke="rgb(102 61 244 / 0.98)"
+        strokeDasharray="2 5"
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="2.75"

@@ -42,6 +42,7 @@ type PlacementCandidate = {
   assistant: ElementPlacement;
   guide?: ElementPlacement;
   side: Exclude<ScenePresentationSide, "docked">;
+  guideAdjacent?: boolean;
   companionSuppressed?: boolean;
   guideSuppressed?: boolean;
 };
@@ -110,9 +111,61 @@ function createTargetCandidates(
   const guides = guideSize.width > 0 && guideSize.height > 0
     ? createGuideCandidates(target, guideSize, viewport, margin, obstructions)
     : [undefined];
-  return assistants.flatMap((assistant) =>
+  const guideAdjacentCandidates = guides.flatMap((guide) =>
+    guide
+      ? [createGuideAdjacentCandidate(target, assistantSize, guideSize, guide)]
+      : [],
+  );
+  const independentCandidates = assistants.flatMap((assistant) =>
     guides.map((guide) => ({ assistant, guide, side: assistant.side })),
   );
+  return [...guideAdjacentCandidates, ...independentCandidates];
+}
+
+function createGuideAdjacentCandidate(
+  target: TargetGeometry,
+  assistantSize: { width: number; height: number },
+  guideSize: { width: number; height: number },
+  guide: ElementPlacement,
+): PlacementCandidate {
+  const gap = GUIDANCE_LAYOUT_CONFIG.elementGap;
+  const targetCenter = centerOf(target);
+  const guideCenter = {
+    x: guide.left + guideSize.width / 2,
+    y: guide.top + guideSize.height / 2,
+  };
+  const deltaX = guideCenter.x - targetCenter.x;
+  const deltaY = guideCenter.y - targetCenter.y;
+
+  if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+    const guideIsRight = deltaX >= 0;
+    return {
+      assistant: {
+        left: guideIsRight
+          ? guide.left + guideSize.width + gap
+          : guide.left - assistantSize.width - gap,
+        top: guide.top + (guideSize.height - assistantSize.height) / 2,
+        order: guide.order,
+      },
+      guide,
+      guideAdjacent: true,
+      side: guideIsRight ? "right" : "left",
+    };
+  }
+
+  const guideIsBelow = deltaY >= 0;
+  return {
+    assistant: {
+      left: guide.left + (guideSize.width - assistantSize.width) / 2,
+      top: guideIsBelow
+        ? guide.top + guideSize.height + gap
+        : guide.top - assistantSize.height - gap,
+      order: guide.order,
+    },
+    guide,
+    guideAdjacent: true,
+    side: guideIsBelow ? "below" : "above",
+  };
 }
 
 function createGuideCandidates(
@@ -326,8 +379,10 @@ function scoreCandidate({
   const obstructionOverlap =
     obstructionOverlapArea(assistantRect, obstructions) +
     (guideRect ? obstructionOverlapArea(guideRect, obstructions) : 0);
+  const compositionPenalty = guideRect && !candidate.guideAdjacent ? 10_000 : 0;
   return (
     obstructionOverlap * GUIDANCE_LAYOUT_CONFIG.obstructionPenalty +
+    compositionPenalty +
     (target ? rectDistance(assistantRect, target) : 0) +
     (target && guideRect ? rectDistance(guideRect, target) * 0.2 : 0) +
     candidate.assistant.order * 0.1 +
@@ -365,6 +420,42 @@ function toPresentationPosition(
 }
 
 export type PointerPoint = { x: number; y: number };
+
+export function createRoundedConnectorPath(
+  points: readonly PointerPoint[],
+  maximumRadius = 8,
+): string {
+  const first = points[0];
+  if (!first) return "";
+  if (points.length === 1) return `M ${first.x} ${first.y}`;
+
+  const commands = [`M ${first.x} ${first.y}`];
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1]!;
+    const corner = points[index]!;
+    const next = points[index + 1]!;
+    const incomingLength = pointDistance(previous, corner);
+    const outgoingLength = pointDistance(corner, next);
+    const radius = Math.min(
+      maximumRadius,
+      incomingLength / 2,
+      outgoingLength / 2,
+    );
+    if (radius === 0) {
+      commands.push(`L ${corner.x} ${corner.y}`);
+      continue;
+    }
+    const before = pointToward(corner, previous, radius);
+    const after = pointToward(corner, next, radius);
+    commands.push(
+      `L ${before.x} ${before.y}`,
+      `Q ${corner.x} ${corner.y} ${after.x} ${after.y}`,
+    );
+  }
+  const last = points.at(-1)!;
+  commands.push(`L ${last.x} ${last.y}`);
+  return commands.join(" ");
+}
 
 export function calculatePointerPath({
   guide,
@@ -506,6 +597,20 @@ function rectDistance(left: TargetRectangle, right: TargetRectangle): number {
 
 function centerOf(value: TargetRectangle): PointerPoint {
   return { x: value.left + value.width / 2, y: value.top + value.height / 2 };
+}
+
+function pointToward(
+  origin: PointerPoint,
+  target: PointerPoint,
+  distance: number,
+): PointerPoint {
+  const totalDistance = pointDistance(origin, target);
+  if (totalDistance === 0) return origin;
+  const ratio = distance / totalDistance;
+  return {
+    x: origin.x + (target.x - origin.x) * ratio,
+    y: origin.y + (target.y - origin.y) * ratio,
+  };
 }
 
 function expandRect(value: TargetRectangle, amount: number): TargetGeometry {
