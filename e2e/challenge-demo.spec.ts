@@ -585,7 +585,7 @@ async function initializeClassroomThroughWebMCP(page: Page): Promise<void> {
           ).__lessoniqueRegisteredTools.length,
       ),
     )
-    .toBe(12);
+    .toBe(13);
 
   expectOk(
     await invokeRegisteredTool(page, "create_guided_lesson", {

@@ -20,6 +20,7 @@ import {
 } from "@/core/workspace";
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
 import { ReferencePanelStore } from "@/core/reference";
+import { GuideBuildService } from "@/core/guide-build";
 import type {
   P0CodeIntelligenceRuntime,
   P0ValidationRuntime,
@@ -55,6 +56,7 @@ export interface P0WorkspaceRuntime {
   assistantIntents: AssistantIntentMapper;
   scene: P0SceneRuntime;
   referencePanels: ReferencePanelStore;
+  guideBuild: GuideBuildService;
   referenceSurfaceModeId: string;
   monacoEditorAdapter: MonacoEditorAdapter;
   previewSurfaceAdapter: PreviewSurfaceAdapter;
@@ -143,11 +145,13 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
   });
   const lessonStore = new LessonStore();
   const referencePanels = new ReferencePanelStore();
+  const guideBuild = new GuideBuildService();
   const classroomLifecycle = new ClassroomLifecycleService();
   const classroomDependencies = {
     lessonStore,
     workspace: controller,
     lifecycle: classroomLifecycle,
+    guideBuild,
   };
   const createGuidedLesson = new CreateGuidedLessonUseCase(classroomDependencies);
   const resetClassroom = new ResetClassroomUseCase(classroomDependencies);
@@ -220,6 +224,7 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     assistantIntents,
     scene,
     referencePanels,
+    guideBuild,
     referenceSurfaceModeId: P0_REFERENCE_SURFACE_MODE_ID,
     monacoEditorAdapter,
     previewSurfaceAdapter,

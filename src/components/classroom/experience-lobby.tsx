@@ -10,12 +10,22 @@ import {
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
+import { GuideBuildLobby } from "@/components/classroom/guide-build-lobby";
+import type { GuideBuildSnapshot } from "@/core/guide-build";
 import type { LessoniqueExperienceState } from "@/features/classroom/experience-state";
 
 type LobbyState = Exclude<LessoniqueExperienceState, "classroom">;
 
-export function ExperienceLobby({ state }: Readonly<{ state: LobbyState }>) {
+export function ExperienceLobby({
+  build,
+  state,
+}: Readonly<{ build: GuideBuildSnapshot; state: LobbyState }>) {
   const shouldReduceMotion = useReducedMotion();
+
+  if (state === "building-guide" || state === "guide-build-error") {
+    return <GuideBuildLobby build={build} />;
+  }
+
   const content = LOBBY_CONTENT[state];
 
   return (

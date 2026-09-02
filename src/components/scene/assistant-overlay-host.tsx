@@ -547,6 +547,7 @@ function OutOfViewGuide({
 export type CompanionVisualState =
   | "idle"
   | "connected"
+  | "building"
   | "guiding"
   | "focusing"
   | "thinking"
@@ -554,12 +555,17 @@ export type CompanionVisualState =
   | "warning"
   | "incompatible";
 
+export type BuilderStep = 1 | 2 | 3;
+
 const NORMAL_COMPANION_ASSET =
   "/images/companion/lessonique-companion-normal.png";
+const BUILDING_COMPANION_ASSET =
+  "/images/companion/lessonique-companion-building-body.png";
 const INCOMPATIBLE_COMPANION_ASSET =
   "/images/companion/lessonique-companion-incompatible.png";
 
 export function LessoniqueCompanion({
+  builderStep,
   className,
   containerRef,
   decorative = false,
@@ -568,7 +574,9 @@ export function LessoniqueCompanion({
   stateId,
   status,
   visualState,
+  workingMotion = "focus",
 }: Readonly<{
+  builderStep?: BuilderStep;
   className?: string;
   containerRef?: Ref<HTMLDivElement>;
   decorative?: boolean;
@@ -577,6 +585,7 @@ export function LessoniqueCompanion({
   stateId: string;
   status: string;
   visualState?: CompanionVisualState;
+  workingMotion?: "focus" | "tap" | "review";
 }>) {
   const stateLabel = stateId.replace("assistant.", "");
   const resolvedVisualState =
@@ -584,6 +593,8 @@ export function LessoniqueCompanion({
   const asset =
     resolvedVisualState === "incompatible"
       ? INCOMPATIBLE_COMPANION_ASSET
+      : resolvedVisualState === "building"
+        ? BUILDING_COMPANION_ASSET
       : NORMAL_COMPANION_ASSET;
 
   return (
@@ -604,10 +615,18 @@ export function LessoniqueCompanion({
       data-pointing-arm={stateId === "assistant.pointing" ? facing : "none"}
       data-assistant-state={stateId}
       data-assistant-status={status}
+      data-builder-step={
+        resolvedVisualState === "building" ? (builderStep ?? 1) : undefined
+      }
       data-companion-asset={
-        resolvedVisualState === "incompatible" ? "incompatible" : "normal"
+        resolvedVisualState === "incompatible"
+          ? "incompatible"
+          : resolvedVisualState === "building"
+            ? "building"
+            : "normal"
       }
       data-companion-visual-state={resolvedVisualState}
+      data-working-motion={workingMotion}
       role={decorative ? undefined : "status"}
     >
       <span aria-hidden="true" className="companion-aura" />
@@ -632,6 +651,10 @@ export function LessoniqueCompanion({
           />
           <span className="companion-limb-layer companion-limb-left" />
           <span className="companion-limb-layer companion-limb-right" />
+          <span className="companion-builder-target">
+            <span className="companion-builder-target-core" />
+            <span className="companion-work-spark" />
+          </span>
           <span className="companion-body-glitch-slice body-glitch-slice-a" />
           <span className="companion-body-glitch-slice body-glitch-slice-b" />
           <span className="companion-body-glitch-slice body-glitch-slice-c" />

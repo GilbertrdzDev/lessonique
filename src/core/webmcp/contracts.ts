@@ -12,6 +12,7 @@ import type {
   lessonStepInputSchema,
   playTeachingSceneInputSchema,
   resetClassroomInputSchema,
+  setGuideBuildStatusInputSchema,
   showReferencePanelInputSchema,
   surfaceConfigurationInputSchema,
   targetRefSchema,
@@ -21,6 +22,7 @@ import type {
 import type { WebMCPToolName } from "./tool-names";
 
 export type GetSystemCapabilitiesInput = z.infer<typeof getSystemCapabilitiesInputSchema>;
+export type SetGuideBuildStatusInput = z.infer<typeof setGuideBuildStatusInputSchema>;
 export type CreateGuidedLessonInput = z.infer<typeof createGuidedLessonInputSchema>;
 export type ResetClassroomInput = z.infer<typeof resetClassroomInputSchema>;
 export type InspectClassroomInput = z.infer<typeof inspectClassroomInputSchema>;
@@ -43,6 +45,7 @@ export type LessonStepInput = z.infer<typeof lessonStepInputSchema>;
 
 export type WebMCPToolInputMap = {
   get_system_capabilities: GetSystemCapabilitiesInput;
+  set_guide_build_status: SetGuideBuildStatusInput;
   create_guided_lesson: CreateGuidedLessonInput;
   reset_classroom: ResetClassroomInput;
   inspect_classroom: InspectClassroomInput;

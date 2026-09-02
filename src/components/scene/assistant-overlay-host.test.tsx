@@ -278,6 +278,32 @@ describe("AssistantOverlayHost", () => {
     expect(html).not.toContain("Connected through WebMCP");
   });
 
+  it("renders the coherent construction asset and its local motion phase", () => {
+    const html = renderToStaticMarkup(
+      <LessoniqueCompanion
+        builderStep={2}
+        facing="right"
+        paused={false}
+        stateId="assistant.thinking"
+        status="building-guide"
+        visualState="building"
+        workingMotion="tap"
+      />,
+    );
+
+    expect(html).toContain('data-companion-visual-state="building"');
+    expect(html).toContain('data-companion-asset="building"');
+    expect(html).toContain('data-builder-step="2"');
+    expect(html).toContain('data-working-motion="tap"');
+    expect(html).toContain("lessonique-companion-building-body.png");
+    expect(html).toContain("companion-limb-left");
+    expect(html).toContain("companion-limb-right");
+    expect(html).toContain("companion-builder-target");
+    expect(html).toContain("companion-builder-target-core");
+    expect(html).toContain("companion-ground-shadow");
+    expect(html).toContain("companion-work-spark");
+  });
+
   it("renders local Previous and Next navigation for a manual micro-step scene", () => {
     const store = new ScenePresentationStore();
     const current = store.getSnapshot();

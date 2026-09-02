@@ -18,6 +18,7 @@ import { ClassroomHeader } from "@/components/classroom/classroom-header";
 import { ExperienceHeader } from "@/components/classroom/experience-header";
 import { ExperienceLobby } from "@/components/classroom/experience-lobby";
 import {
+  type BuilderStep,
   LessoniqueCompanion,
   useBoundedPointerDrag,
 } from "@/components/scene/assistant-overlay-host";
@@ -25,6 +26,7 @@ import { useWebMCPRuntime } from "@/components/webmcp/webmcp-registration-provid
 import { ClassroomWorkspace } from "@/components/workspace/classroom-workspace";
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import { LessonPersistence } from "@/core/lesson";
+import type { GuideBuildStageId } from "@/core/guide-build";
 import { WorkspacePersistence } from "@/core/workspace";
 import {
   resolveLessoniqueExperienceState,
@@ -57,6 +59,11 @@ export function LessoniqueExperience() {
     workspace.scene.store.subscribe,
     workspace.scene.store.getSnapshot,
     workspace.scene.store.getSnapshot,
+  );
+  const guideBuild = useSyncExternalStore(
+    workspace.guideBuild.store.subscribe,
+    workspace.guideBuild.store.getSnapshot,
+    workspace.guideBuild.store.getSnapshot,
   );
   const hasSession = Boolean(lesson.lesson && workspaceState.profileId);
   const [classroomHasOpened, setClassroomHasOpened] = useState(false);
@@ -114,6 +121,13 @@ export function LessoniqueExperience() {
   }, [workspace]);
 
   useEffect(() => {
+    if (guideBuild.status === "building" || guideBuild.status === "error") {
+      if (!hasSession) {
+        const resetTimer = setTimeout(() => setClassroomHasOpened(false), 0);
+        return () => clearTimeout(resetTimer);
+      }
+      return;
+    }
     if (!hasSession) {
       const resetTimer = setTimeout(() => setClassroomHasOpened(false), 0);
       return () => clearTimeout(resetTimer);
@@ -124,13 +138,19 @@ export function LessoniqueExperience() {
       shouldReduceMotion ? 0 : CLASSROOM_TRANSITION_DURATION_MS,
     );
     return () => clearTimeout(timer);
-  }, [classroomHasOpened, hasSession, shouldReduceMotion]);
+  }, [
+    classroomHasOpened,
+    guideBuild.status,
+    hasSession,
+    shouldReduceMotion,
+  ]);
 
   const classroomTransitionComplete = hasSession && classroomHasOpened;
 
   const experienceState = resolveLessoniqueExperienceState({
     agentConnection: webMCP.agentConnection.status,
     classroomTransitionComplete,
+    guideBuildStatus: guideBuild.status,
     hasWorkspaceEnvironment: Boolean(workspaceState.profileId),
     lessonStatus: lesson.status,
     webMCPAvailability: webMCP.availability,
@@ -147,6 +167,8 @@ export function LessoniqueExperience() {
       {experienceState === "classroom" ? <ClassroomSkipLink /> : null}
       <ExperienceHeader experienceState={experienceState} />
       <PersistentCompanion
+        buildStage={guideBuild.stage}
+        buildStatus={guideBuild.status}
         canResumeGuide={workspace.scene.runner.canReplayLast()}
         experienceState={experienceState}
         hidden={sceneOwnsCompanion}
@@ -175,7 +197,11 @@ export function LessoniqueExperience() {
             />
           </motion.div>
         ) : (
-          <ExperienceLobby key={experienceState} state={experienceState} />
+          <ExperienceLobby
+            build={guideBuild}
+            key={experienceState}
+            state={experienceState}
+          />
         )}
       </AnimatePresence>
     </div>
@@ -183,12 +209,16 @@ export function LessoniqueExperience() {
 }
 
 function PersistentCompanion({
+  buildStage,
+  buildStatus,
   canResumeGuide,
   experienceState,
   hidden,
   onResumeGuide,
   resetKey,
 }: Readonly<{
+  buildStage?: GuideBuildStageId;
+  buildStatus: "idle" | "building" | "completed" | "error";
   canResumeGuide: boolean;
   experienceState: LessoniqueExperienceState;
   hidden: boolean;
@@ -204,9 +234,18 @@ function PersistentCompanion({
   } = useBoundedPointerDrag(companionRef, resetKey);
   const [resuming, setResuming] = useState(false);
   const interactive = experienceState === "classroom";
+  const shouldReduceMotion = useReducedMotion();
+  const usesBuildingAsset =
+    experienceState !== "classroom" && buildStatus !== "idle";
+  const workingMotion = useWorkingCompanionMotion(
+    buildStatus === "building" && !hidden,
+    shouldReduceMotion,
+  );
   const assistantState =
     experienceState === "unsupported"
       ? "assistant.warning"
+      : usesBuildingAsset
+        ? "assistant.thinking"
       : experienceState === "supported-disconnected"
         ? "assistant.thinking"
         : experienceState === "connected" ||
@@ -264,9 +303,12 @@ function PersistentCompanion({
         <div className="experience-companion-content" data-slot="persistent-companion-content">
           <span aria-hidden="true" className="experience-companion-orbit" />
           <LessoniqueCompanion
+            builderStep={resolveBuilderStep(buildStage)}
             className={
               experienceState === "classroom"
                 ? "size-36 sm:size-40"
+                : usesBuildingAsset
+                  ? "size-44 sm:size-56"
                 : "size-48 sm:size-64"
             }
             decorative
@@ -274,9 +316,14 @@ function PersistentCompanion({
             paused={false}
             stateId={assistantState}
             status={experienceState}
+            workingMotion={
+              buildStatus === "completed" ? "review" : workingMotion
+            }
             visualState={
               experienceState === "unsupported"
                 ? "incompatible"
+                : usesBuildingAsset
+                  ? "building"
                 : experienceState === "connected" ||
                     experienceState === "starting-session"
                   ? "connected"
@@ -303,4 +350,67 @@ function PersistentCompanion({
       ) : null}
     </>
   );
+}
+
+function resolveBuilderStep(stage?: GuideBuildStageId): BuilderStep {
+  switch (stage) {
+    case "preparing-lesson":
+      return 2;
+    case "setting-up-classroom":
+      return 3;
+    default:
+      return 1;
+  }
+}
+
+type WorkingCompanionMotion = "focus" | "tap" | "review";
+
+function useWorkingCompanionMotion(
+  active: boolean,
+  reduceMotion: boolean | null,
+): WorkingCompanionMotion {
+  const [motionState, setMotionState] = useState<WorkingCompanionMotion>("focus");
+
+  useEffect(() => {
+    if (!active || reduceMotion) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+
+    const scheduleCycle = () => {
+      timer = setTimeout(() => {
+        if (cancelled || document.hidden) return;
+        setMotionState("tap");
+        timer = setTimeout(() => {
+          if (cancelled) return;
+          setMotionState("review");
+          timer = setTimeout(() => {
+            if (cancelled) return;
+            setMotionState("focus");
+            scheduleCycle();
+          }, 1_400);
+        }, 1_750);
+      }, randomWorkingPause());
+    };
+    const handleVisibilityChange = () => {
+      if (timer) clearTimeout(timer);
+      setMotionState("focus");
+      if (!document.hidden) scheduleCycle();
+    };
+
+    scheduleCycle();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [active, reduceMotion]);
+
+  return active && !reduceMotion ? motionState : "focus";
+}
+
+function randomWorkingPause(): number {
+  const randomValue = new Uint32Array(1);
+  window.crypto.getRandomValues(randomValue);
+  return 3_600 + (randomValue[0] ?? 0) % 4_400;
 }

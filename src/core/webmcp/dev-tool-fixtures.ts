@@ -19,6 +19,11 @@ export const DEV_TOOL_FIXTURES = {
       "limits",
     ],
   },
+  set_guide_build_status: {
+    status: "building",
+    stage: "understanding-goal",
+    message: "Analyzing the requested learning goal",
+  },
   create_guided_lesson: {
     lessonId: "lesson.dev-panel",
     lessonMode: "mixed",
@@ -171,6 +176,7 @@ export const DEV_TOOL_FIXTURES = {
 export const DEV_TOOL_FIXTURE_ORDER = [
   "reset_classroom",
   "get_system_capabilities",
+  "set_guide_build_status",
   "create_guided_lesson",
   "configure_learning_environment",
   "apply_workspace_changes",

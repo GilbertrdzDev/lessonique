@@ -2,6 +2,7 @@ import type {
   EnvironmentProfile,
   SurfaceConfiguration,
 } from "@/core/platform/contracts";
+import type { GuideBuildService } from "@/core/guide-build";
 import {
   SchemaValidationError,
   validateClosedJsonObjectInput,
@@ -49,6 +50,7 @@ export class ClassroomToolService {
   readonly #resetClassroom: ResetClassroomUseCase;
   readonly #scenes?: TeachingSceneToolService;
   readonly #lifecycle?: ClassroomLifecycleService;
+  readonly #guideBuild?: GuideBuildService;
 
   constructor(dependencies: {
     workspace: WorkspaceController;
@@ -57,6 +59,7 @@ export class ClassroomToolService {
     resetClassroom: ResetClassroomUseCase;
     scenes?: TeachingSceneToolService;
     lifecycle?: ClassroomLifecycleService;
+    guideBuild?: GuideBuildService;
   }) {
     this.#workspace = dependencies.workspace;
     this.#registries = dependencies.registries;
@@ -65,10 +68,17 @@ export class ClassroomToolService {
     this.#resetClassroom = dependencies.resetClassroom;
     this.#scenes = dependencies.scenes;
     this.#lifecycle = dependencies.lifecycle;
+    this.#guideBuild = dependencies.guideBuild;
   }
 
   validateCreate(input: CreateGuidedLessonInput): void {
-    this.#prepareCreate(input);
+    try {
+      this.#prepareCreate(input);
+    } catch (error) {
+      const normalized = normalizeClassroomError(error);
+      this.#guideBuild?.fail(normalized.message);
+      throw normalized;
+    }
   }
 
   async create(
@@ -77,12 +87,13 @@ export class ClassroomToolService {
   ): Promise<ToolExecutionResult<CreateGuidedLessonData>> {
     const command = this.#prepareCreate(input);
     let snapshot: ClassroomSnapshot | undefined;
+    this.#guideBuild?.beginClassroomSetup();
     try {
       snapshot = await this.#createLesson.execute(command);
       const initialScene = input.initialScene
         ? await this.#scenes!.play(input.initialScene, signal)
         : undefined;
-      return {
+      const result = {
         ok: true,
         status: "completed",
         revision: snapshot.lesson.revision,
@@ -91,15 +102,22 @@ export class ClassroomToolService {
           initialScene?.data,
           this.#lifecycle?.getSnapshot().total,
         ),
-      };
+      } as const;
+      this.#guideBuild?.complete();
+      return result;
     } catch (error) {
       if (snapshot && input.initialScene) {
         try {
           await this.#resetClassroom.execute({ scope: "all" });
         } catch (rollbackError) {
-          throw normalizeClassroomError(rollbackError);
+          const normalizedRollback = normalizeClassroomError(rollbackError);
+          this.#guideBuild?.beginClassroomSetup();
+          this.#guideBuild?.fail(normalizedRollback.message);
+          throw normalizedRollback;
         }
       }
+      this.#guideBuild?.beginClassroomSetup();
+      this.#guideBuild?.fail();
       throw normalizeClassroomError(error);
     }
   }
@@ -112,6 +130,9 @@ export class ClassroomToolService {
         scope: input.scope,
         preserve: { activity: input.preserve?.activity },
       });
+      if (input.scope === "lesson" || input.scope === "all") {
+        this.#guideBuild?.reset();
+      }
       return {
         ok: true,
         status: "completed",

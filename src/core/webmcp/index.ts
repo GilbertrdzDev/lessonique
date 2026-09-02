@@ -11,6 +11,7 @@ export * from "./inspect-classroom";
 export * from "./mock-handlers";
 export * from "./show-reference-panel";
 export * from "./schemas";
+export * from "./set-guide-build-status";
 export * from "./teaching-scene-tools";
 export * from "./update-lesson-plan";
 export * from "./tool-activity-logger";

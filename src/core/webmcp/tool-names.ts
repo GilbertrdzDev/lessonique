@@ -1,5 +1,6 @@
 export const WEBMCP_TOOL_NAMES = [
   "get_system_capabilities",
+  "set_guide_build_status",
   "create_guided_lesson",
   "reset_classroom",
   "inspect_classroom",

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { GuideBuildService } from "@/core/guide-build";
 import type {
   EnvironmentActionResult,
   RuntimeSnapshot,
@@ -64,6 +65,10 @@ describe("classroom bootstrap and reset", () => {
       }),
     );
     expect(snapshot.lifecycle.total).toBe(0);
+    expect(harness.guideBuild.store.getSnapshot()).toMatchObject({
+      status: "completed",
+      stage: "setting-up-classroom",
+    });
   });
 
   it("rejects an invalid environment before cleaning or mutating the active class", async () => {
@@ -116,6 +121,7 @@ describe("classroom bootstrap and reset", () => {
     expect(harness.lessonStore.getSnapshot().lesson).toBeUndefined();
     expect(harness.workspaceStore.getSnapshot()).toBe(previousWorkspace);
     expect(harness.lifecycle.getSnapshot().total).toBe(0);
+    expect(harness.guideBuild.store.getSnapshot().status).toBe("error");
   });
 
   it("aborts before workspace mutation when lifecycle cleanup cannot finish", async () => {
@@ -138,6 +144,7 @@ describe("classroom bootstrap and reset", () => {
     expect(harness.lessonStore.getSnapshot()).toBe(previousLesson);
     expect(harness.workspaceStore.getSnapshot()).toBe(previousWorkspace);
     expect(harness.lifecycle.getSnapshot().resourceIds).toEqual(["scene.failed"]);
+    expect(harness.guideBuild.store.getSnapshot().status).toBe("error");
   });
 
   it("resets all classroom state and resources while optionally preserving activity", async () => {
@@ -240,11 +247,13 @@ function createHarness() {
   });
   const lessonStore = new LessonStore(createIdleLessonState());
   const lifecycle = new ClassroomLifecycleService();
-  const dependencies = { lessonStore, workspace, lifecycle };
+  const guideBuild = new GuideBuildService();
+  const dependencies = { guideBuild, lessonStore, workspace, lifecycle };
   return {
     createLesson: new CreateGuidedLessonUseCase(dependencies),
     resetClassroom: new ResetClassroomUseCase(dependencies),
     lessonStore,
+    guideBuild,
     lifecycle,
     runtime,
     workspaceStore,

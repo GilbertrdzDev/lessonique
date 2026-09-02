@@ -48,6 +48,10 @@ describe("classroom WebMCP tools", () => {
       "styles.css",
       "script.js",
     ]);
+    expect(runtime.guideBuild.store.getSnapshot()).toMatchObject({
+      status: "completed",
+      stage: "setting-up-classroom",
+    });
   });
 
   it("validates and starts an initial scene as part of guided lesson creation", async () => {
@@ -112,6 +116,10 @@ describe("classroom WebMCP tools", () => {
     );
     expect(runtime.lessonStore.getSnapshot()).toBe(previousLesson);
     expect(runtime.store.getSnapshot()).toBe(previousWorkspace);
+    expect(runtime.guideBuild.store.getSnapshot()).toMatchObject({
+      status: "error",
+      message: expect.stringContaining("editor.font-size"),
+    });
   });
 
   it("rejects an invalid initial scene before creating partial classroom state", async () => {
@@ -144,6 +152,9 @@ describe("classroom WebMCP tools", () => {
     expect(runtime.lessonStore.getSnapshot().status).toBe("idle");
     expect(runtime.store.getSnapshot().status).toBe("idle");
     expect(runtime.scene.store.getSnapshot().status).toBe("idle");
+    expect(runtime.guideBuild.store.getSnapshot()).toMatchObject({
+      status: "error",
+    });
   });
 
   it("resets the classroom idempotently through the real lifecycle", async () => {
@@ -177,6 +188,7 @@ describe("classroom WebMCP tools", () => {
     expect(runtime.lessonStore.getSnapshot().plan.steps).toEqual([]);
     expect(runtime.store.getSnapshot().files).toEqual([]);
     expect(runtime.classroomLifecycle.getSnapshot().total).toBe(0);
+    expect(runtime.guideBuild.store.getSnapshot().status).toBe("idle");
   });
 });
 
@@ -188,6 +200,7 @@ function createRegistry(runtime: ReturnType<typeof createP0WorkspaceRuntime>) {
     sceneRunner: runtime.scene.runner,
     sceneState: runtime.scene.store,
     classroomLifecycle: runtime.classroomLifecycle,
+    guideBuild: runtime.guideBuild,
   });
 }
 

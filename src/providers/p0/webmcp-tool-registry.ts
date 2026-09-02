@@ -4,6 +4,7 @@ import type { P0WorkspaceRuntime } from "./workspace-runtime";
 
 export function createP0WebMCPToolRegistry(runtime: P0WorkspaceRuntime) {
   return createEarlyWebMCPToolRegistry(runtime.registries, {
+    guideBuild: runtime.guideBuild,
     workspaceController: runtime.controller,
     createGuidedLesson: runtime.createGuidedLesson,
     resetClassroom: runtime.resetClassroom,

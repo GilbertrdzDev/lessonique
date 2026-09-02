@@ -35,7 +35,7 @@ test.describe("Lessonique WebMCP experience states", () => {
     await installCapturedWebMCP(page);
     await page.goto("/");
 
-    await expectRegisteredToolCount(page, 12);
+    await expectRegisteredToolCount(page, 13);
     await expectExperienceState(page, "supported-disconnected");
     await expectCompanionVisualState(page, "thinking", "normal");
     await expect(
@@ -52,7 +52,7 @@ test.describe("Lessonique WebMCP experience states", () => {
   }) => {
     await installCapturedWebMCP(page);
     await page.goto("/");
-    await expectRegisteredToolCount(page, 12);
+    await expectRegisteredToolCount(page, 13);
 
     const result = await invokeRegisteredTool(page, "get_system_capabilities", {
       include: ["profiles"],
@@ -72,12 +72,108 @@ test.describe("Lessonique WebMCP experience states", () => {
     await expectNoClassroom(page);
   });
 
+  test("renders live guide build stages with one coherent construction companion", async ({
+    page,
+  }) => {
+    await installCapturedWebMCP(page);
+    await page.goto("/");
+    await expectRegisteredToolCount(page, 13);
+
+    const understanding = await invokeRegisteredTool(
+      page,
+      "set_guide_build_status",
+      {
+        status: "building",
+        stage: "understanding-goal",
+        message: "Mapping your learning goal",
+      },
+    );
+
+    expect(understanding).toEqual(expect.objectContaining({ ok: true }));
+    await expectExperienceState(page, "building-guide");
+    await expectCompanionVisualState(page, "building", "building");
+    await expect(persistentCompanion(page)).toHaveAttribute(
+      "data-builder-step",
+      "1",
+    );
+    await expect(
+      page.getByRole("heading", { name: "Building your AI guide..." }),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-guide-build-status="building"]'),
+    ).toHaveAttribute("data-guide-build-stage", "understanding-goal");
+    await expect(
+      page.locator('[data-build-stage-state="active"]'),
+    ).toContainText("Understanding your goal");
+    await expect(
+      persistentCompanion(page).locator(".companion-character-image"),
+    ).toHaveAttribute("src", /lessonique-companion-building-body\.png/u);
+    await expect(
+      persistentCompanion(page).locator(".companion-limb-right"),
+    ).toHaveCSS(
+      "background-image",
+      /lessonique-companion-building-hammer\.png/u,
+    );
+
+    const preparing = await invokeRegisteredTool(
+      page,
+      "set_guide_build_status",
+      {
+        status: "building",
+        stage: "preparing-lesson",
+        message: "Preparing examples and practice",
+      },
+    );
+
+    expect(preparing).toEqual(expect.objectContaining({ ok: true }));
+    await expect(persistentCompanion(page)).toHaveAttribute(
+      "data-builder-step",
+      "2",
+    );
+    await expect(
+      page.locator('[data-build-stage-state="complete"]'),
+    ).toContainText("Understanding your goal");
+    await expect(
+      page.locator('[data-build-stage-state="active"]'),
+    ).toContainText("Preparing the lesson");
+    await expect(
+      page.locator('[data-build-stage-state="pending"]'),
+    ).toContainText("Setting up the classroom");
+
+    const settingUp = await invokeRegisteredTool(
+      page,
+      "set_guide_build_status",
+      {
+        status: "building",
+        stage: "setting-up-classroom",
+        message: "Configuring the classroom",
+      },
+    );
+
+    expect(settingUp).toEqual(expect.objectContaining({ ok: true }));
+    await expect(persistentCompanion(page)).toHaveAttribute(
+      "data-builder-step",
+      "3",
+    );
+    await expect(
+      page.locator('[data-build-stage-state="complete"]'),
+    ).toHaveCount(2);
+    await expect(
+      page.locator('[data-build-stage-state="active"]'),
+    ).toContainText("Setting up the classroom");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  });
+
   test("builds the classroom in the same root document after ChatGPT starts a lesson", async ({
     page,
   }) => {
     await installCapturedWebMCP(page);
     await page.goto("/");
-    await expectRegisteredToolCount(page, 12);
+    await expectRegisteredToolCount(page, 13);
 
     const result = await invokeRegisteredTool(page, "create_guided_lesson", {
       lessonId: "lesson.root-transition",
@@ -108,7 +204,7 @@ test.describe("Lessonique WebMCP experience states", () => {
 
     expect(result).toEqual(expect.objectContaining({ ok: true }));
     await expectExperienceState(page, "starting-session");
-    await expectCompanionVisualState(page, "connected", "normal");
+    await expectCompanionVisualState(page, "building", "building");
     await expectExperienceState(page, "classroom", 10_000);
     await expectCompanionVisualState(page, "idle", "normal");
     await expect(page).toHaveURL(/\/$/u);
@@ -213,7 +309,7 @@ test.describe("Lessonique WebMCP experience states", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await installCapturedWebMCP(page);
     await page.goto("/");
-    await expectRegisteredToolCount(page, 12);
+    await expectRegisteredToolCount(page, 13);
     await invokeRegisteredTool(page, "get_system_capabilities", {
       include: ["profiles"],
     });
@@ -306,7 +402,7 @@ test.describe("Lessonique WebMCP experience states", () => {
       window.dispatchEvent(new Event("focus"));
     });
 
-    await expectRegisteredToolCount(page, 12);
+    await expectRegisteredToolCount(page, 13);
     await expectExperienceState(page, "supported-disconnected");
     await expectCompanionVisualState(page, "thinking", "normal");
     await invokeRegisteredTool(page, "get_system_capabilities", {
@@ -397,7 +493,7 @@ async function expectSharedHoverWaveAndNormalShadow(
 async function expectCompanionVisualState(
   page: Page,
   visualState: string,
-  asset: "normal" | "incompatible",
+  asset: "normal" | "building" | "incompatible",
 ): Promise<void> {
   const companion = persistentCompanion(page);
   await expect(companion).toHaveAttribute(
