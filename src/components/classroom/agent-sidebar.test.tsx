@@ -23,6 +23,8 @@ describe("AgentSidebar", () => {
 
     expect(markup).toContain('aria-label="Learning agent"');
     expect(markup).toContain('aria-label="Resize learning agent panel"');
+    expect(markup).toContain('data-tooltip="Resize learning agent"');
+    expect(markup).toContain('data-tooltip="Collapse learning agent"');
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain("Learning Plan");
     expect(markup).toContain("Live Activity");

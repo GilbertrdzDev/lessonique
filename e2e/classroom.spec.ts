@@ -2646,6 +2646,257 @@ test.describe("classroom shell", () => {
     );
   });
 
+  test("shows synchronized delegated control tooltips without competing with guidance", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    test.skip(testInfo.project.name !== "desktop-chromium");
+
+    const visibleControls = page.locator("[data-tooltip]:visible");
+    const visibleTooltip = page.locator(
+      '.tippy-box[data-theme~="lessonique"][data-state="visible"]',
+    );
+    await expect
+      .poll(() => visibleControls.count())
+      .toBeGreaterThanOrEqual(12);
+    expect(
+      await visibleControls.evaluateAll((controls) =>
+        controls
+          .filter((control) => !control.getAttribute("aria-label")?.trim())
+          .map((control) => control.outerHTML),
+      ),
+    ).toEqual([]);
+
+    const initialTooltipLabels = await visibleControls.evaluateAll((controls) =>
+      controls.map((control) => control.getAttribute("data-tooltip") ?? ""),
+    );
+    for (let index = 0; index < initialTooltipLabels.length; index += 1) {
+      await visibleControls.nth(index).hover();
+      await expect(visibleTooltip).toHaveCount(1);
+      await expect(visibleTooltip).toHaveText(initialTooltipLabels[index]!);
+      await expect(visibleTooltip).toHaveAttribute("data-animation", "scale");
+      await expect(visibleTooltip).toHaveAttribute("data-inertia", "");
+      await page.mouse.move(1, 1);
+    }
+
+    const clearConsole = page.getByRole("button", { name: "Clear console" });
+    await clearConsole.focus();
+    await expect(visibleTooltip).toHaveText("Clear console");
+    await expect(clearConsole).toHaveAttribute("aria-describedby", /tippy/u);
+
+    const stopWorkspace = page.getByRole("button", { name: "Stop workspace" });
+    await stopWorkspace.hover();
+    await expect(visibleTooltip).toHaveText("Stop workspace");
+    await stopWorkspace.click();
+    const runWorkspace = page.getByRole("button", { name: "Run workspace" });
+    await expect(runWorkspace).toHaveAttribute("data-tooltip", "Run workspace");
+    await expect
+      .poll(() =>
+        runWorkspace.evaluate(
+          (control) =>
+            (
+              control as HTMLElement & {
+                _tippy?: { props: { content: unknown } };
+              }
+            )._tippy?.props.content,
+        ),
+      )
+      .toBe("Run workspace");
+    await runWorkspace.click();
+    await expect(stopWorkspace).toHaveAttribute("data-tooltip", "Stop workspace");
+
+    const projectFiles = page.getByRole("complementary", {
+      name: "Project Files",
+    });
+    const collapseProjectFiles = page.getByRole("button", {
+      name: "Collapse project files",
+    });
+    await collapseProjectFiles.hover();
+    await expect(visibleTooltip).toHaveText("Collapse project files");
+    await collapseProjectFiles.click();
+    await expect(projectFiles).toHaveCount(0);
+    const expandProjectFiles = page.getByRole("button", {
+      name: "Expand project files",
+    });
+    await expect(expandProjectFiles).toHaveAttribute(
+      "data-tooltip",
+      "Expand project files",
+    );
+    await expandProjectFiles.click();
+    await expect(projectFiles).toBeVisible();
+    const remountedCreateFile = projectFiles.getByRole("button", {
+      name: "Create file",
+    });
+    await remountedCreateFile.hover();
+    await expect(visibleTooltip).toHaveText("Create file");
+
+    await clearConsole.click();
+    await getWorkspaceTab(page, "script.js").click();
+    const editor = page.getByRole("textbox", { name: "Workspace code editor" });
+    const source = [
+      "// Tooltip and guidance integration",
+      ...Array.from({ length: 45 }, (_, index) => `// filler line ${index + 2}`),
+      "console.log('tooltip flow');",
+      ...Array.from({ length: 40 }, (_, index) => `// trailing line ${index + 48}`),
+    ].join("\n");
+    await editor.press("Control+A");
+    await page.keyboard.insertText(source);
+    await expect(
+      page.getByRole("log", { name: "Runtime console" }),
+    ).toContainText("tooltip flow", { timeout: 20_000 });
+
+    const started = await invokeRegisteredTool(page, "play_teaching_scene", {
+      id: "scene.control-tooltip-isolation",
+      allowManualNavigation: true,
+      beats: [
+        {
+          id: "beat.control-tooltip-console",
+          type: "explanation",
+          prepare: {
+            surfaceId: "editor",
+            filePath: "script.js",
+            scroll: "if-needed",
+          },
+          target: {
+            resolverId: "target.code-range",
+            input: {
+              filePath: "script.js",
+              startLine: 47,
+              startColumn: 1,
+              endLine: 47,
+              endColumn: 8,
+            },
+          },
+          assistant: {
+            stateId: "assistant.pointing",
+            placementId: "placement.near-target",
+            visible: true,
+          },
+          effects: [
+            { effectId: "effect.spotlight" },
+            { effectId: "effect.highlight" },
+            { effectId: "effect.pointer" },
+          ],
+          guide: {
+            title: "Console object",
+            body: "This guide remains independent from control tooltips.",
+          },
+        },
+        {
+          id: "beat.control-tooltip-value",
+          type: "explanation",
+          prepare: {
+            surfaceId: "editor",
+            filePath: "script.js",
+            scroll: "if-needed",
+          },
+          target: {
+            resolverId: "target.code-range",
+            input: {
+              filePath: "script.js",
+              startLine: 47,
+              startColumn: 13,
+              endLine: 47,
+              endColumn: 27,
+            },
+          },
+          assistant: {
+            stateId: "assistant.pointing",
+            placementId: "placement.near-target",
+            visible: true,
+          },
+          effects: [
+            { effectId: "effect.highlight" },
+            { effectId: "effect.pointer" },
+          ],
+          guide: {
+            title: "Logged value",
+            body: "Navigation and highlighting keep their existing behavior.",
+          },
+        },
+      ],
+    });
+    expect(started).toEqual(expect.objectContaining({ ok: true }));
+
+    const overlay = page.getByLabel("Lessonique visual guidance");
+    const guide = page.getByLabel("Teaching guide");
+    const highlight = page.locator('[data-guidance-effect="highlight"]');
+    await expect(guide).toContainText("Console object", { timeout: 20_000 });
+    await expect(highlight).toHaveCount(1);
+    await expect(guide.locator("[data-tooltip]")).toHaveCount(0);
+    await expect(overlay).toHaveCSS("z-index", "40");
+
+    await clearConsole.hover();
+    await expect(visibleTooltip).toHaveText("Clear console");
+    await expect(visibleTooltip.locator("xpath=..")).toHaveCSS("z-index", "35");
+    await expect(visibleTooltip.locator("xpath=..")).toHaveCSS(
+      "pointer-events",
+      "none",
+    );
+    await clearConsole.click();
+    await expect(
+      page
+        .getByRole("log", { name: "Runtime console" })
+        .locator("[data-console-entry-id]"),
+    ).toHaveCount(0);
+    await expect(guide).toBeVisible();
+    await expect(highlight).toHaveCount(1);
+
+    const monacoScrollers = page.locator(".monaco-scrollable-element");
+    const editorScrollerIndex = await monacoScrollers.evaluateAll((elements) =>
+      elements.reduce(
+        (best, element, index) => {
+          const overflow = element.scrollHeight - element.clientHeight;
+          return overflow > best.overflow ? { index, overflow } : best;
+        },
+        { index: -1, overflow: 0 },
+      ).index,
+    );
+    expect(editorScrollerIndex).toBeGreaterThanOrEqual(0);
+    const editorScroller = monacoScrollers.nth(editorScrollerIndex);
+    const initialEditorScroll = await editorScroller.evaluate((element) =>
+      element.scrollTop,
+    );
+    await editorScroller.evaluate((element) => {
+      const maximumScroll = element.scrollHeight - element.clientHeight;
+      element.scrollTop = element.scrollTop > 40
+        ? element.scrollTop - 40
+        : Math.min(maximumScroll, element.scrollTop + 40);
+    });
+    await expect
+      .poll(() => editorScroller.evaluate((element) => element.scrollTop))
+      .not.toBe(initialEditorScroll);
+    await expect(guide).toBeVisible();
+    await expect(highlight).toHaveCount(1);
+
+    await page.getByRole("button", { name: "Collapse project files" }).click();
+    await expect(projectFiles).toHaveCount(0);
+    await expect(highlight).toHaveCount(1);
+    await page.getByRole("button", { name: "Expand project files" }).click();
+    await expect(projectFiles).toBeVisible();
+    await expect(highlight).toHaveCount(1);
+
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(guide).toContainText("Logged value");
+    await expect(highlight).toHaveCount(1);
+    await page.getByRole("button", { name: "Previous", exact: true }).click();
+    await expect(guide).toContainText("Console object");
+    await expect(highlight).toHaveCount(1);
+
+    const cancelled = await invokeRegisteredTool(page, "control_teaching_scene", {
+      action: "cancel",
+      sceneId: "scene.control-tooltip-isolation",
+    });
+    expect(cancelled).toEqual(
+      expect.objectContaining({
+        ok: false,
+        status: "cancelled",
+        data: expect.objectContaining({ sceneStatus: "cancelled" }),
+      }),
+    );
+    await expect(overlay).toHaveCount(0);
+  });
+
   test("toggles automatic execution and keeps only the latest console result", async ({
     page,
   }, testInfo) => {

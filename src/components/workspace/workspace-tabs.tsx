@@ -125,8 +125,8 @@ export function WorkspaceTabs({
               aria-label={`Close file tab ${file.path}`}
               className="mr-1 grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground opacity-70 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 group-hover:opacity-100"
               data-close-workspace-tab={file.path}
+              data-tooltip={`Close ${file.path}`}
               onClick={() => onClose(file.path)}
-              title={`Close ${file.path}`}
               type="button"
             >
               <X aria-hidden="true" className="size-3" />

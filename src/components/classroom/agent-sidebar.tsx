@@ -717,6 +717,7 @@ export function AgentSidebar() {
           aria-valuemin={MINIMUM_PANEL_WIDTH}
           aria-valuenow={panelWidth}
           className="absolute -left-3 top-1/2 z-10 hidden h-20 w-6 -translate-y-1/2 cursor-col-resize touch-none select-none items-center justify-center rounded-full outline-none before:h-9 before:w-1 before:rounded-full before:bg-border before:transition-[height,background-color] hover:before:h-11 hover:before:bg-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:before:h-11 focus-visible:before:bg-primary active:before:bg-primary 2xl:flex"
+          data-tooltip="Resize learning agent"
           onKeyDown={handleResizeKeyDown}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
@@ -731,6 +732,9 @@ export function AgentSidebar() {
           aria-controls="learning-agent-content"
           aria-expanded={!isCollapsed}
           aria-label={
+            isCollapsed ? "Expand learning agent" : "Collapse learning agent"
+          }
+          data-tooltip={
             isCollapsed ? "Expand learning agent" : "Collapse learning agent"
           }
           onClick={() => setIsCollapsed((current) => !current)}

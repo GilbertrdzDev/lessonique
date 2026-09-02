@@ -11,9 +11,9 @@ export function ThemeToggle() {
   return (
     <Button
       aria-label="Toggle color theme"
+      data-tooltip="Toggle color theme"
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
       size="icon-sm"
-      title="Toggle color theme"
       variant="ghost"
     >
       <Sun aria-hidden="true" className="size-4 dark:hidden" />
