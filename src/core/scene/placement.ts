@@ -367,40 +367,100 @@ function toPresentationPosition(
 export type PointerPoint = { x: number; y: number };
 
 export function calculatePointerPath({
-  assistant,
   guide,
   target,
 }: {
-  assistant: TargetGeometry;
-  guide?: TargetGeometry;
+  guide: TargetGeometry;
   target: TargetGeometry;
 }): readonly PointerPoint[] {
-  const assistantCenter = centerOf(assistant);
+  const direction = nearestConnectorDirection(target, guide);
   const targetCenter = centerOf(target);
-  const start = boundaryPoint(assistant, targetCenter);
-  const end = boundaryPoint(target, assistantCenter);
-  if (!guide || !segmentIntersectsRect(start, end, expandRect(guide, 8))) {
-    return [start, end];
+  const targetGap = 10;
+  const channelLength = 14;
+
+  if (direction === "right" || direction === "left") {
+    const sign = direction === "right" ? 1 : -1;
+    const targetEdge = direction === "right" ? target.left + target.width : target.left;
+    const guideEdge = direction === "right" ? guide.left : guide.left + guide.width;
+    const targetPoint = {
+      x: targetEdge + sign * targetGap,
+      y: targetCenter.y,
+    };
+    const guidePoint = {
+      x: guideEdge,
+      y: insetEdgeCoordinate(guide.top, guide.height, targetCenter.y),
+    };
+    const channelX = targetPoint.x +
+      sign * Math.min(channelLength, Math.abs(guidePoint.x - targetPoint.x) / 2);
+    return removeDuplicatePoints([
+      targetPoint,
+      { x: channelX, y: targetPoint.y },
+      { x: channelX, y: guidePoint.y },
+      guidePoint,
+    ]);
   }
-  const expandedGuide = expandRect(guide, 10);
-  const waypoints: PointerPoint[] = [
-    { x: expandedGuide.left - 1, y: expandedGuide.top - 1 },
-    { x: expandedGuide.left + expandedGuide.width + 1, y: expandedGuide.top - 1 },
-    { x: expandedGuide.left - 1, y: expandedGuide.top + expandedGuide.height + 1 },
-    { x: expandedGuide.left + expandedGuide.width + 1, y: expandedGuide.top + expandedGuide.height + 1 },
+
+  const sign = direction === "bottom" ? 1 : -1;
+  const targetEdge = direction === "bottom" ? target.top + target.height : target.top;
+  const guideEdge = direction === "bottom" ? guide.top : guide.top + guide.height;
+  const targetPoint = {
+    x: targetCenter.x,
+    y: targetEdge + sign * targetGap,
+  };
+  const guidePoint = {
+    x: insetEdgeCoordinate(guide.left, guide.width, targetCenter.x),
+    y: guideEdge,
+  };
+  const channelY = targetPoint.y +
+    sign * Math.min(channelLength, Math.abs(guidePoint.y - targetPoint.y) / 2);
+  return removeDuplicatePoints([
+    targetPoint,
+    { x: targetPoint.x, y: channelY },
+    { x: guidePoint.x, y: channelY },
+    guidePoint,
+  ]);
+}
+
+type ConnectorDirection = "top" | "right" | "bottom" | "left";
+
+function nearestConnectorDirection(
+  target: TargetRectangle,
+  guide: TargetRectangle,
+): ConnectorDirection {
+  const candidates: { direction: ConnectorDirection; gap: number }[] = [
+    { direction: "right", gap: guide.left - (target.left + target.width) },
+    { direction: "left", gap: target.left - (guide.left + guide.width) },
+    { direction: "bottom", gap: guide.top - (target.top + target.height) },
+    { direction: "top", gap: target.top - (guide.top + guide.height) },
   ];
-  const waypoint = waypoints
-    .filter(
-      (candidate) =>
-        !segmentIntersectsRect(start, candidate, expandedGuide) &&
-        !segmentIntersectsRect(candidate, end, expandedGuide),
-    )
-    .sort(
-      (left, right) =>
-        pointDistance(start, left) + pointDistance(left, end) -
-        (pointDistance(start, right) + pointDistance(right, end)),
-    )[0];
-  return waypoint ? [start, waypoint, end] : [start, end];
+  const separated = candidates
+    .filter(({ gap }) => gap >= 0)
+    .sort((left, right) => left.gap - right.gap)[0];
+  if (separated) return separated.direction;
+
+  const targetCenter = centerOf(target);
+  const guideCenter = centerOf(guide);
+  const deltaX = guideCenter.x - targetCenter.x;
+  const deltaY = guideCenter.y - targetCenter.y;
+  return Math.abs(deltaX) >= Math.abs(deltaY)
+    ? deltaX >= 0
+      ? "right"
+      : "left"
+    : deltaY >= 0
+      ? "bottom"
+      : "top";
+}
+
+function insetEdgeCoordinate(start: number, length: number, preferred: number): number {
+  const inset = Math.min(22, length / 2);
+  return Math.min(Math.max(preferred, start + inset), start + length - inset);
+}
+
+function removeDuplicatePoints(points: readonly PointerPoint[]): readonly PointerPoint[] {
+  return points.filter(
+    (point, index) =>
+      index === 0 || point.x !== points[index - 1]!.x || point.y !== points[index - 1]!.y,
+  );
 }
 
 function rect(left: number, top: number, width: number, height: number): TargetGeometry {
@@ -448,18 +508,6 @@ function centerOf(value: TargetRectangle): PointerPoint {
   return { x: value.left + value.width / 2, y: value.top + value.height / 2 };
 }
 
-function boundaryPoint(value: TargetRectangle, toward: PointerPoint): PointerPoint {
-  const center = centerOf(value);
-  const deltaX = toward.x - center.x;
-  const deltaY = toward.y - center.y;
-  if (deltaX === 0 && deltaY === 0) return center;
-  const scale = Math.min(
-    deltaX === 0 ? Number.POSITIVE_INFINITY : value.width / 2 / Math.abs(deltaX),
-    deltaY === 0 ? Number.POSITIVE_INFINITY : value.height / 2 / Math.abs(deltaY),
-  );
-  return { x: center.x + deltaX * scale, y: center.y + deltaY * scale };
-}
-
 function expandRect(value: TargetRectangle, amount: number): TargetGeometry {
   return {
     left: value.left - amount,
@@ -467,56 +515,6 @@ function expandRect(value: TargetRectangle, amount: number): TargetGeometry {
     width: value.width + amount * 2,
     height: value.height + amount * 2,
   };
-}
-
-function segmentIntersectsRect(
-  start: PointerPoint,
-  end: PointerPoint,
-  value: TargetRectangle,
-): boolean {
-  if (pointInsideRect(start, value) || pointInsideRect(end, value)) return true;
-  const right = value.left + value.width;
-  const bottom = value.top + value.height;
-  return [
-    [{ x: value.left, y: value.top }, { x: right, y: value.top }],
-    [{ x: right, y: value.top }, { x: right, y: bottom }],
-    [{ x: right, y: bottom }, { x: value.left, y: bottom }],
-    [{ x: value.left, y: bottom }, { x: value.left, y: value.top }],
-  ].some(([edgeStart, edgeEnd]) =>
-    segmentsIntersect(start, end, edgeStart!, edgeEnd!),
-  );
-}
-
-function pointInsideRect(point: PointerPoint, value: TargetRectangle): boolean {
-  return (
-    point.x >= value.left &&
-    point.x <= value.left + value.width &&
-    point.y >= value.top &&
-    point.y <= value.top + value.height
-  );
-}
-
-function segmentsIntersect(
-  firstStart: PointerPoint,
-  firstEnd: PointerPoint,
-  secondStart: PointerPoint,
-  secondEnd: PointerPoint,
-): boolean {
-  const direction = (
-    start: PointerPoint,
-    end: PointerPoint,
-    point: PointerPoint,
-  ) =>
-    (point.x - start.x) * (end.y - start.y) -
-    (point.y - start.y) * (end.x - start.x);
-  const d1 = direction(firstStart, firstEnd, secondStart);
-  const d2 = direction(firstStart, firstEnd, secondEnd);
-  const d3 = direction(secondStart, secondEnd, firstStart);
-  const d4 = direction(secondStart, secondEnd, firstEnd);
-  return (
-    ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
-    ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
-  );
 }
 
 function pointDistance(left: PointerPoint, right: PointerPoint): number {

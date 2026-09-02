@@ -66,15 +66,56 @@ describe("PlacementEngine", () => {
     assertNoOverlap(rectForCompanion(placement), target);
   });
 
-  it("connects the measured companion and target boundaries", () => {
+  it("connects a target-adjacent point to the measured guide boundary", () => {
     const points = calculatePointerPath({
-      assistant: { left: 100, top: 100, width: 100, height: 100 },
+      guide: { left: 500, top: 80, width: 288, height: 200 },
       target: { left: 300, top: 120, width: 80, height: 40 },
     });
 
-    expect(points).toHaveLength(2);
-    expect(points[0]!.x).toBe(200);
-    expect(points[1]!.x).toBe(300);
+    expect(points[0]).toEqual({ x: 390, y: 140 });
+    expect(points.at(-1)).toEqual({ x: 500, y: 140 });
+    expectOrthogonalPath(points);
+  });
+
+  it.each([
+    {
+      name: "left",
+      guide: { left: 20, top: 80, width: 200, height: 180 },
+      targetPoint: { x: 290, y: 140 },
+      guidePoint: { x: 220, y: 140 },
+    },
+    {
+      name: "top",
+      guide: { left: 250, top: 0, width: 288, height: 80 },
+      targetPoint: { x: 340, y: 110 },
+      guidePoint: { x: 340, y: 80 },
+    },
+    {
+      name: "bottom",
+      guide: { left: 250, top: 220, width: 288, height: 180 },
+      targetPoint: { x: 340, y: 170 },
+      guidePoint: { x: 340, y: 220 },
+    },
+  ])("adapts the connector toward the $name side", ({ guide, targetPoint, guidePoint }) => {
+    const points = calculatePointerPath({
+      guide,
+      target: { left: 300, top: 120, width: 80, height: 40 },
+    });
+
+    expect(points[0]).toEqual(targetPoint);
+    expect(points.at(-1)).toEqual(guidePoint);
+    expectOrthogonalPath(points);
+  });
+
+  it("uses the closest open side instead of crossing a diagonal code region", () => {
+    const points = calculatePointerPath({
+      guide: { left: 500, top: 200, width: 288, height: 180 },
+      target: { left: 300, top: 120, width: 80, height: 40 },
+    });
+
+    expect(points[0]).toEqual({ x: 340, y: 170 });
+    expect(points.at(-1)).toEqual({ x: 522, y: 200 });
+    expectOrthogonalPath(points);
   });
 
   it("avoids registered interface obstructions when another safe candidate exists", () => {
@@ -111,6 +152,14 @@ describe("PlacementEngine", () => {
     obstructions.forEach((obstruction) => assertNoOverlap(guide, obstruction));
   });
 });
+
+function expectOrthogonalPath(points: readonly { x: number; y: number }[]): void {
+  expect(points.length).toBeGreaterThanOrEqual(2);
+  points.slice(1).forEach((point, index) => {
+    const previous = points[index]!;
+    expect(point.x === previous.x || point.y === previous.y).toBe(true);
+  });
+}
 
 function calculate(
   overrides: Partial<Parameters<PlacementEngine["calculate"]>[0]> = {},

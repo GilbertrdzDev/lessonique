@@ -1836,8 +1836,8 @@ test.describe("classroom shell", () => {
     const anchors = [
       ["single-line", "One exact line", 1, 1, 1, 33, "step.overview"],
       ["multi-line", "One four-line block", 1, 1, 4, 24, "step.overview"],
-      ["const-token", "The const token", 1, 1, 1, 6, "step.declarations"],
-      ["let-token", "The let token", 2, 1, 2, 4, "step.declarations"],
+      ["const-token", "The `const` token", 1, 1, 1, 6, "step.declarations"],
+      ["let-token", "The `let` token", 2, 1, 2, 4, "step.declarations"],
       ["course-name", "The courseName identifier", 1, 7, 1, 17, "step.assignments"],
       ["string-value", "The JavaScript value", 1, 20, 1, 32, "step.assignments"],
       ["lesson-count", "The lessonCount identifier", 2, 5, 2, 16, "step.assignments"],
@@ -1935,6 +1935,9 @@ test.describe("classroom shell", () => {
     const highlight = page.locator('[data-guidance-effect="highlight"]');
     const spotlight = page.locator('[data-guidance-effect="spotlight"]');
     const pointer = page.locator('[data-guidance-effect="point"]');
+    const targetEndpoint = pointer.locator(
+      '[data-guidance-connector-endpoint="target"]',
+    );
     const editorScroller = page.locator(".monaco-scrollable-element").first();
     const editorRegion = page.locator(
       '[data-interaction-anchor="anchor.workspace-editor"]',
@@ -1952,7 +1955,13 @@ test.describe("classroom shell", () => {
       );
       await expect(spotlight).toHaveCount(1);
       await expect(pointer).toHaveCount(1);
+      await expect(pointer).toHaveAttribute(
+        "data-guidance-presentation",
+        "guide-connector",
+      );
+      await expect(targetEndpoint).toHaveCount(1);
       await expect.poll(() => codeGuidanceIsSafe(page)).toBe(true);
+      await expect.poll(() => codeConnectorIsSafe(page)).toBe(true);
     };
 
     await expectBeat("One exact line", 1);
@@ -1970,6 +1979,15 @@ test.describe("classroom shell", () => {
     const constBox = await highlight.boundingBox();
     expect(constBox).not.toBeNull();
     expect(constBox!.width).toBeLessThan(lineBox!.width / 3);
+    await expect(highlight).toHaveCSS("border-top-width", "2px");
+    await expect(highlight).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(highlight).not.toHaveCSS("box-shadow", "none");
+    await expect(guide.getByRole("button", { name: "Hide guide" })).toHaveText(
+      "Hide",
+    );
+    await expect(guide.locator('code[data-slot="guide-inline-code"]')).toContainText(
+      "const",
+    );
 
     await editorScroller.evaluate((element) => {
       element.scrollTop = 0;
@@ -1977,6 +1995,7 @@ test.describe("classroom shell", () => {
     });
     await expect.poll(() => codeTargetNearEditorEdge(page, "top-left")).toBe(true);
     await expect.poll(() => codeGuidanceIsSafe(page)).toBe(true);
+    const constVisualGeometry = await codeGuidanceGeometry(page);
 
     await next();
     await expectBeat("The let token", 1);
@@ -1994,6 +2013,10 @@ test.describe("classroom shell", () => {
     expect(returnedConstBox).not.toBeNull();
     expect(Math.abs(returnedConstBox!.x - constBox!.x)).toBeLessThanOrEqual(2);
     expect(Math.abs(returnedConstBox!.width - constBox!.width)).toBeLessThanOrEqual(2);
+    expectCodeGuidanceGeometryClose(
+      await codeGuidanceGeometry(page),
+      constVisualGeometry,
+    );
 
     await editorScroller.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
@@ -2941,6 +2964,192 @@ async function codeGuidanceIsSafe(page: Page): Promise<boolean> {
       overlapArea(companionRect) === 0
     );
   });
+}
+
+async function codeConnectorIsSafe(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const highlight = document.querySelector<HTMLElement>(
+      '[data-guidance-effect="highlight"]',
+    );
+    const guide = document.querySelector<HTMLElement>('[data-slot="visual-guide"]');
+    const connector = document.querySelector<SVGSVGElement>(
+      '[data-guidance-presentation="guide-connector"]',
+    );
+    const line = connector?.querySelector<SVGPolylineElement>(
+      '[data-guidance-connector-line="true"]',
+    );
+    const endpoint = connector?.querySelector<SVGCircleElement>(
+      '[data-guidance-connector-endpoint="target"]',
+    );
+    if (!highlight || !guide || !connector || !line || !endpoint) return false;
+
+    const parsePoint = (value: string | null) => {
+      const [x, y] = value?.split(",").map(Number) ?? [];
+      return Number.isFinite(x) && Number.isFinite(y) ? { x: x!, y: y! } : null;
+    };
+    const targetPoint = parsePoint(connector.getAttribute("data-connector-target"));
+    const guidePoint = parsePoint(connector.getAttribute("data-connector-guide"));
+    const linePoints = (line.getAttribute("points") ?? "")
+      .trim()
+      .split(/\s+/u)
+      .filter(Boolean)
+      .map((value) => parsePoint(value))
+      .filter((point): point is { x: number; y: number } => Boolean(point));
+    if (!targetPoint || !guidePoint || linePoints.length < 2) return false;
+
+    const highlightRect = highlight.getBoundingClientRect();
+    const guideRect = guide.getBoundingClientRect();
+    const endpointRect = endpoint.getBoundingClientRect();
+    const close = (left: number, right: number) => Math.abs(left - right) <= 1.5;
+    const samePoint = (
+      left: { x: number; y: number },
+      right: { x: number; y: number },
+    ) => close(left.x, right.x) && close(left.y, right.y);
+    const outsideHighlight =
+      targetPoint.x < highlightRect.left ||
+      targetPoint.x > highlightRect.right ||
+      targetPoint.y < highlightRect.top ||
+      targetPoint.y > highlightRect.bottom;
+    const targetDistance = Math.hypot(
+      targetPoint.x < highlightRect.left
+        ? highlightRect.left - targetPoint.x
+        : targetPoint.x > highlightRect.right
+          ? targetPoint.x - highlightRect.right
+          : 0,
+      targetPoint.y < highlightRect.top
+        ? highlightRect.top - targetPoint.y
+        : targetPoint.y > highlightRect.bottom
+          ? targetPoint.y - highlightRect.bottom
+          : 0,
+    );
+    const endpointOverlap =
+      Math.max(
+        0,
+        Math.min(highlightRect.right, endpointRect.right) -
+          Math.max(highlightRect.left, endpointRect.left),
+      ) *
+      Math.max(
+        0,
+        Math.min(highlightRect.bottom, endpointRect.bottom) -
+          Math.max(highlightRect.top, endpointRect.top),
+      );
+    const guideBoundaryDistance = Math.min(
+      Math.abs(guidePoint.x - guideRect.left),
+      Math.abs(guidePoint.x - guideRect.right),
+      Math.abs(guidePoint.y - guideRect.top),
+      Math.abs(guidePoint.y - guideRect.bottom),
+    );
+    const guidePointWithinBounds =
+      guidePoint.x >= guideRect.left - 1.5 &&
+      guidePoint.x <= guideRect.right + 1.5 &&
+      guidePoint.y >= guideRect.top - 1.5 &&
+      guidePoint.y <= guideRect.bottom + 1.5;
+    const orthogonal = linePoints.slice(1).every((point, index) => {
+      const previous = linePoints[index]!;
+      return close(point.x, previous.x) || close(point.y, previous.y);
+    });
+    const crossesHighlight = linePoints.slice(1).some((point, index) => {
+      const previous = linePoints[index]!;
+      if (close(point.x, previous.x)) {
+        return (
+          point.x > highlightRect.left + 0.5 &&
+          point.x < highlightRect.right - 0.5 &&
+          Math.max(Math.min(point.y, previous.y), highlightRect.top + 0.5) <
+            Math.min(Math.max(point.y, previous.y), highlightRect.bottom - 0.5)
+        );
+      }
+      if (close(point.y, previous.y)) {
+        return (
+          point.y > highlightRect.top + 0.5 &&
+          point.y < highlightRect.bottom - 0.5 &&
+          Math.max(Math.min(point.x, previous.x), highlightRect.left + 0.5) <
+            Math.min(Math.max(point.x, previous.x), highlightRect.right - 0.5)
+        );
+      }
+      return true;
+    });
+    const highlightStyle = getComputedStyle(highlight);
+
+    return (
+      samePoint(linePoints[0]!, targetPoint) &&
+      samePoint(linePoints.at(-1)!, guidePoint) &&
+      outsideHighlight &&
+      targetDistance >= 1 &&
+      targetDistance <= 12 &&
+      endpointOverlap === 0 &&
+      guideBoundaryDistance <= 1.5 &&
+      guidePointWithinBounds &&
+      orthogonal &&
+      !crossesHighlight &&
+      parseFloat(highlightStyle.borderTopWidth) >= 2 &&
+      highlightStyle.backgroundColor !== "rgba(0, 0, 0, 0)" &&
+      highlightStyle.boxShadow !== "none"
+    );
+  });
+}
+
+type CodeGuidanceGeometry = Readonly<{
+  highlight: readonly number[];
+  guide: readonly number[];
+  endpoint: readonly number[];
+  line: readonly number[];
+}>;
+
+async function codeGuidanceGeometry(page: Page): Promise<CodeGuidanceGeometry> {
+  return page.evaluate(() => {
+    const highlight = document.querySelector<HTMLElement>(
+      '[data-guidance-effect="highlight"]',
+    );
+    const guide = document.querySelector<HTMLElement>('[data-slot="visual-guide"]');
+    const connector = document.querySelector<SVGSVGElement>(
+      '[data-guidance-presentation="guide-connector"]',
+    );
+    const line = connector?.querySelector<SVGPolylineElement>(
+      '[data-guidance-connector-line="true"]',
+    );
+    const endpoint = connector?.querySelector<SVGCircleElement>(
+      '[data-guidance-connector-endpoint="target"]',
+    );
+    if (!highlight || !guide || !line || !endpoint) {
+      throw new Error("Complete code guidance geometry is not visible.");
+    }
+    const highlightRect = highlight.getBoundingClientRect();
+    const guideRect = guide.getBoundingClientRect();
+    const endpointRect = endpoint.getBoundingClientRect();
+    const linePoints = (line.getAttribute("points") ?? "")
+      .trim()
+      .split(/[\s,]+/u)
+      .filter(Boolean)
+      .map(Number);
+    return {
+      highlight: [
+        highlightRect.left,
+        highlightRect.top,
+        highlightRect.width,
+        highlightRect.height,
+      ],
+      guide: [guideRect.left, guideRect.top, guideRect.width, guideRect.height],
+      endpoint: [
+        endpointRect.left,
+        endpointRect.top,
+        endpointRect.width,
+        endpointRect.height,
+      ],
+      line: linePoints,
+    };
+  });
+}
+
+function expectCodeGuidanceGeometryClose(
+  actual: CodeGuidanceGeometry,
+  expected: CodeGuidanceGeometry,
+): void {
+  for (const key of ["highlight", "guide", "endpoint", "line"] as const) {
+    expect(actual[key]).toHaveLength(expected[key].length);
+    actual[key].forEach((value, index) => {
+      expect(Math.abs(value - expected[key][index]!)).toBeLessThanOrEqual(2);
+    });
+  }
 }
 
 async function codeTargetNearEditorEdge(

@@ -492,9 +492,38 @@ describe("AssistantOverlayHost", () => {
     expect(html.match(/data-guidance-effect="highlight"/gu)).toHaveLength(1);
     expect(html).toContain('data-guidance-fragment-count="3"');
     expect(html).toContain('data-guidance-shape="continuous"');
-    expect(html).toContain("width:186px");
-    expect(html).toContain("height:60px");
+    expect(html).toContain("width:184px");
+    expect(html).toContain("height:58px");
     expect(html).not.toContain("width:800px");
+  });
+
+  it("keeps an exact token highlight tight, readable, and visually defined", () => {
+    const store = new ScenePresentationStore();
+    const current = store.getSnapshot();
+    store.commit({
+      ...current,
+      sceneId: "scene.token-highlight",
+      beatId: "beat.const",
+      visibility: "visible",
+      guide: { title: "The `const` keyword", body: "Only `const` is active." },
+      targetSnapshot: {
+        status: "resolved",
+        geometry: { left: 100, top: 100, width: 42, height: 19 },
+      },
+      effects: [{ effectId: "effect.highlight" }],
+    });
+
+    const html = renderToStaticMarkup(
+      <AssistantOverlayHost presentationStore={store} />,
+    );
+
+    expect(html).toContain('data-guidance-highlight-padding="2"');
+    expect(html).toContain("left:98px");
+    expect(html).toContain("width:46px");
+    expect(html).toContain("height:23px");
+    expect(html).toContain("border-primary/85");
+    expect(html).toContain("bg-primary/10");
+    expect(html).toContain('data-slot="guide-inline-code"');
   });
 
   it("replaces target overlays with a compact paused guide while the target is out of view", () => {

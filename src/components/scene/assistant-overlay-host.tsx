@@ -268,6 +268,10 @@ export function AssistantOverlayHost({
     target,
     visibility,
   });
+  const connectorGuideGeometry = offsetGeometry(
+    measured.guideGeometry,
+    guideDrag.offset,
+  );
   const companionVisualState = resolveSceneCompanionVisualState(
     assistant.stateId,
     effectIds,
@@ -393,25 +397,11 @@ export function AssistantOverlayHost({
       ) : null}
       {visibility === "visible" && target &&
       (effectIds.has("effect.point") || effectIds.has("effect.pointer")) &&
-      assistant.visible &&
       measured.ready &&
-      !assistant.position.companionSuppressed ? (
+      connectorGuideGeometry &&
+      !assistant.position.guideSuppressed ? (
         <TargetPointer
-          companionLeft={
-            assistant.position.left +
-            assistant.position.companionOffsetLeft +
-            companionDrag.offset.x
-          }
-          companionTop={
-            assistant.position.top +
-            assistant.position.companionOffsetTop +
-            companionDrag.offset.y
-          }
-          companionSize={measured.companionSize}
-          guideGeometry={offsetGeometry(
-            measured.guideGeometry,
-            guideDrag.offset,
-          )}
+          guideGeometry={connectorGuideGeometry}
           geometry={target}
         />
       ) : null}
@@ -766,19 +756,21 @@ function VisualGuideCard({
         <p className="text-[0.66rem] font-bold uppercase tracking-[0.16em] text-primary">
           Lessonique guide
         </p>
-        <button
-          aria-label="Hide guide"
-          className="rounded-md px-2 py-1 text-[0.65rem] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          onClick={onHide}
-          type="button"
-        >
-          Hide
-        </button>
-        {paused ? (
-          <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.62rem] font-semibold text-warning">
-            Paused
-          </span>
-        ) : null}
+        <div className="flex items-center gap-1">
+          {paused ? (
+            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.62rem] font-semibold text-warning">
+              Paused
+            </span>
+          ) : null}
+          <button
+            aria-label="Hide guide"
+            className="rounded-md px-2 py-1 text-[0.65rem] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
+            onClick={onHide}
+            type="button"
+          >
+            Hide
+          </button>
+        </div>
       </div>
       {guide?.title ? (
         <h2 className="text-sm font-bold">
@@ -897,74 +889,68 @@ function TargetHighlight({ geometry }: Readonly<{ geometry: TargetGeometry }>) {
   return (
     <div
       aria-hidden="true"
-      className="absolute rounded-lg border border-primary/50 bg-primary/12 shadow-[0_0_0_1px_rgb(124_92_255_/_0.08),0_8px_22px_rgb(76_56_160_/_0.12)]"
+      className="absolute rounded-md border-2 border-primary/85 bg-primary/10 shadow-[0_0_0_1px_rgb(255_255_255_/_0.72),0_0_14px_rgb(124_92_255_/_0.42)]"
       data-guidance-effect="highlight"
       data-guidance-fragment-count={targetFragments(geometry).length}
+      data-guidance-highlight-padding="2"
       data-guidance-shape="continuous"
-      style={targetStyle(block, 3)}
+      style={targetStyle(block, 2)}
     />
   );
 }
 
 function TargetPointer({
-  companionLeft,
-  companionTop,
-  companionSize,
   guideGeometry,
   geometry,
 }: Readonly<{
-  companionLeft: number;
-  companionTop: number;
-  companionSize: { width: number; height: number };
-  guideGeometry?: TargetGeometry;
+  guideGeometry: TargetGeometry;
   geometry: TargetGeometry;
 }>) {
   const points = calculatePointerPath({
-    assistant: {
-      left: companionLeft,
-      top: companionTop,
-      width: companionSize.width,
-      height: companionSize.height,
-    },
-    ...(guideGeometry ? { guide: guideGeometry } : {}),
+    guide: guideGeometry,
     target: geometry,
   });
   const serializedPoints = points.map(({ x, y }) => `${x},${y}`).join(" ");
-  const start = points[0]!;
-  const end = points.at(-1)!;
+  const targetPoint = points[0]!;
+  const guidePoint = points.at(-1)!;
   return (
     <svg
       aria-hidden="true"
       className="absolute inset-0 size-full overflow-visible"
-      data-pointer-end={`${end.x},${end.y}`}
-      data-pointer-start={`${start.x},${start.y}`}
+      data-connector-guide={`${guidePoint.x},${guidePoint.y}`}
+      data-connector-target={`${targetPoint.x},${targetPoint.y}`}
       data-guidance-effect="point"
+      data-guidance-presentation="guide-connector"
+      data-pointer-end={`${guidePoint.x},${guidePoint.y}`}
+      data-pointer-start={`${targetPoint.x},${targetPoint.y}`}
     >
-      <defs>
-        <linearGradient id="lessonique-pointer-gradient" x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" stopColor="rgb(124 92 255)" />
-          <stop offset="1" stopColor="rgb(103 232 249)" />
-        </linearGradient>
-        <marker
-          id="lessonique-pointer-head"
-          markerHeight="8"
-          markerUnits="strokeWidth"
-          markerWidth="8"
-          orient="auto"
-          refX="7"
-          refY="4"
-        >
-          <path d="M0,0 L8,4 L0,8 z" fill="rgb(165 243 252)" />
-        </marker>
-      </defs>
       <polyline
+        data-guidance-connector-line="true"
         fill="none"
-        markerEnd="url(#lessonique-pointer-head)"
         points={serializedPoints}
-        stroke="url(#lessonique-pointer-gradient)"
+        stroke="rgb(102 61 244 / 0.98)"
         strokeLinecap="round"
         strokeLinejoin="round"
-        strokeWidth="2"
+        strokeWidth="2.75"
+        style={{ filter: "drop-shadow(0 0 3px rgb(111 76 255 / 0.52))" }}
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle
+        cx={targetPoint.x}
+        cy={targetPoint.y}
+        data-guidance-connector-endpoint-halo="target"
+        fill="rgb(111 76 255 / 0.2)"
+        r="7"
+      />
+      <circle
+        cx={targetPoint.x}
+        cy={targetPoint.y}
+        data-guidance-connector-endpoint="target"
+        fill="rgb(102 61 244)"
+        r="4.25"
+        stroke="rgb(255 255 255 / 0.96)"
+        strokeWidth="1.5"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );
