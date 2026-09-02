@@ -35,7 +35,7 @@ describe("AgentSidebar", () => {
     expect(markup).not.toContain("Connected through WebMCP");
     expect(markup).not.toContain("Understand the objective");
     expect(markup).toContain("WebMCP Dev Panel");
-    expect(markup).toContain("12 tools");
+    expect(markup).toContain("13 tools");
     expect(markup).toContain('data-interaction-anchor="anchor.learning-plan"');
     expect(markup).toContain('data-interaction-anchor="anchor.live-activity"');
   });

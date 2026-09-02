@@ -1,0 +1,23 @@
+.root {
+  position: relative;
+  display: block;
+  max-inline-size: 100%;
+  aspect-ratio: 362 / 320;
+  overflow: hidden;
+  contain: layout paint style;
+  isolation: isolate;
+  background-image: var(--construction-sprite-url);
+  background-repeat: no-repeat;
+  background-position: var(--construction-frame-x, 0%)
+    var(--construction-frame-y, 0%);
+  background-size: var(--construction-sheet-width)
+    var(--construction-sheet-height);
+  image-rendering: auto;
+  will-change: background-position;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root {
+    will-change: auto;
+  }
+}

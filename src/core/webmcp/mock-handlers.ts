@@ -7,6 +7,7 @@ import type {
   ValidationResultSnapshotStore,
   CodeIntelligenceService,
 } from "@/core/code-intelligence";
+import type { GuideBuildService } from "@/core/guide-build";
 import type {
   ClassroomLifecycleService,
   AssistantIntentMapper,
@@ -32,6 +33,7 @@ import { ExecuteEnvironmentActionService } from "./execute-environment-action";
 import { EvaluateCurrentStepService } from "./evaluate-current-step";
 import { InspectClassroomService } from "./inspect-classroom";
 import { ShowReferencePanelService } from "./show-reference-panel";
+import { SetGuideBuildStatusService } from "./set-guide-build-status";
 import { TeachingSceneToolService } from "./teaching-scene-tools";
 import { UpdateLessonPlanService } from "./update-lesson-plan";
 import type { ToolHandler, ToolExecutionResult, WebMCPToolInputMap } from "./contracts";
@@ -43,6 +45,11 @@ const TOOL_METADATA = {
   get_system_capabilities: {
     title: "Get system capabilities",
     description: "Discover registered profiles, providers, surfaces, actions, guidance capabilities, and limits.",
+  },
+  set_guide_build_status: {
+    title: "Set guide build status",
+    description:
+      "Report the real guide-planning stage before classroom creation. Start with understanding-goal, advance one stage at a time, and let create_guided_lesson own successful completion. Use error with a learner-facing message when planning cannot continue.",
   },
   create_guided_lesson: {
     title: "Create guided lesson",
@@ -91,6 +98,7 @@ const TOOL_METADATA = {
 } as const satisfies Record<WebMCPToolName, { title: string; description: string }>;
 
 export type EarlyWebMCPIntegrations = {
+  guideBuild?: GuideBuildService;
   workspaceController?: WorkspaceController;
   createGuidedLesson?: CreateGuidedLessonUseCase;
   resetClassroom?: ResetClassroomUseCase;
@@ -134,6 +142,9 @@ export function createEarlyWebMCPToolRegistry(
         integrations.workspaceController,
         registries,
       )
+    : undefined;
+  const guideBuildStatus = integrations.guideBuild
+    ? new SetGuideBuildStatusService(integrations.guideBuild)
     : undefined;
   const workspaceChanges = integrations.workspaceController
     ? new ApplyWorkspaceChangesService(
@@ -193,6 +204,7 @@ export function createEarlyWebMCPToolRegistry(
           resetClassroom: integrations.resetClassroom,
           scenes,
           lifecycle: integrations.classroomLifecycle,
+          guideBuild: integrations.guideBuild,
         })
       : undefined;
   const inspection =
@@ -217,6 +229,15 @@ export function createEarlyWebMCPToolRegistry(
 
   for (const name of WEBMCP_TOOL_NAMES) {
     if (name === "get_system_capabilities") continue;
+    if (name === "set_guide_build_status" && guideBuildStatus) {
+      registerDefinition(registry, {
+        name,
+        ...TOOL_METADATA.set_guide_build_status,
+        inputSchema: WEBMCP_TOOL_INPUT_SCHEMAS.set_guide_build_status,
+        handler: (input) => guideBuildStatus.execute(input),
+      });
+      continue;
+    }
     if (name === "create_guided_lesson" && classroom) {
       registerDefinition(registry, {
         name,

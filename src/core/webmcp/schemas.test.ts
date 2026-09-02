@@ -8,6 +8,7 @@ import {
   getWebMCPToolJsonSchema,
   inspectClassroomInputSchema,
   playTeachingSceneInputSchema,
+  setGuideBuildStatusInputSchema,
   WEBMCP_TOOL_INPUT_SCHEMAS,
 } from "./schemas";
 import { WEBMCP_TOOL_NAMES } from "./tool-names";
@@ -67,6 +68,33 @@ describe("WebMCP tool schemas", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it("requires the matching fields for each guide build status", () => {
+    expect(
+      setGuideBuildStatusInputSchema.safeParse({
+        status: "building",
+        stage: "understanding-goal",
+      }).success,
+    ).toBe(true);
+    expect(
+      setGuideBuildStatusInputSchema.safeParse({ status: "building" }).success,
+    ).toBe(false);
+    expect(
+      setGuideBuildStatusInputSchema.safeParse({
+        status: "error",
+        message: "The lesson could not be prepared.",
+      }).success,
+    ).toBe(true);
+    expect(
+      setGuideBuildStatusInputSchema.safeParse({ status: "error" }).success,
+    ).toBe(false);
+    expect(
+      setGuideBuildStatusInputSchema.safeParse({
+        status: "completed",
+        stage: "setting-up-classroom",
+      }).success,
+    ).toBe(false);
   });
 
   it("requires explicit lesson and beat intent in the public JSON schemas", () => {

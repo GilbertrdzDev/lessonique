@@ -297,6 +297,29 @@
     scale(1.04);
 }
 
+[data-experience-state="building-guide"] .experience-companion,
+[data-experience-state="guide-build-error"] .experience-companion {
+  top: clamp(5.75rem, 8vh, 7.25rem);
+  transform: translate(
+      calc(-50% + var(--experience-companion-offset-x)),
+      var(--experience-companion-offset-y)
+    )
+    scale(1);
+}
+
+[data-companion-experience-state="building-guide"]
+  .experience-companion-particle,
+[data-companion-experience-state="guide-build-error"]
+  .experience-companion-particle {
+  opacity: 0;
+  animation: none;
+}
+
+[data-companion-renderer="construction-sprite"]
+  .experience-companion-orbit {
+  display: none;
+}
+
 [data-companion-experience-state="unsupported"] {
   filter: saturate(0.72) brightness(0.96);
 }
@@ -1390,6 +1413,11 @@
 }
 
 @media (max-width: 48rem) {
+  [data-experience-state="building-guide"] .experience-companion,
+  [data-experience-state="guide-build-error"] .experience-companion {
+    top: 8.25rem;
+  }
+
   [data-experience-state="classroom"] .experience-companion {
     top: 11rem;
     left: 76%;

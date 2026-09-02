@@ -3,6 +3,7 @@ import { z } from "zod";
 import { DEFAULT_SYSTEM_LIMITS } from "@/core/platform/contracts";
 import type { JsonValue } from "@/core/platform/json-schema";
 import { GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION } from "@/core/platform/visual-guide";
+import { GUIDE_BUILD_STAGE_IDS } from "@/core/guide-build";
 
 import type { WebMCPToolName } from "./tool-names";
 
@@ -261,6 +262,38 @@ export const getSystemCapabilitiesInputSchema = withP0Safety(
   }),
 );
 
+export const setGuideBuildStatusInputSchema = withP0Safety(
+  z
+    .strictObject({
+      status: z.enum(["building", "completed", "error"]),
+      stage: z.enum(GUIDE_BUILD_STAGE_IDS).optional(),
+      message: z.string().min(1).max(160).optional(),
+    })
+    .superRefine((input, context) => {
+      if (input.status === "building" && !input.stage) {
+        context.addIssue({
+          code: "custom",
+          message: "A building status requires a guide build stage.",
+          path: ["stage"],
+        });
+      }
+      if (input.status === "error" && !input.message) {
+        context.addIssue({
+          code: "custom",
+          message: "An error status requires a learner-facing message.",
+          path: ["message"],
+        });
+      }
+      if (input.status !== "building" && input.stage) {
+        context.addIssue({
+          code: "custom",
+          message: "Only a building status accepts a stage.",
+          path: ["stage"],
+        });
+      }
+    }),
+);
+
 export const createGuidedLessonInputSchema = withP0Safety(
   z.strictObject({
     lessonId: identifierSchema,
@@ -487,6 +520,7 @@ export const showReferencePanelInputSchema = withP0Safety(
 
 export const WEBMCP_TOOL_INPUT_SCHEMAS = {
   get_system_capabilities: getSystemCapabilitiesInputSchema,
+  set_guide_build_status: setGuideBuildStatusInputSchema,
   create_guided_lesson: createGuidedLessonInputSchema,
   reset_classroom: resetClassroomInputSchema,
   inspect_classroom: inspectClassroomInputSchema,

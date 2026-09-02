@@ -156,8 +156,14 @@ function getHeaderStatus(
   if (experienceState === "unsupported") {
     return { label: "Browser not compatible", tone: "warning" as const };
   }
+  if (experienceState === "guide-build-error") {
+    return { label: "Guide build paused", tone: "warning" as const };
+  }
+  if (experienceState === "building-guide") {
+    return { label: "Building your AI guide", tone: "success" as const };
+  }
   if (experienceState === "starting-session") {
-    return { label: "Building your lesson", tone: "success" as const };
+    return { label: "Opening your classroom", tone: "success" as const };
   }
   if (connection === "connected") {
     return { label: "Connected through WebMCP", tone: "success" as const };

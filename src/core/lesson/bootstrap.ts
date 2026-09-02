@@ -3,6 +3,7 @@ import type {
   WorkspaceState,
 } from "@/core/workspace/contracts";
 import type { WorkspaceController } from "@/core/workspace/workspace-controller";
+import type { GuideBuildService } from "@/core/guide-build";
 
 import type {
   LessonDefinition,
@@ -81,15 +82,18 @@ export class CreateGuidedLessonUseCase {
   readonly #workspace: WorkspaceController;
   readonly #lifecycle: ClassroomLifecycleService;
   readonly #snapshot: GetClassroomSnapshotUseCase;
+  readonly #guideBuild?: GuideBuildService;
 
   constructor(dependencies: {
     lessonStore: LessonStoreAdapter;
     workspace: WorkspaceController;
     lifecycle: ClassroomLifecycleService;
+    guideBuild?: GuideBuildService;
   }) {
     this.#lessonStore = dependencies.lessonStore;
     this.#workspace = dependencies.workspace;
     this.#lifecycle = dependencies.lifecycle;
+    this.#guideBuild = dependencies.guideBuild;
     this.#snapshot = new GetClassroomSnapshotUseCase(dependencies);
   }
 
@@ -97,9 +101,15 @@ export class CreateGuidedLessonUseCase {
     const currentLesson = this.#lessonStore.getSnapshot();
     const preparedLesson = createActiveLessonState(command.lesson, command.steps);
     this.#workspace.validateEnvironmentConfiguration(command.environment);
+    this.#guideBuild?.beginClassroomSetup();
 
-    const cleanup = await this.#lifecycle.cleanup("all", "lesson-replacement");
-    assertCleanupSucceeded(cleanup);
+    try {
+      const cleanup = await this.#lifecycle.cleanup("all", "lesson-replacement");
+      assertCleanupSucceeded(cleanup);
+    } catch (error) {
+      this.#guideBuild?.fail();
+      throw error;
+    }
 
     try {
       await this.#workspace.configureEnvironment(command.environment);
@@ -107,13 +117,16 @@ export class CreateGuidedLessonUseCase {
         ...preparedLesson,
         revision: currentLesson.revision + 1,
       });
-      return this.#snapshot.execute();
+      const snapshot = this.#snapshot.execute();
+      this.#guideBuild?.complete();
+      return snapshot;
     } catch (error) {
       await this.#lifecycle.cleanup("all", "rollback");
       this.#lessonStore.commit({
         ...createIdleLessonState(),
         revision: currentLesson.revision + 1,
       });
+      this.#guideBuild?.fail();
       throw error;
     }
   }
@@ -124,15 +137,18 @@ export class ResetClassroomUseCase {
   readonly #workspace: WorkspaceController;
   readonly #lifecycle: ClassroomLifecycleService;
   readonly #snapshot: GetClassroomSnapshotUseCase;
+  readonly #guideBuild?: GuideBuildService;
 
   constructor(dependencies: {
     lessonStore: LessonStoreAdapter;
     workspace: WorkspaceController;
     lifecycle: ClassroomLifecycleService;
+    guideBuild?: GuideBuildService;
   }) {
     this.#lessonStore = dependencies.lessonStore;
     this.#workspace = dependencies.workspace;
     this.#lifecycle = dependencies.lifecycle;
+    this.#guideBuild = dependencies.guideBuild;
     this.#snapshot = new GetClassroomSnapshotUseCase(dependencies);
   }
 
@@ -168,6 +184,7 @@ export class ResetClassroomUseCase {
           : [],
         revision: currentLesson.revision + 1,
       });
+      this.#guideBuild?.reset();
     }
 
     return this.#snapshot.execute();

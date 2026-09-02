@@ -5,6 +5,7 @@ import { resolveLessoniqueExperienceState } from "./experience-state";
 const idleInput = {
   agentConnection: "disconnected" as const,
   classroomTransitionComplete: false,
+  guideBuildStatus: "idle" as const,
   hasWorkspaceEnvironment: false,
   lessonStatus: "idle" as const,
   webMCPAvailability: "detecting" as const,
@@ -50,6 +51,29 @@ describe("Lessonique experience state", () => {
       resolveLessoniqueExperienceState({
         ...activeSession,
         classroomTransitionComplete: true,
+      }),
+    ).toBe("classroom");
+  });
+
+  it("keeps an already-open classroom mounted while replacing its guide", () => {
+    const existingSession = {
+      ...idleInput,
+      classroomTransitionComplete: true,
+      hasWorkspaceEnvironment: true,
+      lessonStatus: "active" as const,
+      workspaceStatus: "ready" as const,
+    };
+
+    expect(
+      resolveLessoniqueExperienceState({
+        ...existingSession,
+        guideBuildStatus: "building",
+      }),
+    ).toBe("classroom");
+    expect(
+      resolveLessoniqueExperienceState({
+        ...existingSession,
+        guideBuildStatus: "error",
       }),
     ).toBe("classroom");
   });

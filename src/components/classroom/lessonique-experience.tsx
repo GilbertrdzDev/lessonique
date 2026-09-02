@@ -18,6 +18,11 @@ import { ClassroomHeader } from "@/components/classroom/classroom-header";
 import { ExperienceHeader } from "@/components/classroom/experience-header";
 import { ExperienceLobby } from "@/components/classroom/experience-lobby";
 import {
+  ConstructionPet,
+  preloadConstructionPetSprite,
+  type ConstructionPetStep,
+} from "@/components/scene/construction-pet";
+import {
   LessoniqueCompanion,
   useBoundedPointerDrag,
 } from "@/components/scene/assistant-overlay-host";
@@ -25,6 +30,7 @@ import { useWebMCPRuntime } from "@/components/webmcp/webmcp-registration-provid
 import { ClassroomWorkspace } from "@/components/workspace/classroom-workspace";
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
 import { LessonPersistence } from "@/core/lesson";
+import type { GuideBuildStageId } from "@/core/guide-build";
 import { WorkspacePersistence } from "@/core/workspace";
 import {
   resolveLessoniqueExperienceState,
@@ -57,6 +63,11 @@ export function LessoniqueExperience() {
     workspace.scene.store.subscribe,
     workspace.scene.store.getSnapshot,
     workspace.scene.store.getSnapshot,
+  );
+  const guideBuild = useSyncExternalStore(
+    workspace.guideBuild.store.subscribe,
+    workspace.guideBuild.store.getSnapshot,
+    workspace.guideBuild.store.getSnapshot,
   );
   const hasSession = Boolean(lesson.lesson && workspaceState.profileId);
   const [classroomHasOpened, setClassroomHasOpened] = useState(false);
@@ -114,6 +125,13 @@ export function LessoniqueExperience() {
   }, [workspace]);
 
   useEffect(() => {
+    if (guideBuild.status === "building" || guideBuild.status === "error") {
+      if (!hasSession) {
+        const resetTimer = setTimeout(() => setClassroomHasOpened(false), 0);
+        return () => clearTimeout(resetTimer);
+      }
+      return;
+    }
     if (!hasSession) {
       const resetTimer = setTimeout(() => setClassroomHasOpened(false), 0);
       return () => clearTimeout(resetTimer);
@@ -124,19 +142,34 @@ export function LessoniqueExperience() {
       shouldReduceMotion ? 0 : CLASSROOM_TRANSITION_DURATION_MS,
     );
     return () => clearTimeout(timer);
-  }, [classroomHasOpened, hasSession, shouldReduceMotion]);
+  }, [
+    classroomHasOpened,
+    guideBuild.status,
+    hasSession,
+    shouldReduceMotion,
+  ]);
 
   const classroomTransitionComplete = hasSession && classroomHasOpened;
 
   const experienceState = resolveLessoniqueExperienceState({
     agentConnection: webMCP.agentConnection.status,
     classroomTransitionComplete,
+    guideBuildStatus: guideBuild.status,
     hasWorkspaceEnvironment: Boolean(workspaceState.profileId),
     lessonStatus: lesson.status,
     webMCPAvailability: webMCP.availability,
     workspaceStatus: workspaceState.status,
   });
   const sceneOwnsCompanion = presentation.assistant.visible;
+
+  useEffect(() => {
+    if (
+      experienceState === "connected" ||
+      experienceState === "building-guide"
+    ) {
+      preloadConstructionPetSprite();
+    }
+  }, [experienceState]);
 
   return (
     <div
@@ -147,6 +180,8 @@ export function LessoniqueExperience() {
       {experienceState === "classroom" ? <ClassroomSkipLink /> : null}
       <ExperienceHeader experienceState={experienceState} />
       <PersistentCompanion
+        buildStage={guideBuild.stage}
+        buildStatus={guideBuild.status}
         canResumeGuide={workspace.scene.runner.canReplayLast()}
         experienceState={experienceState}
         hidden={sceneOwnsCompanion}
@@ -175,7 +210,11 @@ export function LessoniqueExperience() {
             />
           </motion.div>
         ) : (
-          <ExperienceLobby key={experienceState} state={experienceState} />
+          <ExperienceLobby
+            build={guideBuild}
+            key={experienceState}
+            state={experienceState}
+          />
         )}
       </AnimatePresence>
     </div>
@@ -183,12 +222,16 @@ export function LessoniqueExperience() {
 }
 
 function PersistentCompanion({
+  buildStage,
+  buildStatus,
   canResumeGuide,
   experienceState,
   hidden,
   onResumeGuide,
   resetKey,
 }: Readonly<{
+  buildStage?: GuideBuildStageId;
+  buildStatus: "idle" | "building" | "completed" | "error";
   canResumeGuide: boolean;
   experienceState: LessoniqueExperienceState;
   hidden: boolean;
@@ -204,6 +247,11 @@ function PersistentCompanion({
   } = useBoundedPointerDrag(companionRef, resetKey);
   const [resuming, setResuming] = useState(false);
   const interactive = experienceState === "classroom";
+  const shouldReduceMotion = useReducedMotion();
+  const constructionActive =
+    experienceState === "building-guide" && buildStatus === "building";
+  const completionTransitionActive =
+    experienceState !== "classroom" && buildStatus === "completed";
   const assistantState =
     experienceState === "unsupported"
       ? "assistant.warning"
@@ -248,6 +296,9 @@ function PersistentCompanion({
           hidden && "experience-companion-hidden pointer-events-none",
         )}
         data-companion-experience-state={experienceState}
+        data-companion-renderer={
+          constructionActive ? "construction-sprite" : "standard"
+        }
         data-dragging={dragging}
         data-manual-offset-x={offset.x}
         data-manual-offset-y={offset.y}
@@ -263,28 +314,37 @@ function PersistentCompanion({
       >
         <div className="experience-companion-content" data-slot="persistent-companion-content">
           <span aria-hidden="true" className="experience-companion-orbit" />
-          <LessoniqueCompanion
-            className={
-              experienceState === "classroom"
-                ? "size-36 sm:size-40"
-                : "size-48 sm:size-64"
-            }
-            decorative
-            facing={experienceState === "classroom" ? "left" : "right"}
-            paused={false}
-            stateId={assistantState}
-            status={experienceState}
-            visualState={
-              experienceState === "unsupported"
-                ? "incompatible"
-                : experienceState === "connected" ||
-                    experienceState === "starting-session"
-                  ? "connected"
-                  : experienceState === "supported-disconnected"
-                    ? "thinking"
-                    : "idle"
-            }
-          />
+          {constructionActive ? (
+            <ConstructionPet
+              builderStep={resolveBuilderStep(buildStage)}
+              className="w-[16.5rem] sm:w-[21rem]"
+              reducedMotion={Boolean(shouldReduceMotion)}
+            />
+          ) : completionTransitionActive ? null : (
+            <LessoniqueCompanion
+              className={
+                experienceState === "classroom"
+                  ? "size-36 sm:size-40"
+                  : "size-48 sm:size-64"
+              }
+              decorative
+              facing={experienceState === "classroom" ? "left" : "right"}
+              paused={false}
+              stateId={assistantState}
+              status={experienceState}
+              visualState={
+                experienceState === "unsupported"
+                  ? "incompatible"
+                  : experienceState === "connected" ||
+                      experienceState === "starting-session"
+                    ? "connected"
+                    : experienceState === "supported-disconnected" ||
+                        experienceState === "guide-build-error"
+                      ? "thinking"
+                      : "idle"
+              }
+            />
+          )}
           <span aria-hidden="true" className="experience-companion-particle particle-one" />
           <span aria-hidden="true" className="experience-companion-particle particle-two" />
           <span aria-hidden="true" className="experience-companion-particle particle-three" />
@@ -303,4 +363,15 @@ function PersistentCompanion({
       ) : null}
     </>
   );
+}
+
+function resolveBuilderStep(stage?: GuideBuildStageId): ConstructionPetStep {
+  switch (stage) {
+    case "preparing-lesson":
+      return 2;
+    case "setting-up-classroom":
+      return 3;
+    default:
+      return 1;
+  }
 }

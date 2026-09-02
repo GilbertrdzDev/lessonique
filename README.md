@@ -30,6 +30,8 @@ sequenceDiagram
 
     ChatGPT->>Tools: get_system_capabilities
     Tools-->>ChatGPT: Providers, surfaces, actions, limits, targets
+    ChatGPT->>Tools: set_guide_build_status
+    Tools-->>Learner: Real planning stage and working companion
     ChatGPT->>Tools: create_guided_lesson
     Tools->>Classroom: Transactional lesson bootstrap
     Classroom->>Workspace: Configure profile, files, and runtime
@@ -51,7 +53,7 @@ The core depends on extensible string identifiers and registries rather than a f
 
 ```mermaid
 flowchart TB
-    ChatGPT[ChatGPT] -->|12 WebMCP Site Tools| ToolLayer[Top-level Tool Registry]
+    ChatGPT[ChatGPT] -->|13 WebMCP Site Tools| ToolLayer[Top-level Tool Registry]
     ToolLayer --> Validation[Closed schemas and capability checks]
     Validation --> Orchestrator[Lesson Orchestrator]
 
@@ -114,6 +116,7 @@ All tools are registered from the top-level document through `document.modelCont
 | Tool | Responsibility |
 |---|---|
 | `get_system_capabilities` | Discover profiles, languages, runtimes, surfaces, actions, semantic targets, validators, and limits. |
+| `set_guide_build_status` | Advance the real pre-classroom guide build through its three declared stages or report an actionable error. |
 | `create_guided_lesson` | Transactionally create or replace the lesson, workspace, runtime, plan, and optional initial scene. |
 | `reset_classroom` | Idempotently clear guidance, runtime, workspace, lesson state, or the complete classroom. |
 | `inspect_classroom` | Read bounded lesson, workspace, runtime, scene, assistant, interaction, and evidence snapshots. |

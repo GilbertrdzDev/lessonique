@@ -605,7 +605,9 @@ export function LessoniqueCompanion({
       data-assistant-state={stateId}
       data-assistant-status={status}
       data-companion-asset={
-        resolvedVisualState === "incompatible" ? "incompatible" : "normal"
+        resolvedVisualState === "incompatible"
+          ? "incompatible"
+            : "normal"
       }
       data-companion-visual-state={resolvedVisualState}
       role={decorative ? undefined : "status"}

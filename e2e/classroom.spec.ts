@@ -31,6 +31,7 @@ test.describe("classroom shell", () => {
   }) => {
     const expectedNames = [
       "get_system_capabilities",
+      "set_guide_build_status",
       "create_guided_lesson",
       "reset_classroom",
       "inspect_classroom",
@@ -125,7 +126,7 @@ test.describe("classroom shell", () => {
     const panel = page.locator('[data-slot="webmcp-dev-panel"]');
     await panel.locator("summary").first().click();
     const toolSelector = page.getByRole("combobox", { name: "WebMCP tool" });
-    await expect(toolSelector.locator("option")).toHaveCount(12);
+    await expect(toolSelector.locator("option")).toHaveCount(13);
     await toolSelector.selectOption("play_teaching_scene");
     await expect(page.getByLabel("Tool input JSON")).toHaveValue(
       /target\.surface-anchor/u,
@@ -136,7 +137,7 @@ test.describe("classroom shell", () => {
 
     await page.getByRole("button", { name: "Run all fixtures" }).click();
     const results = page.getByRole("list", { name: "Dev fixture results" });
-    await expect(results.locator("li")).toHaveCount(12, { timeout: 30_000 });
+    await expect(results.locator("li")).toHaveCount(13, { timeout: 30_000 });
     await expect(results.locator('[data-status="failed"]')).toHaveCount(0);
     await expect(
       results.locator(
@@ -144,7 +145,7 @@ test.describe("classroom shell", () => {
       ),
     ).toHaveCount(1);
     await expect(
-      page.getByRole("status").filter({ hasText: '"accepted": 12' }),
+      page.getByRole("status").filter({ hasText: '"accepted": 13' }),
     ).toBeVisible();
 
     const reference = page.locator(
@@ -2470,7 +2471,7 @@ async function initializeClassroomThroughWebMCP(page: Page): Promise<void> {
           ).__lessoniqueRegisteredTools.length,
       ),
     )
-    .toBe(12);
+    .toBe(13);
 
   const result = await invokeRegisteredTool(page, "create_guided_lesson", {
     lessonId: "lesson.e2e-shell",

@@ -93,6 +93,7 @@ function getActivityCopy<TName extends WebMCPToolName>(
   switch (toolName) {
     case "get_system_capabilities":
     case "inspect_classroom":
+    case "set_guide_build_status":
       return undefined;
     case "create_guided_lesson":
       return describeLesson(input as CreateGuidedLessonInput);
