@@ -47,6 +47,7 @@ describe("WorkspaceTabs", () => {
     expect(markup).toContain(`aria-controls="${WORKSPACE_EDITOR_PANEL_ID}"`);
     expect(markup).toContain('data-workspace-tab-path="index.html"');
     expect(markup).toContain('aria-label="Close file tab styles.css"');
+    expect(markup).toContain('data-tooltip="Close styles.css"');
     expect(markup).toContain('draggable="true"');
   });
 

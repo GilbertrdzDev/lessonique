@@ -657,6 +657,7 @@ export function ClassroomWorkspace() {
                   aria-valuemin={MINIMUM_PROJECT_FILES_WIDTH}
                   aria-valuenow={projectFilesWidth}
                   className="absolute -right-3 top-1/2 z-20 hidden h-20 w-6 -translate-y-1/2 cursor-col-resize touch-none select-none items-center justify-center rounded-full outline-none before:h-9 before:w-1 before:rounded-full before:bg-border before:transition-[height,background-color] hover:before:h-11 hover:before:bg-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:before:h-11 focus-visible:before:bg-primary active:before:bg-primary md:flex"
+                  data-tooltip="Resize Project Files"
                   onKeyDown={handleProjectFilesResizeKeyDown}
                   onPointerCancel={finishProjectFilesResize}
                   onPointerDown={handleProjectFilesPointerDown}
@@ -713,6 +714,7 @@ export function ClassroomWorkspace() {
                   aria-valuetext={`${Math.round((1 - lowerPanelRatio) * 100)}% editor and ${Math.round(lowerPanelRatio * 100)}% lower panel`}
                   className={`relative z-20 flex cursor-row-resize touch-none select-none items-center justify-center bg-border/70 outline-none before:h-1 before:w-20 before:rounded-full before:transition-colors hover:before:bg-primary focus-visible:ring-2 focus-visible:ring-ring ${isLowerPanelResizing ? "before:bg-primary" : "before:bg-muted-foreground/35"}`}
                   data-slot="editor-console-resizer"
+                  data-tooltip="Resize editor and console"
                   onKeyDown={handleLowerPanelResizeKeyDown}
                   onLostPointerCapture={finishLowerPanelResize}
                   onPointerCancel={finishLowerPanelResize}
@@ -755,6 +757,7 @@ export function ClassroomWorkspace() {
                             aria-pressed={previewViewport === id}
                             className="rounded-md border p-1.5 text-muted-foreground transition-colors hover:text-foreground aria-pressed:border-primary/50 aria-pressed:bg-brand-soft aria-pressed:text-primary"
                             key={id}
+                            data-tooltip={label}
                             onClick={() => void changeViewport(id)}
                             type="button"
                           >
@@ -844,8 +847,8 @@ function WorkspaceAction({
           ? "border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
           : "bg-background/70 text-muted-foreground hover:border-primary/40 hover:text-primary"
       }`}
+      data-tooltip={label}
       onClick={onClick}
-      title={label}
       type="button"
     >
       <Icon aria-hidden="true" className="size-3.5" />

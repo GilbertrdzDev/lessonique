@@ -863,8 +863,8 @@ function PanelAction({ icon: Icon, label, onClick }: Readonly<{
     <button
       aria-label={label}
       className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      data-tooltip={label}
       onClick={onClick}
-      title={label}
       type="button"
     >
       <Icon aria-hidden="true" className="size-3.5" />
