@@ -21,11 +21,15 @@ import type {
   EvaluateCurrentStepInput,
   ToolExecutionResult,
 } from "./contracts";
+import type {
+  SceneExerciseEvaluation,
+  SceneExerciseEvaluator,
+} from "@/core/scene";
 import { ToolInvocationError } from "./tool-invocation-service";
 
 export type EvaluateCurrentStepData = ReturnType<typeof toEvaluationData>;
 
-export class EvaluateCurrentStepService {
+export class EvaluateCurrentStepService implements SceneExerciseEvaluator {
   readonly #lesson: LessonStoreAdapter;
   readonly #validation: ValidationEngine;
   readonly #registries: ProviderPlatformRegistries;
@@ -133,21 +137,7 @@ export class EvaluateCurrentStepService {
 
     let results: ValidationResult[];
     try {
-      results = await Promise.all(
-        step.criteria.map((criterion) =>
-          this.#validation.evaluate(
-            {
-              id: criterion.id,
-              validatorId: criterion.validatorId,
-              input: criterion.input ?? {},
-              ...(typeof criterion.input?.filePath === "string"
-                ? { filePath: criterion.input.filePath }
-                : {}),
-            },
-            signal,
-          ),
-        ),
-      );
+      results = await this.#evaluateCriteria(step, signal);
     } catch (error) {
       if (showFeedback) {
         this.#activity.setAgentState(agentBeforeEvaluation);
@@ -216,6 +206,64 @@ export class EvaluateCurrentStepService {
         results,
       }),
     };
+  }
+
+  async evaluate(
+    stepId: string,
+    options: { recordAttempt: boolean },
+    signal: AbortSignal,
+  ): Promise<SceneExerciseEvaluation> {
+    if (options.recordAttempt) {
+      const result = await this.execute(
+        {
+          stepId,
+          advanceOnPass: false,
+          showFeedback: true,
+        },
+        signal,
+      );
+      if (!result.data) {
+        throw new Error("Exercise validation returned no result data.");
+      }
+      return {
+        passed: result.data.passed,
+        passedCriteria: result.data.criteria.filter(
+          ({ status }) => status === "passed",
+        ).length,
+        totalCriteria: result.data.criteria.length,
+      };
+    }
+
+    const step = this.validate({ stepId });
+    const results = await this.#evaluateCriteria(step, signal);
+    return {
+      passed: results.every(({ status }) => status === "passed"),
+      passedCriteria: results.filter(({ status }) => status === "passed").length,
+      totalCriteria: results.length,
+    };
+  }
+
+  async #evaluateCriteria(
+    step: LessonStepState,
+    signal: AbortSignal,
+  ): Promise<ValidationResult[]> {
+    const results: ValidationResult[] = [];
+    for (const criterion of step.criteria) {
+      results.push(
+        await this.#validation.evaluate(
+          {
+            id: criterion.id,
+            validatorId: criterion.validatorId,
+            input: criterion.input ?? {},
+            ...(typeof criterion.input?.filePath === "string"
+              ? { filePath: criterion.input.filePath }
+              : {}),
+          },
+          signal,
+        ),
+      );
+    }
+    return results;
   }
 }
 

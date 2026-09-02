@@ -12,6 +12,7 @@ import { TargetResolverFacade } from "@/core/workspace/target-resolver-facade";
 
 import {
   P0_GUIDANCE_EFFECT_IDS,
+  P0_INTERACTION_EVENT_TYPE_IDS,
   P0_TARGET_RESOLVER_IDS,
 } from "./provider-platform";
 import type { P0WorkspaceRuntime } from "./workspace-runtime";
@@ -31,6 +32,7 @@ export function createP0SceneRuntime(
     | "lessonStore"
     | "classroomLifecycle"
     | "interactionTracker"
+    | "evaluateCurrentStep"
     | "validation"
     | "monacoEditorAdapter"
     | "previewSurfaceAdapter"
@@ -57,6 +59,9 @@ export function createP0SceneRuntime(
     lifecycle: workspace.classroomLifecycle,
     targets,
     waits,
+    exerciseEvaluator: workspace.evaluateCurrentStep,
+    exerciseInteractionTypeIds: [P0_INTERACTION_EVENT_TYPE_IDS.editorChange],
+    interactions: workspace.interactionTracker,
     store,
     presentation,
     surfacePreparer: new P0SceneSurfacePreparer(workspace),

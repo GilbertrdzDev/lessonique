@@ -111,6 +111,7 @@ export class InteractionTracker {
   readonly #onInteraction?: (event: NormalizedInteractionEvent) => void;
   readonly #now: () => string;
   readonly #waits = new Map<string, PendingWait>();
+  readonly #listeners = new Set<(event: NormalizedInteractionEvent) => void>();
   #sourceController?: AbortController;
 
   constructor(options: InteractionTrackerOptions) {
@@ -138,6 +139,11 @@ export class InteractionTracker {
   detachSources(): void {
     this.#sourceController?.abort();
     this.#sourceController = undefined;
+  }
+
+  subscribe(listener: (event: NormalizedInteractionEvent) => void): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
   }
 
   record(event: InteractionEvent): NormalizedInteractionEvent | undefined {
@@ -178,6 +184,7 @@ export class InteractionTracker {
         : state.agent,
       revision: state.revision + 1,
     });
+    this.#listeners.forEach((listener) => listener(normalized));
 
     matchingWaits.forEach((wait) => {
       wait.finish({ status: "satisfied", event: normalized });

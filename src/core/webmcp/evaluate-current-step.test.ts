@@ -154,6 +154,78 @@ describe("evaluate_current_step", () => {
     expect(state.agent).toEqual(agentBeforeEvaluation);
   });
 
+  it("recognizes an equivalent JavaScript function solution through semantic criteria", async () => {
+    const runtime = createP0WorkspaceRuntime();
+    const registry = createRegistry(runtime);
+    await registry.invoke("create_guided_lesson", {
+      lessonId: "lesson.equivalent-solution",
+      lessonMode: "practice",
+      title: "Equivalent JavaScript solution",
+      objective: "Validate function intent without matching exact source text.",
+      environment: {
+        profileId: "profile.javascript-console",
+        activeFile: "index.js",
+        activeSurfaceId: "editor",
+      },
+      files: [
+        {
+          path: "index.js",
+          languageId: "language.javascript",
+          content:
+            'const favoriteColor = "green";\nconst describeFavorite = (color) => `I like ${color}.`;\nconsole.log(describeFavorite(favoriteColor));',
+        },
+      ],
+      steps: [
+        {
+          id: "step.exercise",
+          title: "Describe a favorite color",
+          objective: "Create and call describeFavorite.",
+          criteria: [
+            {
+              id: "criterion.function",
+              validatorId: "validator.javascript-function-exists",
+              input: { filePath: "index.js", name: "describeFavorite" },
+            },
+            {
+              id: "criterion.call",
+              validatorId: "validator.javascript-call-exists",
+              input: { filePath: "index.js", calleeName: "describeFavorite" },
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await runtime.evaluateCurrentStep.evaluate(
+      "step.exercise",
+      { recordAttempt: false },
+      new AbortController().signal,
+    );
+
+    expect(result).toEqual({
+      passed: true,
+      passedCriteria: 2,
+      totalCriteria: 2,
+    });
+    expect(runtime.lessonStore.getSnapshot().plan.steps[0]?.attempts).toEqual([]);
+
+    await runtime.controller.updateFileContent(
+      "index.js",
+      'const describeFavorite = (color) => `I like ${color}.`;',
+    );
+    const invalidated = await runtime.evaluateCurrentStep.evaluate(
+      "step.exercise",
+      { recordAttempt: false },
+      new AbortController().signal,
+    );
+
+    expect(invalidated).toEqual({
+      passed: false,
+      passedCriteria: 1,
+      totalCriteria: 2,
+    });
+  });
+
   it("rejects missing steps and steps without criteria before recording attempts", async () => {
     const runtime = createP0WorkspaceRuntime();
     const registry = createRegistry(runtime);

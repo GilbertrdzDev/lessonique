@@ -9,6 +9,7 @@ import type {
   GuidanceProgressCoordinator,
   LessonState,
   LessonStoreAdapter,
+  NormalizedInteractionEvent,
 } from "@/core/lesson";
 import { GuidanceProgressCoordinator as LessonGuidanceProgressCoordinator } from "@/core/lesson";
 import type { TargetResolverFacade } from "@/core/workspace/target-resolver-facade";
@@ -49,6 +50,24 @@ export type SceneControlAction =
 
 export interface SceneSurfacePreparer {
   prepare(preparation: ScenePreparation, signal: AbortSignal): Promise<void>;
+}
+
+export interface SceneExerciseEvaluation {
+  passed: boolean;
+  passedCriteria: number;
+  totalCriteria: number;
+}
+
+export interface SceneExerciseEvaluator {
+  evaluate(
+    stepId: string,
+    options: { recordAttempt: boolean },
+    signal: AbortSignal,
+  ): Promise<SceneExerciseEvaluation>;
+}
+
+export interface SceneInteractionObserver {
+  subscribe(listener: (event: NormalizedInteractionEvent) => void): () => void;
 }
 
 export class SceneValidationError extends Error {
@@ -93,7 +112,20 @@ export interface SceneRunnerOptions {
   prefersReducedMotion?(): boolean;
   beatDurationMs?: number;
   targetRecoveryMs?: number;
+  exerciseEvaluator?: SceneExerciseEvaluator;
+  exerciseInteractionTypeIds?: readonly string[];
+  interactions?: SceneInteractionObserver;
 }
+
+type ActiveExercise = {
+  stepId: string;
+  eventTypeId?: string;
+  surfaceId?: string;
+  sequence: number;
+  debounceTimer?: ReturnType<typeof setTimeout>;
+  validationAbort?: AbortController;
+  unsubscribe?: () => void;
+};
 
 type ActiveScene = {
   scene: TeachingScene;
@@ -104,6 +136,7 @@ type ActiveScene = {
   beatAbort?: AbortController;
   generation: number;
   resumeListeners: Set<() => void>;
+  exercise?: ActiveExercise;
 };
 
 type ReplayableScene = {
@@ -132,6 +165,9 @@ export class SceneRunner {
   readonly #prefersReducedMotion: () => boolean;
   readonly #beatDurationMs: number;
   readonly #targetRecoveryMs: number;
+  readonly #exerciseEvaluator?: SceneExerciseEvaluator;
+  readonly #exerciseInteractionTypeIds: ReadonlySet<string>;
+  readonly #interactions?: SceneInteractionObserver;
   #active?: ActiveScene;
   #replayable?: ReplayableScene;
 
@@ -160,6 +196,11 @@ export class SceneRunner {
     this.#prefersReducedMotion = options.prefersReducedMotion ?? (() => false);
     this.#beatDurationMs = options.beatDurationMs ?? 1_200;
     this.#targetRecoveryMs = options.targetRecoveryMs ?? 1_500;
+    this.#exerciseEvaluator = options.exerciseEvaluator;
+    this.#exerciseInteractionTypeIds = new Set(
+      options.exerciseInteractionTypeIds ?? [],
+    );
+    this.#interactions = options.interactions;
   }
 
   get store(): SceneStore {
@@ -342,8 +383,10 @@ export class SceneRunner {
     if (!active.scene.allowManualNavigation && action !== "restart") {
       throw new SceneControlError("The active scene does not allow manual navigation.");
     }
-    const activeBeat = active.scene.beats[active.index];
-    if (action === "next" && activeBeat?.wait && this.#store.getSnapshot().status === "waiting") {
+    if (
+      action === "next" &&
+      this.#presentation.getSnapshot().navigation.nextBlocked
+    ) {
       throw new SceneControlError(
         "Complete the required learner interaction before moving to the next step.",
       );
@@ -365,6 +408,17 @@ export class SceneRunner {
     }));
     active.beatAbort?.abort();
     return this.#store.getSnapshot();
+  }
+
+  async validateCurrentExercise(): Promise<SceneExerciseEvaluation> {
+    const active = this.#active;
+    const exercise = active?.exercise;
+    if (!active || !exercise) {
+      throw new SceneControlError(
+        "The active teaching scene does not have an exercise to validate.",
+      );
+    }
+    return this.#validateExercise(active, exercise, "manual");
   }
 
   async returnToCurrentTarget(): Promise<SceneSnapshot> {
@@ -437,7 +491,13 @@ export class SceneRunner {
         try {
           cleanupBeat = await this.#enterBeat(active, beat, index, signal);
           let waitResult: WaitCoordinatorResult | undefined;
-          if (beat.wait) {
+          const exercise = this.#createFinalExercise(active, beat, index, signal);
+          if (exercise) {
+            active.exercise = exercise;
+            await this.#validateExercise(active, exercise, "initial");
+            this.#setSceneStatus("waiting", beat);
+            await waitForManualNavigation(signal);
+          } else if (beat.wait) {
             this.#setSceneStatus("waiting", beat);
             this.#actor.setState(
               beat.type === "interaction" ? "assistant.waiting" : "assistant.thinking",
@@ -472,6 +532,7 @@ export class SceneRunner {
         } catch (error) {
           if (!isAbortError(error)) throw error;
         } finally {
+          this.#disposeExercise(active);
           await cleanupBeat();
           if (active.beatAbort === beatAbort) {
             active.beatAbort = undefined;
@@ -531,6 +592,7 @@ export class SceneRunner {
     signal: AbortSignal,
   ): Promise<() => Promise<void>> {
     const generation = ++active.generation;
+    const exerciseStepId = this.#finalExerciseStepId(active.scene, beat, index);
     this.#guidanceProgress.enterSection(
       sceneLessonStepIds(active.scene),
       beat.lessonStepId,
@@ -561,8 +623,11 @@ export class SceneRunner {
         total: active.scene.beats.length,
         canGoPrevious: active.scene.allowManualNavigation && index > 0,
         canGoNext: active.scene.allowManualNavigation,
-        nextBlocked: Boolean(beat.wait),
+        nextBlocked: Boolean(exerciseStepId || beat.wait),
         transitioning: true,
+        ...(exerciseStepId
+          ? { exerciseValidation: { status: "idle" as const } }
+          : {}),
       },
       visibility:
         previousPresentation.visibility === "hidden-by-user"
@@ -710,6 +775,176 @@ export class SceneRunner {
     return async () => {
       for (const cleanup of cleanups.reverse()) await cleanup();
     };
+  }
+
+  #finalExerciseStepId(
+    scene: TeachingScene,
+    beat: TeachingSceneBeat,
+    index: number,
+  ): string | undefined {
+    if (
+      !scene.allowManualNavigation ||
+      index !== scene.beats.length - 1 ||
+      !this.#exerciseEvaluator ||
+      beat.wait?.kind !== "interaction" ||
+      !this.#exerciseInteractionTypeIds.has(beat.wait.eventTypeId)
+    ) {
+      return undefined;
+    }
+    const lesson = this.#lesson.getSnapshot();
+    const stepId = beat.lessonStepId ?? lesson.plan.activeStepId;
+    const step = lesson.plan.steps.find(({ id }) => id === stepId);
+    return step?.criteria.length ? step.id : undefined;
+  }
+
+  #createFinalExercise(
+    active: ActiveScene,
+    beat: TeachingSceneBeat,
+    index: number,
+    signal: AbortSignal,
+  ): ActiveExercise | undefined {
+    const stepId = this.#finalExerciseStepId(active.scene, beat, index);
+    if (!stepId) return undefined;
+    const exercise: ActiveExercise = {
+      stepId,
+      sequence: 0,
+      ...(beat.wait?.kind === "interaction"
+        ? { eventTypeId: beat.wait.eventTypeId }
+        : {}),
+      ...(beat.prepare?.surfaceId ? { surfaceId: beat.prepare.surfaceId } : {}),
+    };
+    exercise.unsubscribe = this.#interactions?.subscribe((event) => {
+      const isRelevant = exercise.eventTypeId
+        ? event.typeId === exercise.eventTypeId
+        : exercise.surfaceId
+          ? event.surfaceId === exercise.surfaceId
+          : false;
+      if (
+        signal.aborted ||
+        this.#active !== active ||
+        !isRelevant
+      ) {
+        return;
+      }
+      this.#presentation.patch((current) => ({
+        ...current,
+        phase: "validating",
+        navigation: {
+          ...current.navigation,
+          nextBlocked: true,
+          exerciseValidation: { status: "validating" },
+        },
+      }));
+      clearTimeout(exercise.debounceTimer);
+      exercise.debounceTimer = setTimeout(() => {
+        void this.#validateExercise(active, exercise, "automatic");
+      }, 350);
+    });
+    return exercise;
+  }
+
+  async #validateExercise(
+    active: ActiveScene,
+    exercise: ActiveExercise,
+    source: "initial" | "automatic" | "manual",
+  ): Promise<SceneExerciseEvaluation> {
+    const evaluator = this.#exerciseEvaluator;
+    if (!evaluator || this.#active !== active || active.exercise !== exercise) {
+      throw new SceneControlError(
+        "The active teaching scene does not have an exercise to validate.",
+      );
+    }
+    clearTimeout(exercise.debounceTimer);
+    exercise.validationAbort?.abort();
+    const validationAbort = new AbortController();
+    exercise.validationAbort = validationAbort;
+    const sequence = ++exercise.sequence;
+    const signal = AbortSignal.any([active.scope.signal, validationAbort.signal]);
+    if (source !== "initial") {
+      this.#presentation.patch((current) => ({
+        ...current,
+        phase: "validating",
+        navigation: {
+          ...current.navigation,
+          nextBlocked: true,
+          exerciseValidation: { status: "validating" },
+        },
+      }));
+      this.#actor.setState("assistant.thinking", "waiting");
+    }
+    try {
+      const result = await evaluator.evaluate(
+        exercise.stepId,
+        { recordAttempt: source === "manual" },
+        signal,
+      );
+      if (
+        signal.aborted ||
+        this.#active !== active ||
+        active.exercise !== exercise ||
+        exercise.sequence !== sequence
+      ) {
+        throw createAbortError();
+      }
+      const status = result.passed
+        ? "passed"
+        : source === "initial"
+          ? "idle"
+          : "failed";
+      const message = result.passed
+        ? "Exercise complete. Finish is now available."
+        : source === "initial"
+          ? undefined
+          : `${result.passedCriteria} of ${result.totalCriteria} requirements passed.`;
+      this.#presentation.patch((current) => ({
+        ...current,
+        phase: result.passed ? "feedback" : "interaction",
+        navigation: {
+          ...current.navigation,
+          nextBlocked: !result.passed,
+          exerciseValidation: {
+            status,
+            ...(message ? { message } : {}),
+          },
+        },
+      }));
+      this.#actor.setState(
+        result.passed ? "assistant.success" : "assistant.waiting",
+        result.passed ? "presenting" : "waiting",
+      );
+      return result;
+    } catch (error) {
+      const totalCriteria =
+        this.#lesson
+          .getSnapshot()
+          .plan.steps.find(({ id }) => id === exercise.stepId)?.criteria.length ?? 0;
+      if (isAbortError(error)) {
+        return { passed: false, passedCriteria: 0, totalCriteria };
+      }
+      this.#presentation.patch((current) => ({
+        ...current,
+        phase: "interaction",
+        navigation: {
+          ...current.navigation,
+          nextBlocked: true,
+          exerciseValidation: {
+            status: "error",
+            message: "Validation could not run. Please try again.",
+          },
+        },
+      }));
+      this.#actor.setState("assistant.warning", "waiting");
+      return { passed: false, passedCriteria: 0, totalCriteria };
+    }
+  }
+
+  #disposeExercise(active: ActiveScene): void {
+    const exercise = active.exercise;
+    if (!exercise) return;
+    clearTimeout(exercise.debounceTimer);
+    exercise.validationAbort?.abort();
+    exercise.unsubscribe?.();
+    active.exercise = undefined;
   }
 
   async #resolveTarget(

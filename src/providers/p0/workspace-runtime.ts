@@ -21,6 +21,7 @@ import {
 import type { ProviderPlatformRegistries } from "@/core/platform/registries";
 import { ReferencePanelStore } from "@/core/reference";
 import { GuideBuildService } from "@/core/guide-build";
+import { EvaluateCurrentStepService } from "@/core/webmcp/evaluate-current-step";
 import type {
   P0CodeIntelligenceRuntime,
   P0ValidationRuntime,
@@ -54,6 +55,7 @@ export interface P0WorkspaceRuntime {
   validation: P0ValidationRuntime;
   interactionTracker: InteractionTracker;
   assistantIntents: AssistantIntentMapper;
+  evaluateCurrentStep: EvaluateCurrentStepService;
   scene: P0SceneRuntime;
   referencePanels: ReferencePanelStore;
   guideBuild: GuideBuildService;
@@ -168,6 +170,12 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     getEnvironmentRevision: () => store.getSnapshot().environmentRevision,
     onInteraction: (event) => controller.recordInteraction(event),
   });
+  const evaluateCurrentStep = new EvaluateCurrentStepService({
+    lesson: lessonStore,
+    validation: validation.engine,
+    registries,
+    assistantIntents,
+  });
 
   let analyzedFiles = store.getSnapshot().files;
   const unsubscribeCodeAnalysis = store.subscribe(() => {
@@ -203,6 +211,7 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     lessonStore,
     classroomLifecycle,
     interactionTracker,
+    evaluateCurrentStep,
     validation,
     monacoEditorAdapter,
     previewSurfaceAdapter,
@@ -222,6 +231,7 @@ export function createP0WorkspaceRuntime(): P0WorkspaceRuntime {
     validation,
     interactionTracker,
     assistantIntents,
+    evaluateCurrentStep,
     scene,
     referencePanels,
     guideBuild,

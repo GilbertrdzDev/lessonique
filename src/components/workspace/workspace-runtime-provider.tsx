@@ -23,6 +23,7 @@ export function WorkspaceRuntimeProvider({ children }: Readonly<{ children: Reac
       {children}
       <AssistantOverlayHost
         onControl={(action) => workspace.scene.runner.control(action)}
+        onValidateExercise={() => workspace.scene.runner.validateCurrentExercise()}
         onReturnToStep={() => workspace.scene.runner.returnToCurrentTarget()}
         presentationStore={workspace.scene.presentation}
       />
