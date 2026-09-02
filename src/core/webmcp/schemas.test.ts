@@ -126,6 +126,9 @@ describe("WebMCP tool schemas", () => {
     expect((sceneProperties.beats.items as { required?: string[] }).required).toContain(
       "type",
     );
+    expect(lessonProperties.initialScene.description).toContain(
+      "exact token, single line, or contiguous multi-line range",
+    );
     expect(beatSchema.type.description).toContain("one small concept");
     expect(
       playTeachingSceneInputSchema.safeParse({

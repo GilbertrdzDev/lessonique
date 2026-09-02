@@ -18,6 +18,9 @@ describe("ToolRegistry", () => {
     expect(registry.require("create_guided_lesson").description).toContain(
       "single backticks",
     );
+    expect(registry.require("create_guided_lesson").description).toContain(
+      "exact token, single line, or contiguous multi-line range",
+    );
     expect(registry.require("play_teaching_scene").description).toContain(
       "one small concept per explanation beat",
     );

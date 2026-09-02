@@ -104,6 +104,9 @@ test.describe("classroom shell", () => {
     expect(discovery.lessonModeRequired).toBe(true);
     expect(discovery.beatTypeRequired).toBe(true);
     expect(discovery.createDescription).toContain("not a workspace full of TODOs");
+    expect(discovery.createDescription).toContain(
+      "exact token, single line, or contiguous multi-line range",
+    );
     expect(discovery.sceneDescription).toContain(
       "one small concept per explanation beat",
     );
@@ -1800,6 +1803,282 @@ test.describe("classroom shell", () => {
     );
   });
 
+  test("preserves exact Monaco token, line, and contiguous range anchors through navigation and layout changes", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    const edgeToken = "RIGHT_EDGE";
+    const edgeLine = `const horizontalPadding = "${"x".repeat(140)}${edgeToken}";`;
+    const edgeStartColumn = edgeLine.indexOf(edgeToken) + 1;
+    const code = [
+      'const courseName = "JavaScript";',
+      "let lessonCount = 3;",
+      "let isInteractive = true;",
+      "const nextTopic = null;",
+      "",
+      "const profile = {",
+      '  level: "beginner",',
+      "  active: true,",
+      "};",
+      ...Array.from({ length: 32 }, (_, index) => `// scroll filler ${index + 1}`),
+      edgeLine,
+    ].join("\n");
+    const lessonSteps = [
+      ["step.overview", "Variable overview"],
+      ["step.declarations", "Declaration keywords"],
+      ["step.assignments", "Identifiers and values"],
+      ["step.objects", "Object ranges"],
+      ["step.edges", "Viewport edges"],
+    ] as const;
+    const anchors = [
+      ["single-line", "One exact line", 1, 1, 1, 33, "step.overview"],
+      ["multi-line", "One four-line block", 1, 1, 4, 24, "step.overview"],
+      ["const-token", "The const token", 1, 1, 1, 6, "step.declarations"],
+      ["let-token", "The let token", 2, 1, 2, 4, "step.declarations"],
+      ["course-name", "The courseName identifier", 1, 7, 1, 17, "step.assignments"],
+      ["string-value", "The JavaScript value", 1, 20, 1, 32, "step.assignments"],
+      ["lesson-count", "The lessonCount identifier", 2, 5, 2, 16, "step.assignments"],
+      ["number-value", "The numeric value", 2, 19, 2, 20, "step.assignments"],
+      ["object-block", "One object block", 6, 1, 8, 16, "step.objects"],
+      [
+        "edge-token",
+        "The bottom-right token",
+        42,
+        edgeStartColumn,
+        42,
+        edgeStartColumn + edgeToken.length,
+        "step.edges",
+      ],
+    ] as const;
+
+    const created = await invokeRegisteredTool(page, "create_guided_lesson", {
+      lessonId: "lesson.monaco-anchor-regression",
+      lessonMode: "explain",
+      title: "Precise Monaco anchors",
+      objective: "Keep visual guidance synchronized with exact source ranges.",
+      replaceExisting: true,
+      environment: {
+        profileId: "profile.javascript-console",
+        languageIds: ["language.javascript"],
+        activeFile: "variables.js",
+        activeSurfaceId: "editor",
+        surfaces: [
+          {
+            id: "editor",
+            visible: true,
+            options: [{ optionId: "editor.word-wrap", value: false }],
+          },
+          { id: "console", visible: true },
+        ],
+      },
+      files: [
+        {
+          path: "variables.js",
+          languageId: "language.javascript",
+          content: code,
+          readOnly: true,
+        },
+      ],
+      steps: lessonSteps.map(([id, title]) => ({
+        id,
+        title,
+        objective: `Verify ${title.toLowerCase()}.`,
+      })),
+      initialScene: {
+        id: "scene.monaco-anchor-regression",
+        cleanupPolicy: "replace",
+        allowManualNavigation: true,
+        beats: anchors.map(
+          ([id, title, startLine, startColumn, endLine, endColumn, lessonStepId]) => ({
+            id: `beat.${id}`,
+            lessonStepId,
+            type: "explanation",
+            prepare: {
+              surfaceId: "editor",
+              filePath: "variables.js",
+              scroll: "if-needed",
+            },
+            target: {
+              resolverId: "target.code-range",
+              input: {
+                filePath: "variables.js",
+                startLine,
+                startColumn,
+                endLine,
+                endColumn,
+              },
+            },
+            assistant: {
+              stateId: "assistant.pointing",
+              placementId: "placement.near-target",
+              visible: true,
+            },
+            effects: [
+              { effectId: "effect.spotlight" },
+              { effectId: "effect.highlight" },
+              { effectId: "effect.pointer" },
+            ],
+            guide: {
+              title,
+              body: `This beat measures only the ${id.replaceAll("-", " ")} target.`,
+            },
+          }),
+        ),
+      },
+    });
+    expect(created).toEqual(expect.objectContaining({ ok: true }));
+
+    const guide = page.getByLabel("Teaching guide");
+    const highlight = page.locator('[data-guidance-effect="highlight"]');
+    const spotlight = page.locator('[data-guidance-effect="spotlight"]');
+    const pointer = page.locator('[data-guidance-effect="point"]');
+    const editorScroller = page.locator(".monaco-scrollable-element").first();
+    const editorRegion = page.locator(
+      '[data-interaction-anchor="anchor.workspace-editor"]',
+    );
+    const next = () => page.getByRole("button", { name: "Next", exact: true }).click();
+    const previous = () =>
+      page.getByRole("button", { name: "Previous", exact: true }).click();
+    const expectBeat = async (title: string, fragmentCount: number) => {
+      await expect(guide).toContainText(title, { timeout: 15_000 });
+      await expect(highlight).toHaveCount(1);
+      await expect(highlight).toHaveAttribute("data-guidance-shape", "continuous");
+      await expect(highlight).toHaveAttribute(
+        "data-guidance-fragment-count",
+        String(fragmentCount),
+      );
+      await expect(spotlight).toHaveCount(1);
+      await expect(pointer).toHaveCount(1);
+      await expect.poll(() => codeGuidanceIsSafe(page)).toBe(true);
+    };
+
+    await expectBeat("One exact line", 1);
+    const lineBox = await highlight.boundingBox();
+    expect(lineBox).not.toBeNull();
+
+    await next();
+    await expectBeat("One four-line block", 4);
+    const blockBox = await highlight.boundingBox();
+    expect(blockBox).not.toBeNull();
+    expect(blockBox!.height).toBeGreaterThan(lineBox!.height * 3);
+
+    await next();
+    await expectBeat("The const token", 1);
+    const constBox = await highlight.boundingBox();
+    expect(constBox).not.toBeNull();
+    expect(constBox!.width).toBeLessThan(lineBox!.width / 3);
+
+    await editorScroller.evaluate((element) => {
+      element.scrollTop = 0;
+      element.scrollLeft = 0;
+    });
+    await expect.poll(() => codeTargetNearEditorEdge(page, "top-left")).toBe(true);
+    await expect.poll(() => codeGuidanceIsSafe(page)).toBe(true);
+
+    await next();
+    await expectBeat("The let token", 1);
+    const letBox = await highlight.boundingBox();
+    expect(letBox).not.toBeNull();
+    expect(letBox!.width).toBeLessThan(constBox!.width);
+
+    await previous();
+    await expectBeat("The const token", 1);
+    await next();
+    await expectBeat("The let token", 1);
+    await previous();
+    await expectBeat("The const token", 1);
+    const returnedConstBox = await highlight.boundingBox();
+    expect(returnedConstBox).not.toBeNull();
+    expect(Math.abs(returnedConstBox!.x - constBox!.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(returnedConstBox!.width - constBox!.width)).toBeLessThanOrEqual(2);
+
+    await editorScroller.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect(page.getByLabel("Teaching guide paused")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(highlight).toHaveCount(0);
+    await page.getByRole("button", { name: "Return to step" }).click();
+    await expectBeat("The const token", 1);
+
+    await next();
+    await expectBeat("The let token", 1);
+    await next();
+    await expectBeat("The courseName identifier", 1);
+    const identifierBox = await highlight.boundingBox();
+    expect(identifierBox).not.toBeNull();
+    expect(identifierBox!.width).toBeGreaterThan(constBox!.width);
+
+    const projectFilesResizer = page.getByRole("separator", {
+      name: "Resize project files panel",
+    });
+    const editorBeforeResize = await editorRegion.boundingBox();
+    await projectFilesResizer.press("End");
+    await expect
+      .poll(async () => (await editorRegion.boundingBox())?.x)
+      .not.toBe(editorBeforeResize?.x);
+    await expectBeat("The courseName identifier", 1);
+    await projectFilesResizer.press("Home");
+    await expectBeat("The courseName identifier", 1);
+
+    const verticalResizer = page.getByRole("separator", {
+      name: "Resize editor and console panels",
+    });
+    const editorHeightBeforeResize = (await editorRegion.boundingBox())?.height;
+    await verticalResizer.press("End");
+    await expect
+      .poll(async () => (await editorRegion.boundingBox())?.height)
+      .not.toBe(editorHeightBeforeResize);
+    await expectBeat("The courseName identifier", 1);
+    await verticalResizer.press("Home");
+    await expectBeat("The courseName identifier", 1);
+
+    await next();
+    await expectBeat("The JavaScript value", 1);
+    const stringValueBox = await highlight.boundingBox();
+    expect(stringValueBox).not.toBeNull();
+    expect(stringValueBox!.width).toBeGreaterThan(identifierBox!.width);
+
+    await next();
+    await expectBeat("The lessonCount identifier", 1);
+    const secondIdentifierBox = await highlight.boundingBox();
+    expect(secondIdentifierBox).not.toBeNull();
+    expect(secondIdentifierBox!.width).toBeGreaterThan(constBox!.width);
+
+    await next();
+    await expectBeat("The numeric value", 1);
+    const numberValueBox = await highlight.boundingBox();
+    expect(numberValueBox).not.toBeNull();
+    expect(numberValueBox!.width).toBeLessThan(letBox!.width);
+
+    await next();
+    await expectBeat("One object block", 3);
+    const objectBox = await highlight.boundingBox();
+    expect(objectBox).not.toBeNull();
+    expect(objectBox!.height).toBeGreaterThan(lineBox!.height * 2.2);
+
+    await next();
+    await expectBeat("The bottom-right token", 1);
+    await editorScroller.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+      element.scrollLeft = element.scrollWidth;
+    });
+    await expect.poll(() => codeTargetNearEditorEdge(page, "bottom-right")).toBe(true);
+    await expect.poll(() => codeGuidanceIsSafe(page)).toBe(true);
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect(page.getByLabel("Teaching guide paused")).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.getByRole("button", { name: "Return to step" }).click();
+    await expectBeat("The bottom-right token", 1);
+    await expect.poll(() => codeGuidanceIsSafe(page)).toBe(true);
+  });
+
   test("creates and resets the rendered classroom through the real WebMCP lifecycle", async ({
     page,
   }, testInfo) => {
@@ -2624,6 +2903,66 @@ async function guidanceTargetOverlap(page: import("@playwright/test").Page) {
       },
     };
   });
+}
+
+async function codeGuidanceIsSafe(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const target = document.querySelector<HTMLElement>(
+      '[data-guidance-effect="highlight"]',
+    );
+    const guide = document.querySelector<HTMLElement>('[data-slot="visual-guide"]');
+    const companion = document.querySelector<HTMLElement>(
+      '[data-slot="draggable-companion"]',
+    );
+    if (!target || !guide || !companion) return false;
+    const targetRect = target.getBoundingClientRect();
+    const guideRect = guide.getBoundingClientRect();
+    const companionRect = companion.getBoundingClientRect();
+    const insideViewport = (rect: DOMRect) =>
+      rect.left >= 0 &&
+      rect.top >= 0 &&
+      rect.right <= window.innerWidth &&
+      rect.bottom <= window.innerHeight;
+    const overlapArea = (candidate: DOMRect) =>
+      Math.max(
+        0,
+        Math.min(targetRect.right, candidate.right) -
+          Math.max(targetRect.left, candidate.left),
+      ) *
+      Math.max(
+        0,
+        Math.min(targetRect.bottom, candidate.bottom) -
+          Math.max(targetRect.top, candidate.top),
+      );
+    return (
+      insideViewport(guideRect) &&
+      insideViewport(companionRect) &&
+      overlapArea(guideRect) === 0 &&
+      overlapArea(companionRect) === 0
+    );
+  });
+}
+
+async function codeTargetNearEditorEdge(
+  page: Page,
+  edge: "top-left" | "bottom-right",
+): Promise<boolean> {
+  return page.evaluate((requestedEdge) => {
+    const target = document.querySelector<HTMLElement>(
+      '[data-guidance-effect="highlight"]',
+    );
+    const editor = document.querySelector<HTMLElement>(
+      '[data-interaction-anchor="anchor.workspace-editor"]',
+    );
+    if (!target || !editor) return false;
+    const targetRect = target.getBoundingClientRect();
+    const editorRect = editor.getBoundingClientRect();
+    return requestedEdge === "top-left"
+      ? targetRect.top - editorRect.top < 60 &&
+          targetRect.left - editorRect.left < 180
+      : editorRect.bottom - targetRect.bottom < 60 &&
+          editorRect.right - targetRect.right < 80;
+  }, edge);
 }
 
 async function dragBy(

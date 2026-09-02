@@ -312,7 +312,7 @@ export const createGuidedLessonInputSchema = withP0Safety(
       .min(1)
       .max(DEFAULT_SYSTEM_LIMITS.maxLessonSteps),
     initialScene: teachingSceneInputSchema
-      .describe("For explain or mixed lessons, prefer a complete multi-beat micro-step scene with local navigation. Do not create artificial learner waits merely to keep explanations visible.")
+      .describe("For explain or mixed lessons, prefer a complete multi-beat micro-step scene with local navigation. Code explanations should use one semantic target per beat for the exact token, single line, or contiguous multi-line range being discussed and include registered visual effects for that target. Do not create artificial learner waits merely to keep explanations visible.")
       .optional(),
   }),
 );
