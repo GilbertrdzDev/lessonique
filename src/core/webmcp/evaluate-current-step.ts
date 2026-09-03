@@ -213,6 +213,7 @@ export class EvaluateCurrentStepService implements SceneExerciseEvaluator {
     options: { recordAttempt: boolean },
     signal: AbortSignal,
   ): Promise<SceneExerciseEvaluation> {
+    const step = this.validate({ stepId });
     if (options.recordAttempt) {
       const result = await this.execute(
         {
@@ -225,21 +226,41 @@ export class EvaluateCurrentStepService implements SceneExerciseEvaluator {
       if (!result.data) {
         throw new Error("Exercise validation returned no result data.");
       }
+      const failedCriterionIds = new Set(
+        result.data.criteria
+          .filter(({ status }) => status !== "passed")
+          .map(({ criterionId }) => criterionId),
+      );
+      const failedRequirements = step.criteria
+        .filter(({ id }) => failedCriterionIds.has(id))
+        .map(({ requirement }) => requirement)
+        .filter((requirement): requirement is string => Boolean(requirement));
       return {
         passed: result.data.passed,
         passedCriteria: result.data.criteria.filter(
           ({ status }) => status === "passed",
         ).length,
         totalCriteria: result.data.criteria.length,
+        ...(failedRequirements.length > 0 ? { failedRequirements } : {}),
       };
     }
 
-    const step = this.validate({ stepId });
     const results = await this.#evaluateCriteria(step, signal);
+    const passed = results.every(({ status }) => status === "passed");
+    const failedCriterionIds = new Set(
+      results
+        .filter(({ status }) => status !== "passed")
+        .map(({ conditionId }) => conditionId),
+    );
+    const failedRequirements = step.criteria
+      .filter(({ id }) => failedCriterionIds.has(id))
+      .map(({ requirement }) => requirement)
+      .filter((requirement): requirement is string => Boolean(requirement));
     return {
-      passed: results.every(({ status }) => status === "passed"),
+      passed,
       passedCriteria: results.filter(({ status }) => status === "passed").length,
       totalCriteria: results.length,
+      ...(failedRequirements.length > 0 ? { failedRequirements } : {}),
     };
   }
 

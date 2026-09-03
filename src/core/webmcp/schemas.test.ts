@@ -132,7 +132,7 @@ describe("WebMCP tool schemas", () => {
       "type",
     );
     expect((sceneProperties.beats as JsonSchemaNode).description).toContain(
-      "without filler or concept compression",
+      "Prefer clarity over count",
     );
     expect(lessonProperties.initialScene.description).toContain(
       "exact token, single line, or contiguous multi-line range",
@@ -141,7 +141,7 @@ describe("WebMCP tool schemas", () => {
       "omit the final beat's guide supportingItems",
     );
     expect(lessonProperties.steps.description).toContain(
-      "do not add filler or compress distinct concepts",
+      "group closely related concepts",
     );
     expect(criterionSchema?.required).toContain("requirement");
     expect(criterionSchema?.properties?.requirement.description).toContain(
@@ -250,7 +250,7 @@ describe("WebMCP tool schemas", () => {
     ).toThrow();
   });
 
-  it("enforces visual guidance limits without a fixed scene length", () => {
+  it("enforces visual guidance limits and a 15-beat scene maximum", () => {
     expect(
       playTeachingSceneInputSchema.safeParse({
         id: "scene.fixture",
@@ -261,11 +261,20 @@ describe("WebMCP tool schemas", () => {
       }).success,
     ).toBe(true);
     expect(
+      playTeachingSceneInputSchema.safeParse({
+        id: "scene.too-long",
+        beats: Array.from(
+          { length: DEFAULT_SYSTEM_LIMITS.maxSceneBeats + 1 },
+          (_, index) => ({ id: `beat.${index}`, type: "explanation" }),
+        ),
+      }).success,
+    ).toBe(false);
+    expect(
       (getWebMCPToolJsonSchema("play_teaching_scene").properties as Record<
         string,
         JsonSchemaNode
       >).beats.maxItems,
-    ).toBeUndefined();
+    ).toBe(DEFAULT_SYSTEM_LIMITS.maxSceneBeats);
     expect(() =>
       playTeachingSceneInputSchema.parse({
         id: "scene.fixture",
@@ -399,7 +408,7 @@ describe("WebMCP tool schemas", () => {
     expect(result.success).toBe(true);
   });
 
-  it("enforces bounded fields without imposing a lesson-step count", () => {
+  it("enforces bounded fields and a 15-step Learning Plan maximum", () => {
     const lesson = createValidLessonInput();
 
     expect(
@@ -427,7 +436,20 @@ describe("WebMCP tool schemas", () => {
           JsonSchemaNode
         >
       ).steps.maxItems,
-    ).toBeUndefined();
+    ).toBe(DEFAULT_SYSTEM_LIMITS.maxLessonSteps);
+    expect(
+      createGuidedLessonInputSchema.safeParse({
+        ...lesson,
+        steps: Array.from(
+          { length: DEFAULT_SYSTEM_LIMITS.maxLessonSteps + 1 },
+          (_, index) => ({
+            id: `step.${index}`,
+            title: `Step ${index}`,
+            objective: "Group related concepts before exceeding the guide limit.",
+          }),
+        ),
+      }).success,
+    ).toBe(false);
     expect(
       createGuidedLessonInputSchema.safeParse({
         ...lesson,
