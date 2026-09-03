@@ -206,8 +206,8 @@ src/providers/p0/            HTML, CSS, JavaScript, Sandpack, and P0 registries
 src/testing/                 Fake-provider extensibility coverage
 ```
 
-Third-party attribution is available in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+Third-party attribution is available in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md), and the production history of the companion artwork is documented in [ASSET_PROVENANCE.md](./ASSET_PROVENANCE.md).
 
 ## License
 
-Lessonique's original source code is available under the [MIT License](./LICENSE). Third-party software and assets remain governed by their respective terms as documented in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+Lessonique's original source code and Lessonique-owned visual assets are available under the [MIT License](./LICENSE). Third-party software and assets remain governed by their respective terms as documented in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
