@@ -56,6 +56,7 @@ export interface SceneExerciseEvaluation {
   passed: boolean;
   passedCriteria: number;
   totalCriteria: number;
+  failedRequirements?: readonly string[];
 }
 
 export interface SceneExerciseEvaluator {
@@ -119,6 +120,7 @@ export interface SceneRunnerOptions {
 
 type ActiveExercise = {
   stepId: string;
+  finalBeat: boolean;
   eventTypeId?: string;
   surfaceId?: string;
   sequence: number;
@@ -221,6 +223,11 @@ export class SceneRunner {
     }
     if (scene.beats.length === 0) {
       throw new SceneValidationError("Teaching scenes require at least one beat.");
+    }
+    if (scene.beats.length > DEFAULT_SYSTEM_LIMITS.maxSceneBeats) {
+      throw new SceneValidationError(
+        `Teaching scenes support at most ${DEFAULT_SYSTEM_LIMITS.maxSceneBeats} beats. Group related concepts into clearer steps.`,
+      );
     }
     const prepared = this.#deriveFinalExerciseRequirements(scene, lesson);
     const beatIds = new Set<string>();
@@ -488,7 +495,7 @@ export class SceneRunner {
         try {
           cleanupBeat = await this.#enterBeat(active, beat, index, signal);
           let waitResult: WaitCoordinatorResult | undefined;
-          const exercise = this.#createFinalExercise(active, beat, index, signal);
+          const exercise = this.#createExercise(active, beat, index, signal);
           if (exercise) {
             active.exercise = exercise;
             await this.#validateExercise(active, exercise, "initial");
@@ -589,7 +596,7 @@ export class SceneRunner {
     signal: AbortSignal,
   ): Promise<() => Promise<void>> {
     const generation = ++active.generation;
-    const exerciseStepId = this.#finalExerciseStepId(active.scene, beat, index);
+    const exerciseStepId = this.#exerciseStepId(active.scene, beat);
     this.#guidanceProgress.enterSection(
       sceneLessonStepIds(active.scene),
       beat.lessonStepId,
@@ -781,14 +788,12 @@ export class SceneRunner {
     };
   }
 
-  #finalExerciseStepId(
+  #exerciseStepId(
     scene: TeachingScene,
     beat: TeachingSceneBeat,
-    index: number,
   ): string | undefined {
     if (
       !scene.allowManualNavigation ||
-      index !== scene.beats.length - 1 ||
       !this.#exerciseEvaluator ||
       beat.wait?.kind !== "interaction" ||
       !this.#exerciseInteractionTypeIds.has(beat.wait.eventTypeId)
@@ -801,16 +806,17 @@ export class SceneRunner {
     return step?.criteria.length ? step.id : undefined;
   }
 
-  #createFinalExercise(
+  #createExercise(
     active: ActiveScene,
     beat: TeachingSceneBeat,
     index: number,
     signal: AbortSignal,
   ): ActiveExercise | undefined {
-    const stepId = this.#finalExerciseStepId(active.scene, beat, index);
+    const stepId = this.#exerciseStepId(active.scene, beat);
     if (!stepId) return undefined;
     const exercise: ActiveExercise = {
       stepId,
+      finalBeat: index === active.scene.beats.length - 1,
       sequence: 0,
       ...(beat.wait?.kind === "interaction"
         ? { eventTypeId: beat.wait.eventTypeId }
@@ -829,6 +835,17 @@ export class SceneRunner {
         !isRelevant
       ) {
         return;
+      }
+      if (!exercise.finalBeat) {
+        const currentStep = this.#lesson
+          .getSnapshot()
+          .plan.steps.find(({ id }) => id === exercise.stepId);
+        if (currentStep?.status !== "active") {
+          this.#guidanceProgress.enterSection(
+            sceneLessonStepIds(active.scene),
+            exercise.stepId,
+          );
+        }
       }
       this.#presentation.patch((current) =>
         current.phase === "validating" &&
@@ -909,11 +926,17 @@ export class SceneRunner {
         : source === "initial"
           ? "idle"
           : "failed";
+      if (result.passed && !exercise.finalBeat) {
+        this.#guidanceProgress.completeSection(
+          sceneLessonStepIds(active.scene),
+          exercise.stepId,
+        );
+      }
       const message = result.passed
-        ? "Exercise complete. Finish is now available."
+        ? `Exercise complete. ${exercise.finalBeat ? "Finish" : "Next"} is now available.`
         : source === "initial"
           ? undefined
-          : `${result.passedCriteria} of ${result.totalCriteria} requirements passed.`;
+          : failedExerciseMessage(result);
       const phase = result.passed ? "feedback" : "interaction";
       this.#presentation.patch((current) =>
         current.phase === phase &&
@@ -1342,6 +1365,15 @@ function estimateTextLines(value: string, charactersPerLine: number): number {
         total + Math.max(1, Math.ceil(line.length / charactersPerLine)),
       0,
     );
+}
+
+function failedExerciseMessage(result: SceneExerciseEvaluation): string {
+  const summary = `${result.passedCriteria} of ${result.totalCriteria} requirements passed.`;
+  const failedRequirements = result.failedRequirements ?? [];
+  if (failedRequirements.length === 0) return summary;
+  const visibleRequirements = failedRequirements.slice(0, 2).join(" ");
+  const remaining = failedRequirements.length - 2;
+  return `${summary} Still needed: ${visibleRequirements}${remaining > 0 ? ` ${remaining} more requirement${remaining === 1 ? "" : "s"}.` : ""}`;
 }
 
 function isAbortError(error: unknown): boolean {

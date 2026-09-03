@@ -23,6 +23,8 @@ export type EnvironmentActionOwnerType = "runtime" | "profile" | "surface";
 export interface SystemLimits {
   maxFiles: number;
   maxFileBytes: number;
+  maxLessonSteps: number;
+  maxSceneBeats: number;
   maxVisualGuideBodyCharacters: number;
   maxVisualGuideItems: number;
   maxVisualGuideItemCharacters: number;
@@ -34,6 +36,8 @@ export interface SystemLimits {
 export const DEFAULT_SYSTEM_LIMITS: Readonly<SystemLimits> = Object.freeze({
   maxFiles: 8,
   maxFileBytes: 50 * 1024,
+  maxLessonSteps: 15,
+  maxSceneBeats: 15,
   maxVisualGuideBodyCharacters: 500,
   maxVisualGuideItems: 5,
   maxVisualGuideItemCharacters: 120,

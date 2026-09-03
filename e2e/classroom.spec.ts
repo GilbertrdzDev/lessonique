@@ -84,7 +84,10 @@ test.describe("classroom shell", () => {
       const createTool = tools.find(({ name }) => name === "create_guided_lesson");
       const sceneTool = tools.find(({ name }) => name === "play_teaching_scene");
       const sceneProperties = sceneTool?.inputSchema.properties as
-        | { beats?: { items?: { required?: string[] } } }
+        | { beats?: { items?: { required?: string[] }; maxItems?: number } }
+        | undefined;
+      const createProperties = createTool?.inputSchema.properties as
+        | { steps?: { maxItems?: number } }
         | undefined;
       return {
         allClosed: tools.every(
@@ -96,6 +99,8 @@ test.describe("classroom shell", () => {
         lessonModeRequired:
           createTool?.inputSchema.required?.includes("lessonMode") ?? false,
         sceneDescription: sceneTool?.description,
+        maxLessonSteps: createProperties?.steps?.maxItems,
+        maxSceneBeats: sceneProperties?.beats?.maxItems,
         result: await capabilityTool?.execute({ include: ["limits"] }),
       };
     });
@@ -110,10 +115,17 @@ test.describe("classroom shell", () => {
     expect(discovery.sceneDescription).toContain(
       "one small concept per explanation beat",
     );
+    expect(discovery.maxLessonSteps).toBe(15);
+    expect(discovery.maxSceneBeats).toBe(15);
     expect(discovery.result).toEqual(
       expect.objectContaining({
         ok: true,
-        data: expect.objectContaining({ limits: expect.any(Object) }),
+        data: expect.objectContaining({
+          limits: expect.objectContaining({
+            maxLessonSteps: 15,
+            maxSceneBeats: 15,
+          }),
+        }),
       }),
     );
   });
@@ -2111,6 +2123,527 @@ test.describe("classroom shell", () => {
         }),
       }),
     );
+  });
+
+  test("validates an intermediate exercise before Next and synchronizes the Learning Plan", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    test.skip(testInfo.project.name !== "desktop-chromium");
+
+    const created = await invokeRegisteredTool(page, "create_guided_lesson", {
+      lessonId: "lesson.intermediate-exercise-validation",
+      lessonMode: "practice",
+      title: "Intermediate exercise validation",
+      objective: "Create a function before continuing to its call site.",
+      environment: {
+        profileId: "profile.javascript-console",
+        languageIds: ["language.javascript"],
+        activeFile: "index.js",
+        activeSurfaceId: "editor",
+      },
+      files: [
+        {
+          path: "index.js",
+          languageId: "language.javascript",
+          content: "// Create greet, then continue.\n",
+        },
+      ],
+      steps: [
+        {
+          id: "step.intro",
+          title: "Read the goal",
+          objective: "Understand the two-part exercise.",
+        },
+        {
+          id: "step.create",
+          title: "Create the function",
+          objective: "Define greet before moving forward.",
+          criteria: [
+            {
+              id: "criterion.function",
+              requirement: "Create the `greet` function.",
+              validatorId: "validator.javascript-function-exists",
+              input: { filePath: "index.js", name: "greet" },
+            },
+          ],
+        },
+        {
+          id: "step.connect",
+          title: "Connect the result",
+          objective: "Call the function after defining it.",
+        },
+        {
+          id: "step.call",
+          title: "Call the function",
+          objective: "Invoke greet to finish the lesson.",
+          criteria: [
+            {
+              id: "criterion.call",
+              requirement: "Call `greet`.",
+              validatorId: "validator.javascript-call-exists",
+              input: { filePath: "index.js", calleeName: "greet" },
+            },
+          ],
+        },
+      ],
+      initialScene: {
+        id: "scene.intermediate-exercise-validation",
+        cleanupPolicy: "replace",
+        allowManualNavigation: true,
+        beats: [
+          {
+            id: "beat.intro",
+            type: "explanation",
+            lessonStepId: "step.intro",
+            prepare: {
+              surfaceId: "editor",
+              filePath: "index.js",
+              scroll: "if-needed",
+            },
+            target: {
+              resolverId: "target.code-range",
+              input: {
+                filePath: "index.js",
+                startLine: 1,
+                startColumn: 1,
+                endLine: 1,
+                endColumn: 31,
+              },
+            },
+            effects: [],
+            guide: {
+              title: "Two small changes",
+              body: "First create the function. You will call it in the final exercise.",
+            },
+          },
+          {
+            id: "beat.create",
+            type: "interaction",
+            lessonStepId: "step.create",
+            prepare: {
+              surfaceId: "editor",
+              filePath: "index.js",
+              scroll: "if-needed",
+            },
+            target: {
+              resolverId: "target.code-range",
+              input: {
+                filePath: "index.js",
+                startLine: 1,
+                startColumn: 1,
+                endLine: 1,
+                endColumn: 31,
+              },
+            },
+            effects: [],
+            guide: {
+              title: "Create greet",
+              body: "Define greet in this step, then validate before continuing.",
+            },
+            wait: {
+              kind: "interaction",
+              eventTypeId: "interaction.editor-change",
+              target: {
+                resolverId: "target.code-range",
+                input: {
+                  filePath: "index.js",
+                  startLine: 1,
+                  startColumn: 1,
+                  endLine: 1,
+                  endColumn: 31,
+                },
+              },
+              timeoutMs: 300_000,
+            },
+          },
+          {
+            id: "beat.connect",
+            type: "explanation",
+            lessonStepId: "step.connect",
+            prepare: {
+              surfaceId: "editor",
+              filePath: "index.js",
+              scroll: "if-needed",
+            },
+            target: {
+              resolverId: "target.code-range",
+              input: {
+                filePath: "index.js",
+                startLine: 1,
+                startColumn: 1,
+                endLine: 1,
+                endColumn: 31,
+              },
+            },
+            effects: [],
+            guide: {
+              title: "Use the result",
+              body: "The function exists. The final exercise checks its call site.",
+            },
+          },
+          {
+            id: "beat.call",
+            type: "interaction",
+            lessonStepId: "step.call",
+            prepare: {
+              surfaceId: "editor",
+              filePath: "index.js",
+              scroll: "if-needed",
+            },
+            target: {
+              resolverId: "target.code-range",
+              input: {
+                filePath: "index.js",
+                startLine: 1,
+                startColumn: 1,
+                endLine: 1,
+                endColumn: 31,
+              },
+            },
+            effects: [],
+            guide: {
+              title: "Call greet",
+              body: "Invoke greet, validate the exercise, and finish.",
+            },
+            wait: {
+              kind: "interaction",
+              eventTypeId: "interaction.editor-change",
+              target: {
+                resolverId: "target.code-range",
+                input: {
+                  filePath: "index.js",
+                  startLine: 1,
+                  startColumn: 1,
+                  endLine: 1,
+                  endColumn: 31,
+                },
+              },
+              timeoutMs: 300_000,
+            },
+          },
+        ],
+      },
+    });
+    expect(created).toEqual(expect.objectContaining({ ok: true }));
+
+    const guide = page.getByLabel("Teaching guide");
+    const plan = page.getByRole("region", { name: "Learning Plan" });
+    const validate = page.getByRole("button", {
+      name: "Validate Exercise",
+      exact: true,
+    });
+    const next = page.getByRole("button", { name: "Next", exact: true });
+    const finish = page.getByRole("button", { name: "Finish", exact: true });
+    const editor = page.getByRole("textbox", { name: "Workspace code editor" });
+    const planStep = (id: string) =>
+      page.locator(`[data-learning-plan-step-id="${id}"]`);
+    const replaceEditor = async (content: string) => {
+      await editor.press("Control+A");
+      await page.keyboard.insertText(content);
+    };
+
+    await expect(guide).toContainText("Two small changes");
+    await expect(validate).toHaveCount(0);
+    await next.click();
+
+    await expect(guide).toContainText("Create greet");
+    await expect(validate).toBeVisible();
+    await expect(next).toBeDisabled();
+    await validate.click();
+    await expect(guide.getByRole("status")).toContainText(
+      "Create the `greet` function.",
+    );
+    await expect(next).toBeDisabled();
+
+    const functionOnly = "function greet(name) { return `Hello ${name}`; }";
+    await replaceEditor(functionOnly);
+    await validate.click();
+    await expect(guide.getByRole("status")).toContainText(
+      "Exercise complete. Next is now available.",
+      { timeout: 10_000 },
+    );
+    await expect(next).toBeEnabled();
+    await expect(planStep("step.intro")).toHaveAttribute(
+      "data-learning-plan-state",
+      "complete",
+    );
+    await expect(planStep("step.create")).toHaveAttribute(
+      "data-learning-plan-state",
+      "complete",
+    );
+    await expect(planStep("step.connect")).toHaveAttribute(
+      "data-learning-plan-state",
+      "current",
+    );
+
+    await next.click();
+    await expect(guide).toContainText("Use the result");
+    await next.click();
+    await expect(guide).toContainText("Call greet");
+    await expect(validate).toBeVisible();
+    await expect(finish).toBeDisabled();
+    await validate.click();
+    await expect(guide.getByRole("status")).toContainText("Call `greet`.");
+    await expect(finish).toBeDisabled();
+
+    await replaceEditor(`${functionOnly}\ngreet("Ada");`);
+    await validate.click();
+    await expect(guide.getByRole("status")).toContainText(
+      "Exercise complete. Finish is now available.",
+      { timeout: 10_000 },
+    );
+    await expect(finish).toBeEnabled();
+    await finish.click();
+    await expect(plan).toContainText("Completed");
+    for (const id of ["step.intro", "step.create", "step.connect", "step.call"]) {
+      await expect(planStep(id)).toHaveAttribute(
+        "data-learning-plan-state",
+        "complete",
+      );
+    }
+  });
+
+  test("frames exact HTML words, content, tags, lines, and multi-line ranges symmetrically", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    const html = [
+      "<main>",
+      "  <h1>Welcome to HTML</h1>",
+      "  <p>Build clear pages.</p>",
+      "</main>",
+    ].join("\n");
+    const anchors = [
+      ["opening", "Opening tag", 2, 3, 2, 7, 2, 6],
+      ["content", "Element content", 2, 7, 2, 22, 6, 21],
+      ["closing", "Closing tag", 2, 22, 2, 27, 21, 26],
+      ["word", "Exact word", 3, 12, 3, 17, 11, 16],
+      ["line", "Complete line", 3, 1, 3, 28, 0, 27],
+      ["multiline", "Contiguous HTML block", 2, 3, 3, 28, 2, 27],
+    ] as const;
+
+    const created = await invokeRegisteredTool(page, "create_guided_lesson", {
+      lessonId: "lesson.html-highlight-framing",
+      lessonMode: "explain",
+      title: "Exact HTML highlight framing",
+      objective: "Frame representative Monaco ranges with even visual padding.",
+      replaceExisting: true,
+      environment: {
+        profileId: "profile.vanilla-web",
+        languageIds: [
+          "language.html",
+          "language.css",
+          "language.javascript",
+        ],
+        activeFile: "index.html",
+        activeSurfaceId: "editor",
+      },
+      files: [
+        {
+          path: "index.html",
+          languageId: "language.html",
+          content: html,
+          readOnly: true,
+        },
+        {
+          path: "styles.css",
+          languageId: "language.css",
+          content: "",
+          readOnly: true,
+        },
+        {
+          path: "script.js",
+          languageId: "language.javascript",
+          content: "",
+          readOnly: true,
+        },
+      ],
+      steps: [
+        {
+          id: "step.highlight-types",
+          title: "Highlight range types",
+          objective: "Compare exact HTML range shapes.",
+        },
+      ],
+      initialScene: {
+        id: "scene.html-highlight-framing",
+        cleanupPolicy: "replace",
+        allowManualNavigation: true,
+        beats: anchors.map(
+          ([id, title, startLine, startColumn, endLine, endColumn]) => ({
+            id: `beat.${id}`,
+            type: "explanation",
+            lessonStepId: "step.highlight-types",
+            prepare: {
+              surfaceId: "editor",
+              filePath: "index.html",
+              scroll: "if-needed",
+            },
+            target: {
+              resolverId: "target.code-range",
+              input: {
+                filePath: "index.html",
+                startLine,
+                startColumn,
+                endLine,
+                endColumn,
+              },
+            },
+            effects: [{ effectId: "effect.highlight" }],
+            guide: {
+              title,
+              body: `Frame the exact ${id} range with even padding.`,
+            },
+          }),
+        ),
+      },
+    });
+    expect(created).toEqual(expect.objectContaining({ ok: true }));
+
+    const editor = page.getByRole("textbox", { name: "Workspace code editor" });
+    const guide = page.getByLabel("Teaching guide");
+    const highlight = page.locator('[data-guidance-effect="highlight"]');
+    const targetBox = async (
+      startLine: number,
+      endLine: number,
+      firstLineStartOffset: number,
+      lastLineEndOffset: number,
+    ) =>
+      editor.evaluate(
+        (input, range) => {
+          const root = input.closest(".monaco-editor");
+          const lines = Array.from(
+            root?.querySelectorAll<HTMLElement>(".view-lines > .view-line") ?? [],
+          );
+          const fragments = [] as Array<{
+            bottom: number;
+            left: number;
+            right: number;
+            top: number;
+          }>;
+          for (let lineNumber = range.startLine; lineNumber <= range.endLine; lineNumber += 1) {
+            const line = lines[lineNumber - 1];
+            if (!line) throw new Error(`Monaco line ${lineNumber} is not rendered.`);
+            const lineText = line.textContent ?? "";
+            const startOffset =
+              lineNumber === range.startLine ? range.firstLineStartOffset : 0;
+            const endOffset =
+              lineNumber === range.endLine ? range.lastLineEndOffset : lineText.length;
+            const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+            let cursor = 0;
+            let startNode: Text | undefined;
+            let startNodeOffset = 0;
+            let endNode: Text | undefined;
+            let endNodeOffset = 0;
+            while (walker.nextNode()) {
+              const node = walker.currentNode as Text;
+              const nextCursor = cursor + node.data.length;
+              if (!startNode && startOffset >= cursor && startOffset <= nextCursor) {
+                startNode = node;
+                startNodeOffset = startOffset - cursor;
+              }
+              if (!endNode && endOffset >= cursor && endOffset <= nextCursor) {
+                endNode = node;
+                endNodeOffset = endOffset - cursor;
+              }
+              cursor = nextCursor;
+            }
+            if (!startNode || !endNode) {
+              throw new Error(`Unable to measure Monaco line ${lineNumber}.`);
+            }
+            const domRange = document.createRange();
+            domRange.setStart(startNode, startNodeOffset);
+            domRange.setEnd(endNode, endNodeOffset);
+            const textRect = domRange.getBoundingClientRect();
+            const lineRect = line.getBoundingClientRect();
+            fragments.push({
+              bottom: lineRect.bottom,
+              left: textRect.left,
+              right: textRect.right,
+              top: lineRect.top,
+            });
+          }
+          return {
+            x: Math.min(...fragments.map(({ left }) => left)),
+            y: Math.min(...fragments.map(({ top }) => top)),
+            width:
+              Math.max(...fragments.map(({ right }) => right)) -
+              Math.min(...fragments.map(({ left }) => left)),
+            height:
+              Math.max(...fragments.map(({ bottom }) => bottom)) -
+              Math.min(...fragments.map(({ top }) => top)),
+          };
+        },
+        { startLine, endLine, firstLineStartOffset, lastLineEndOffset },
+      );
+    const expectSymmetricFrame = async (
+      startLine: number,
+      endLine: number,
+      firstLineStartOffset: number,
+      lastLineEndOffset: number,
+    ) => {
+      await expect(highlight).toHaveCount(1);
+      await expect(highlight).toHaveCSS("border-left-width", "2px");
+      await expect(highlight).toHaveAttribute("data-guidance-highlight-padding", "4");
+      const [actual, target] = await Promise.all([
+        highlight.boundingBox(),
+        targetBox(startLine, endLine, firstLineStartOffset, lastLineEndOffset),
+      ]);
+      expect(actual).not.toBeNull();
+      const gaps = [
+        target.x - actual!.x,
+        target.y - actual!.y,
+        actual!.x + actual!.width - (target.x + target.width),
+        actual!.y + actual!.height - (target.y + target.height),
+      ];
+      for (const gap of gaps) expect(Math.abs(gap - 6)).toBeLessThanOrEqual(0.75);
+      expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThanOrEqual(1);
+    };
+
+    for (let index = 0; index < anchors.length; index += 1) {
+      const [, title, startLine, , endLine, , startOffset, endOffset] = anchors[index];
+      await expect(guide).toContainText(title);
+      await expectSymmetricFrame(startLine, endLine, startOffset, endOffset);
+      if (index === 2) {
+        await page.setViewportSize({ width: 1280, height: 760 });
+        await expectSymmetricFrame(startLine, endLine, startOffset, endOffset);
+        const beforeEditorZoom = await highlight.boundingBox();
+        const zoomed = await invokeRegisteredTool(
+          page,
+          "configure_learning_environment",
+          {
+            surfaces: [
+              {
+                id: "editor",
+                options: [{ optionId: "editor.font-size", value: 20 }],
+              },
+            ],
+          },
+        );
+        expect(zoomed).toEqual(expect.objectContaining({ ok: true }));
+        await expect(page.locator(".monaco-editor .view-lines")).toHaveCSS(
+          "font-size",
+          "20px",
+        );
+        await expectSymmetricFrame(startLine, endLine, startOffset, endOffset);
+        const afterEditorZoom = await highlight.boundingBox();
+        expect(afterEditorZoom).not.toBeNull();
+        expect(beforeEditorZoom).not.toBeNull();
+        expect(afterEditorZoom!.width).toBeGreaterThan(beforeEditorZoom!.width);
+        await page.getByRole("button", { name: "Previous", exact: true }).click();
+        await expect(guide).toContainText("Element content");
+        await page.getByRole("button", { name: "Next", exact: true }).click();
+        await expect(guide).toContainText(title);
+        await expectSymmetricFrame(startLine, endLine, startOffset, endOffset);
+      }
+      if (index < anchors.length - 1) {
+        await page.getByRole("button", { name: "Next", exact: true }).click();
+      }
+    }
   });
 
   test("preserves exact Monaco token, line, and contiguous range anchors through navigation and layout changes", async ({

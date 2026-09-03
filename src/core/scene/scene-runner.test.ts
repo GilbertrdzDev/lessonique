@@ -30,6 +30,14 @@ describe("SceneRunner", () => {
     expect(runner.validate(scene("scene.long-form", 15)).beats).toHaveLength(15);
   });
 
+  it("rejects a scene above the 15-beat guide limit", () => {
+    const { runner } = createHarness();
+
+    expect(() => runner.validate(scene("scene.too-long", 16))).toThrow(
+      "Teaching scenes support at most 15 beats",
+    );
+  });
+
   it("rejects more final criteria than the numbered guide can represent", () => {
     const { runner } = createHarness({
       exerciseEvaluator: {
@@ -412,6 +420,151 @@ describe("SceneRunner", () => {
     expect(lesson.getSnapshot().plan.steps.at(-1)?.status).toBe("completed");
   });
 
+  it("validates an intermediate coding exercise in its own beat and synchronizes the plan", async () => {
+    let passed = false;
+    let interactionListener:
+      | Parameters<SceneInteractionObserver["subscribe"]>[0]
+      | undefined;
+    const exerciseEvaluator: SceneExerciseEvaluator = {
+      evaluate: vi.fn(async () => ({
+        passed,
+        passedCriteria: passed ? 1 : 0,
+        totalCriteria: 1,
+        ...(passed
+          ? {}
+          : { failedRequirements: ["Use an `h1` heading."] }),
+      })),
+    };
+    const interactions: SceneInteractionObserver = {
+      subscribe: vi.fn((listener) => {
+        interactionListener = listener;
+        return vi.fn();
+      }),
+    };
+    const { runner, lesson } = createHarness({
+      beatDurationMs: 30_000,
+      exerciseEvaluator,
+      interactions,
+      lessonStepCount: 3,
+      stepCriteria: {
+        2: [
+          {
+            id: "criterion.heading",
+            requirement: "Use an `h1` heading.",
+            validatorId: "validator.html-element-exists",
+            input: { filePath: "index.html", tagName: "h1" },
+          },
+        ],
+      },
+    });
+    const intermediateScene: TeachingScene = {
+      ...scene("scene.intermediate-exercise", 3),
+      beats: [
+        {
+          id: "beat.intro",
+          lessonStepId: "step.1",
+          type: "explanation",
+          effects: [],
+          guide: { body: "Review the current markup." },
+        },
+        {
+          id: "beat.exercise",
+          lessonStepId: "step.2",
+          type: "interaction",
+          prepare: { surfaceId: "editor", filePath: "index.html" },
+          effects: [],
+          guide: { body: "Replace the heading element." },
+          wait: {
+            kind: "interaction",
+            eventTypeId: "interaction.editor-change",
+          },
+        },
+        {
+          id: "beat.review",
+          lessonStepId: "step.3",
+          type: "explanation",
+          effects: [],
+          guide: { body: "Review the completed structure." },
+        },
+      ],
+    };
+
+    await runner.start(intermediateScene);
+    await vi.advanceTimersByTimeAsync(0);
+    await runner.control("next");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(runner.presentation.getSnapshot().navigation).toMatchObject({
+      current: 2,
+      total: 3,
+      nextBlocked: true,
+      exerciseValidation: { status: "idle" },
+    });
+    await runner.validateCurrentExercise();
+    expect(runner.presentation.getSnapshot().navigation).toMatchObject({
+      nextBlocked: true,
+      exerciseValidation: {
+        status: "failed",
+        message:
+          "0 of 1 requirements passed. Still needed: Use an `h1` heading.",
+      },
+    });
+    expect(exerciseEvaluator.evaluate).toHaveBeenLastCalledWith(
+      "step.2",
+      { recordAttempt: true },
+      expect.any(AbortSignal),
+    );
+
+    passed = true;
+    await runner.validateCurrentExercise();
+    expect(runner.presentation.getSnapshot().navigation).toMatchObject({
+      nextBlocked: false,
+      exerciseValidation: {
+        status: "passed",
+        message: "Exercise complete. Next is now available.",
+      },
+    });
+    expect(lesson.getSnapshot().plan.steps.map(({ status }) => status)).toEqual([
+      "completed",
+      "completed",
+      "active",
+    ]);
+
+    await runner.control("next");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runner.presentation.getSnapshot().navigation).toMatchObject({
+      current: 3,
+      nextBlocked: false,
+    });
+    expect(runner.presentation.getSnapshot().navigation.exerciseValidation).toBeUndefined();
+
+    await runner.control("previous");
+    await vi.advanceTimersByTimeAsync(0);
+    passed = false;
+    interactionListener?.({
+      id: "editor-change-intermediate",
+      typeId: "interaction.editor-change",
+      surfaceId: "editor",
+      environmentRevision: 1,
+      occurredAt: "2026-09-03T00:00:00.000Z",
+    });
+    expect(runner.presentation.getSnapshot().navigation).toMatchObject({
+      current: 2,
+      nextBlocked: true,
+      exerciseValidation: { status: "validating" },
+    });
+    expect(lesson.getSnapshot().plan.steps.map(({ status }) => status)).toEqual([
+      "completed",
+      "active",
+      "pending",
+    ]);
+    await vi.advanceTimersByTimeAsync(350);
+    expect(runner.presentation.getSnapshot().navigation.exerciseValidation).toMatchObject({
+      status: "failed",
+      message: "0 of 1 requirements passed. Still needed: Use an `h1` heading.",
+    });
+  });
+
   it("replays the last completed scene from beat one only for the same lesson", async () => {
     const { runner, lesson } = createHarness({
       beatDurationMs: 30_000,
@@ -791,6 +944,10 @@ function createHarness(options: {
   exerciseEvaluator?: SceneExerciseEvaluator;
   interactions?: SceneInteractionObserver;
   finalStepCriteria?: Parameters<typeof createActiveLessonState>[1][number]["criteria"];
+  stepCriteria?: Record<
+    number,
+    Parameters<typeof createActiveLessonState>[1][number]["criteria"]
+  >;
 } = {}) {
   const platform = createP0ProviderPlatform();
   const lessonStepCount = options.lessonStepCount ?? 1;
@@ -806,7 +963,8 @@ function createHarness(options: {
         title: `Step ${index + 1}`,
         objective: "Follow the guidance.",
         criteria:
-          index === lessonStepCount - 1 ? options.finalStepCriteria ?? [] : [],
+          options.stepCriteria?.[index + 1] ??
+          (index === lessonStepCount - 1 ? options.finalStepCriteria ?? [] : []),
         hints: ["Try the registered target."],
       })),
     ),

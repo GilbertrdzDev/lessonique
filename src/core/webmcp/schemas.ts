@@ -195,8 +195,9 @@ export const teachingSceneInputSchema = z.strictObject({
   beats: z
     .array(teachingBeatSchema)
     .min(1)
+    .max(DEFAULT_SYSTEM_LIMITS.maxSceneBeats)
     .describe(
-      "Choose the number of beats from the teaching content. Use one clear pedagogical purpose per beat, without filler or concept compression to meet a quota.",
+      `Use only the beats required by the teaching content, up to ${DEFAULT_SYSTEM_LIMITS.maxSceneBeats}. Prefer clarity over count, avoid filler or unnatural compression, and group closely related concepts when needed.`,
     ),
 });
 
@@ -322,11 +323,12 @@ export const createGuidedLessonInputSchema = withP0Safety(
     steps: z
       .array(lessonStepInputSchema)
       .min(1)
+      .max(DEFAULT_SYSTEM_LIMITS.maxLessonSteps)
       .describe(
-        "Choose the number of Learning Plan steps from the teaching content. Keep simple lessons concise, but do not add filler or compress distinct concepts to meet a fixed count.",
+        `Use only the Learning Plan steps required by the teaching content, up to ${DEFAULT_SYSTEM_LIMITS.maxLessonSteps}. Prefer clarity over count, avoid filler or unnatural compression, and group closely related concepts when needed.`,
       ),
     initialScene: teachingSceneInputSchema
-      .describe(`For explain or mixed lessons, prefer a complete multi-beat micro-step scene with local navigation. Choose the beat count from the content: keep simple lessons concise, use 10, 15, or more beats when distinct concepts need them, and never add filler or compress concepts to meet a quota. Code explanations should use one semantic target per beat for the exact token, single line, or contiguous multi-line range being discussed and include registered visual effects for that target. Do not create artificial learner waits merely to keep explanations visible. On a final coding exercise, use at most ${DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems} criteria and omit the final beat's guide supportingItems because Lessonique derives the numbered list from each criterion's requirement in matching order.`)
+      .describe(`For explain or mixed lessons, prefer a complete multi-beat scene with local navigation and no more than ${DEFAULT_SYSTEM_LIMITS.maxSceneBeats} beats. Use only the beats needed for clarity, avoid filler or unnatural compression, and group closely related concepts when necessary. Code explanations should use one semantic target per beat for the exact token, single line, or contiguous multi-line range being discussed and include registered visual effects for that target. Treat endColumn as the exclusive endpoint after the final target character. Do not create artificial learner waits merely to keep explanations visible. Every coding exercise, including an intermediate exercise, must use a mapped lesson step with structural validation criteria and an editor-change interaction wait so Lessonique exposes validation in that same beat. On a final coding exercise, use at most ${DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems} criteria and omit the final beat's guide supportingItems because Lessonique derives the numbered list from each criterion's requirement in matching order.`)
       .optional(),
   }),
 );
@@ -486,7 +488,8 @@ const lessonPlanOperationSchema = z.discriminatedUnion("type", [
     type: z.literal("replace_steps"),
     steps: z
       .array(lessonStepInputSchema)
-      .min(1),
+      .min(1)
+      .max(DEFAULT_SYSTEM_LIMITS.maxLessonSteps),
   }),
   z.strictObject({
     type: z.literal("insert_step"),

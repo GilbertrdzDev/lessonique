@@ -555,8 +555,8 @@ describe("AssistantOverlayHost", () => {
     expect(html).toContain('data-guidance-fragment-count="3"');
     expect(html).toContain('data-guidance-shape="continuous"');
     expect(html).toContain('data-guidance-highlight-appearance="standalone"');
-    expect(html).toContain("width:188px");
-    expect(html).toContain("height:62px");
+    expect(html).toContain("width:192px");
+    expect(html).toContain("height:66px");
     expect(html).not.toContain("width:800px");
   });
 
@@ -582,9 +582,9 @@ describe("AssistantOverlayHost", () => {
 
     expect(html).toContain('data-guidance-highlight-appearance="standalone"');
     expect(html).toContain('data-guidance-highlight-padding="4"');
-    expect(html).toContain("left:96px");
-    expect(html).toContain("width:50px");
-    expect(html).toContain("height:27px");
+    expect(html).toContain("left:94px");
+    expect(html).toContain("width:54px");
+    expect(html).toContain("height:31px");
     expect(html).toContain("border-primary/85");
     expect(html).toContain("bg-primary/10");
     expect(html).toContain('data-slot="guide-inline-code"');

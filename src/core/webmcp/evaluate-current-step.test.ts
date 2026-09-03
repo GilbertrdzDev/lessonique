@@ -230,6 +230,7 @@ describe("evaluate_current_step", () => {
       passed: false,
       passedCriteria: 1,
       totalCriteria: 2,
+      failedRequirements: ["Call `describeFavorite`."],
     });
   });
 

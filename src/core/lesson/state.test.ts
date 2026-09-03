@@ -19,6 +19,12 @@ describe("lesson plan state", () => {
     expect(plan.steps.slice(1).every((step) => step.status === "pending")).toBe(true);
   });
 
+  it("rejects a plan above the 15-step guide limit", () => {
+    expect(() => createLessonPlan(createSteps(16))).toThrow(
+      "A lesson plan supports at most 15 steps",
+    );
+  });
+
   it("requires a non-empty plan and unique step and criterion IDs", () => {
     expect(() => createLessonPlan([])).toThrow("at least one step");
     expect(() => createLessonPlan([createSteps(1)[0]!, createSteps(1)[0]!])).toThrow(

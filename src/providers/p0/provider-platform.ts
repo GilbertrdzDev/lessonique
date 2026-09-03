@@ -937,9 +937,17 @@ const TARGET_RESOLVERS: readonly TargetResolverDefinition[] = [
       properties: {
         filePath: { type: "string", minLength: 1, maxLength: 256 },
         startLine: { type: "integer", minimum: 1 },
-        startColumn: { type: "integer", minimum: 1 },
+        startColumn: {
+          type: "integer",
+          minimum: 1,
+          description: "One-based inclusive start column.",
+        },
         endLine: { type: "integer", minimum: 1 },
-        endColumn: { type: "integer", minimum: 1 },
+        endColumn: {
+          type: "integer",
+          minimum: 1,
+          description: "One-based exclusive end column after the final target character.",
+        },
       },
       required: [
         "filePath",
