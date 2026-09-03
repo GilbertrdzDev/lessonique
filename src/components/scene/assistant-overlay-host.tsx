@@ -267,6 +267,7 @@ export function AssistantOverlayHost({
     companionRef,
     generation: presentation.generation,
     guideRef,
+    preserveCompanionPosition: Boolean(presentation.navigation.exerciseValidation),
     presentationStore,
     target,
     visibility,
@@ -1032,6 +1033,7 @@ function useMeasuredSceneLayout({
   companionRef,
   generation,
   guideRef,
+  preserveCompanionPosition,
   presentationStore,
   target,
   visibility,
@@ -1041,6 +1043,7 @@ function useMeasuredSceneLayout({
   companionRef: { current: HTMLDivElement | null };
   generation: number;
   guideRef: { current: HTMLElement | null };
+  preserveCompanionPosition: boolean;
   presentationStore: ScenePresentationStore;
   target?: TargetGeometry;
   visibility: ScenePresentationVisibility;
@@ -1054,14 +1057,7 @@ function useMeasuredSceneLayout({
   const targetLeft = target?.left;
   const targetTop = target?.top;
   const targetWidth = target?.width;
-  const layoutKey = [
-    generation,
-    beatId ?? "idle",
-    targetLeft ?? "none",
-    targetTop ?? "none",
-    targetWidth ?? "none",
-    targetHeight ?? "none",
-  ].join(":");
+  const layoutKey = [generation, beatId ?? "idle"].join(":");
 
   useEffect(() => {
     if (visibility !== "visible") return;
@@ -1096,7 +1092,11 @@ function useMeasuredSceneLayout({
         return { left: value.left, top: value.top, width: value.width, height: value.height };
       });
       const viewport = window.visualViewport;
-      const position = overlayPlacement.calculate({
+      const viewportSize = {
+        width: Math.min(window.innerWidth, viewport?.width ?? window.innerWidth),
+        height: Math.min(window.innerHeight, viewport?.height ?? window.innerHeight),
+      };
+      const calculatedPosition = overlayPlacement.calculate({
         placementId: assistant.placementId,
         ...(targetLeft !== undefined &&
         targetTop !== undefined &&
@@ -1111,14 +1111,20 @@ function useMeasuredSceneLayout({
               },
             }
           : {}),
-        viewport: {
-          width: Math.min(window.innerWidth, viewport?.width ?? window.innerWidth),
-          height: Math.min(window.innerHeight, viewport?.height ?? window.innerHeight),
-        },
+        viewport: viewportSize,
         assistantSize: companionSize,
         guideSize,
         obstructions,
       });
+      const position =
+        preserveCompanionPosition
+          ? preserveStableCompanionPosition(
+              calculatedPosition,
+              activePresentation.assistant.position,
+              companionSize,
+              viewportSize,
+            )
+          : calculatedPosition;
       presentationStore.patch((current) =>
         current.generation !== generation || current.beatId !== beatId
           ? current
@@ -1165,11 +1171,6 @@ function useMeasuredSceneLayout({
     };
     const schedule = () => {
       if (settleFrame || animationFrame) return;
-      setMeasurement((current) =>
-        current.layoutKey === undefined
-          ? current
-          : { ...current, layoutKey: undefined },
-      );
       settleFrame = window.requestAnimationFrame(() => {
         settleFrame = 0;
         animationFrame = window.requestAnimationFrame(synchronize);
@@ -1223,6 +1224,7 @@ function useMeasuredSceneLayout({
     guideRef,
     layoutKey,
     presentationStore,
+    preserveCompanionPosition,
     targetHeight,
     targetLeft,
     targetTop,
@@ -1231,6 +1233,31 @@ function useMeasuredSceneLayout({
   ]);
 
   return { ...measurement, ready: measurement.layoutKey === layoutKey };
+}
+
+function preserveStableCompanionPosition(
+  calculated: ReturnType<PlacementEngine["calculate"]>,
+  current: ReturnType<ScenePresentationStore["getSnapshot"]>["assistant"]["position"],
+  companionSize: { width: number; height: number },
+  viewport: { width: number; height: number },
+): ReturnType<PlacementEngine["calculate"]> {
+  const left = current.left + current.companionOffsetLeft;
+  const top = current.top + current.companionOffsetTop;
+  const fitsViewport =
+    left >= DRAG_VIEWPORT_MARGIN &&
+    top >= DRAG_VIEWPORT_MARGIN &&
+    left + companionSize.width <= viewport.width - DRAG_VIEWPORT_MARGIN &&
+    top + companionSize.height <= viewport.height - DRAG_VIEWPORT_MARGIN;
+  return fitsViewport
+    ? {
+        ...calculated,
+        companionOffsetLeft: left - calculated.left,
+        companionOffsetTop: top - calculated.top,
+        companionSuppressed: current.companionSuppressed,
+        facing: current.facing,
+        side: current.side,
+      }
+    : calculated;
 }
 
 function positionsEqual(

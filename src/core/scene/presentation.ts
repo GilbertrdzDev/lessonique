@@ -38,10 +38,14 @@ export class AssistantActor {
   }
 
   setState(stateId: string, status: "presenting" | "waiting" = "presenting"): void {
-    this.#store.patch((current) => ({
-      ...current,
-      assistant: { ...current.assistant, stateId, status },
-    }));
+    this.#store.patch((current) =>
+      current.assistant.stateId === stateId && current.assistant.status === status
+        ? current
+        : {
+            ...current,
+            assistant: { ...current.assistant, stateId, status },
+          },
+    );
   }
 
   setPosition(

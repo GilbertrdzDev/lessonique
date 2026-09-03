@@ -1930,18 +1930,138 @@ test.describe("classroom shell", () => {
       "0 of 2 requirements passed.",
     );
     await expect(finish).toBeDisabled();
+    await page.waitForTimeout(100);
+
+    await page.evaluate(() => {
+      const guideElement = document.querySelector<HTMLElement>(
+        '[data-slot="draggable-guide"]',
+      );
+      const companionElement = document.querySelector<HTMLElement>(
+        '[data-slot="draggable-companion"]',
+      );
+      if (!guideElement || !companionElement) {
+        throw new Error("The active guide and companion are required for stability testing.");
+      }
+      const probe = {
+        companionElement,
+        companionHiddenCount: 0,
+        companionRemovalCount: 0,
+        companionTransform: companionElement.style.transform,
+        companionTransformChangeCount: 0,
+        guideElement,
+        guideHiddenCount: 0,
+        guideRemovalCount: 0,
+        observer: undefined as MutationObserver | undefined,
+      };
+      const observer = new MutationObserver((records) => {
+        for (const record of records) {
+          if (record.type === "attributes") {
+            if (
+              record.target === guideElement &&
+              guideElement.style.visibility === "hidden"
+            ) {
+              probe.guideHiddenCount += 1;
+            }
+            if (
+              record.target === companionElement &&
+              companionElement.style.visibility === "hidden"
+            ) {
+              probe.companionHiddenCount += 1;
+            }
+            if (
+              record.target === companionElement &&
+              companionElement.style.transform !== probe.companionTransform
+            ) {
+              probe.companionTransform = companionElement.style.transform;
+              probe.companionTransformChangeCount += 1;
+            }
+            continue;
+          }
+          for (const node of record.removedNodes) {
+            if (node === guideElement || (node instanceof Element && node.contains(guideElement))) {
+              probe.guideRemovalCount += 1;
+            }
+            if (
+              node === companionElement ||
+              (node instanceof Element && node.contains(companionElement))
+            ) {
+              probe.companionRemovalCount += 1;
+            }
+          }
+        }
+      });
+      observer.observe(document.body, {
+        attributeFilter: ["style"],
+        attributes: true,
+        childList: true,
+        subtree: true,
+      });
+      probe.observer = observer;
+      const browserWindow = window as typeof window & {
+        __lessoniqueExerciseStabilityProbe?: typeof probe;
+      };
+      browserWindow.__lessoniqueExerciseStabilityProbe?.observer?.disconnect();
+      browserWindow.__lessoniqueExerciseStabilityProbe = probe;
+    });
 
     const equivalentSolution = [
       'const favoriteColor = "green";',
       "const describeFavorite = (color) => `I like ${color}.`;",
       "console.log(describeFavorite(favoriteColor));",
     ].join("\n");
-    await replaceEditor(equivalentSolution);
+    await editor.press("Control+A");
+    for (const character of equivalentSolution) {
+      await page.keyboard.insertText(character);
+      await page.waitForTimeout(8);
+    }
     await expect(guide.getByRole("status")).toContainText(
       "Exercise complete. Finish is now available.",
       { timeout: 10_000 },
     );
     await expect(finish).toBeEnabled();
+    const stability = await page.evaluate(() => {
+      const browserWindow = window as typeof window & {
+        __lessoniqueExerciseStabilityProbe?: {
+          companionElement: HTMLElement;
+          companionHiddenCount: number;
+          companionRemovalCount: number;
+          companionTransform: string;
+          companionTransformChangeCount: number;
+          guideElement: HTMLElement;
+          guideHiddenCount: number;
+          guideRemovalCount: number;
+          observer?: MutationObserver;
+        };
+      };
+      const probe = browserWindow.__lessoniqueExerciseStabilityProbe;
+      if (!probe) throw new Error("The exercise stability probe is unavailable.");
+      probe.observer?.disconnect();
+      return {
+        companionConnected: probe.companionElement.isConnected,
+        companionHiddenCount: probe.companionHiddenCount,
+        companionPreserved:
+          document.querySelector('[data-slot="draggable-companion"]') ===
+          probe.companionElement,
+        companionRemovalCount: probe.companionRemovalCount,
+        companionTransformChangeCount: probe.companionTransformChangeCount,
+        guideConnected: probe.guideElement.isConnected,
+        guideHiddenCount: probe.guideHiddenCount,
+        guidePreserved:
+          document.querySelector('[data-slot="draggable-guide"]') === probe.guideElement,
+        guideRemovalCount: probe.guideRemovalCount,
+      };
+    });
+    expect(stability).toEqual({
+      companionConnected: true,
+      companionHiddenCount: 0,
+      companionPreserved: true,
+      companionRemovalCount: 0,
+      companionTransformChangeCount: 0,
+      guideConnected: true,
+      guideHiddenCount: 0,
+      guidePreserved: true,
+      guideRemovalCount: 0,
+    });
 
     await replaceEditor(`${equivalentSolution}\n// This unrelated comment keeps the solution valid.`);
     await expect(finish).toBeEnabled();
