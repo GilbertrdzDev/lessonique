@@ -247,6 +247,7 @@ export class SceneRunner {
         previousPlanIndex = planIndex;
       }
     }
+    this.#validateFinalExerciseRequirements(scene, lesson);
   }
 
   async start(scene: TeachingScene): Promise<SceneSnapshot> {
@@ -1095,6 +1096,37 @@ export class SceneRunner {
       }
       this.#platform.validators.require(criterion.validatorId);
     }
+  }
+
+  #validateFinalExerciseRequirements(
+    scene: TeachingScene,
+    lesson: LessonState,
+  ): void {
+    const beat = scene.beats.at(-1);
+    if (
+      !scene.allowManualNavigation ||
+      !this.#exerciseEvaluator ||
+      beat?.wait?.kind !== "interaction" ||
+      !this.#exerciseInteractionTypeIds.has(beat.wait.eventTypeId)
+    ) {
+      return;
+    }
+    const stepId = beat.lessonStepId ?? lesson.plan.activeStepId;
+    const step = lesson.plan.steps.find(({ id }) => id === stepId);
+    if (!step?.criteria.length) return;
+
+    if (step.criteria.length > DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems) {
+      throw new SceneValidationError(
+        `Final exercise Learning Plan step "${step.id}" has ${step.criteria.length} criteria, but the visual guide supports at most ${DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems} numbered requirements. Consolidate the criteria before creating the scene.`,
+      );
+    }
+
+    const requirementCount = beat.guide?.supportingItems?.length ?? 0;
+    if (requirementCount === step.criteria.length) return;
+
+    throw new SceneValidationError(
+      `Final exercise beat "${beat.id}" must provide exactly one guide supporting item for each validation criterion in Learning Plan step "${step.id}", in the same order (${step.criteria.length} criteria, ${requirementCount} supporting items). Include learner-visible items for technical checks such as console errors.`,
+    );
   }
 
   #validateEffect(

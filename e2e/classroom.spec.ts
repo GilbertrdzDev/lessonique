@@ -1887,6 +1887,10 @@ test.describe("classroom shell", () => {
             guide: {
               title: "Small coding challenge",
               body: "Create describeFavorite, return a sentence, and call it.",
+              supportingItems: [
+                "Create the `describeFavorite` function.",
+                "Call `describeFavorite`.",
+              ],
             },
             wait: {
               kind: "interaction",
@@ -1923,6 +1927,13 @@ test.describe("classroom shell", () => {
     };
 
     await expect(guide).toContainText("Small coding challenge");
+    await expect(guide.getByRole("listitem")).toHaveCount(2);
+    await expect(guide.getByRole("listitem").nth(0)).toContainText(
+      "Create the describeFavorite function.",
+    );
+    await expect(guide.getByRole("listitem").nth(1)).toContainText(
+      "Call describeFavorite.",
+    );
     await expect(validate).toBeVisible();
     await expect(finish).toBeDisabled();
     await validate.click();

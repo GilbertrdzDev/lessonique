@@ -157,6 +157,74 @@ describe("classroom WebMCP tools", () => {
     });
   });
 
+  it("preserves the classroom when final exercise requirements do not match its criteria", async () => {
+    const runtime = createP0WorkspaceRuntime();
+    const registry = createRegistry(runtime);
+    await registry.invoke(
+      "create_guided_lesson",
+      createLessonInput("lesson.previous"),
+    );
+    const previousLesson = runtime.lessonStore.getSnapshot();
+    const previousWorkspace = runtime.store.getSnapshot();
+    const replacement = {
+      ...createLessonInput("lesson.misaligned-exercise"),
+      steps: [
+        {
+          id: "step.exercise",
+          title: "Build a semantic section",
+          objective: "Create a section without runtime errors.",
+          criteria: [
+            {
+              id: "criterion.section",
+              validatorId: "validator.html-element-exists",
+              input: { filePath: "index.html", tagName: "section" },
+            },
+            {
+              id: "criterion.no-errors",
+              validatorId: "validator.no-console-errors",
+            },
+          ],
+        },
+      ],
+      initialScene: {
+        id: "scene.misaligned-exercise",
+        allowManualNavigation: true,
+        beats: [
+          {
+            id: "beat.exercise",
+            type: "interaction" as const,
+            lessonStepId: "step.exercise",
+            prepare: { surfaceId: "editor", filePath: "index.html" },
+            guide: {
+              body: "Create a semantic section.",
+              supportingItems: ["Add a `section` element."],
+            },
+            wait: {
+              kind: "interaction" as const,
+              eventTypeId: "interaction.editor-change",
+              timeoutMs: 300_000,
+            },
+          },
+        ],
+      },
+    };
+
+    const result = await registry.invoke("create_guided_lesson", replacement);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: expect.objectContaining({
+          code: "invalid_teaching_scene",
+          message: expect.stringContaining("2 criteria, 1 supporting items"),
+          recoverable: true,
+        }),
+      }),
+    );
+    expect(runtime.lessonStore.getSnapshot()).toBe(previousLesson);
+    expect(runtime.store.getSnapshot()).toBe(previousWorkspace);
+  });
+
   it("resets the classroom idempotently through the real lifecycle", async () => {
     const runtime = createP0WorkspaceRuntime();
     const registry = createRegistry(runtime);
