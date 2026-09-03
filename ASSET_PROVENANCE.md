@@ -13,6 +13,8 @@ This record describes how the current Lessonique companion assets were produced.
 
 The original reference images are not distributed in this repository. The generated and normalized assets were created during the challenge development period and committed between August 31 and September 1, 2026.
 
-## Rights confirmation
+## Project owner declaration
 
-Before challenge submission, the project owner must confirm that the user-provided visual references were original or authorized for this use. This record intentionally does not infer that legal confirmation from the generation history alone.
+The project owner confirms that the source visual references were created using ChatGPT's Create Image tool. Codex was then used to design and assemble the remaining Lessonique-owned derivatives, variants, sprite sheets, and related visual assets.
+
+The project owner confirms authorization to use, modify, publish, and distribute these resulting assets as part of Lessonique. Lessonique-owned visual assets are made available under the repository's MIT License. Third-party software and assets remain subject to their respective terms.

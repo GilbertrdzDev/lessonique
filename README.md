@@ -210,4 +210,4 @@ Third-party attribution is available in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_N
 
 ## License
 
-Lessonique's original source code is available under the [MIT License](./LICENSE). Third-party software and assets remain governed by their respective terms as documented in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+Lessonique's original source code and Lessonique-owned visual assets are available under the [MIT License](./LICENSE). Third-party software and assets remain governed by their respective terms as documented in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
