@@ -213,6 +213,7 @@ export class ClassroomToolService {
         ...(step.instructions ? { instructions: step.instructions } : {}),
         criteria: (step.criteria ?? []).map((criterion) => ({
           id: criterion.id,
+          requirement: criterion.requirement,
           validatorId: criterion.validatorId,
           ...(criterion.input ? { input: structuredClone(criterion.input) } : {}),
         })),

@@ -128,7 +128,7 @@ const visualGuideSchema = z.strictObject({
     )
     .max(DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems)
     .describe(
-      `For a final coding exercise, provide exactly one learner-visible requirement for each validation criterion on the mapped lesson step, in the same order, including technical gates such as no console errors. Final exercises therefore support at most ${DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems} criteria.`,
+      "Use for supporting details on explanation beats. Omit this field on the final coding-exercise beat because Lessonique derives its numbered requirements from the mapped criteria.",
     )
     .optional(),
 });
@@ -195,11 +195,20 @@ export const teachingSceneInputSchema = z.strictObject({
   beats: z
     .array(teachingBeatSchema)
     .min(1)
-    .max(DEFAULT_SYSTEM_LIMITS.maxSceneBeats),
+    .describe(
+      "Choose the number of beats from the teaching content. Use one clear pedagogical purpose per beat, without filler or concept compression to meet a quota.",
+    ),
 });
 
 const lessonCriterionSchema = z.strictObject({
   id: identifierSchema,
+  requirement: z
+    .string()
+    .min(1)
+    .max(DEFAULT_SYSTEM_LIMITS.maxVisualGuideItemCharacters)
+    .describe(
+      "Describe this validation gate in learner-visible language. Final coding-exercise numbered requirements are derived from these values in criterion order.",
+    ),
   validatorId: identifierSchema,
   input: providerInputSchema.optional(),
 });
@@ -313,9 +322,11 @@ export const createGuidedLessonInputSchema = withP0Safety(
     steps: z
       .array(lessonStepInputSchema)
       .min(1)
-      .max(DEFAULT_SYSTEM_LIMITS.maxLessonSteps),
+      .describe(
+        "Choose the number of Learning Plan steps from the teaching content. Keep simple lessons concise, but do not add filler or compress distinct concepts to meet a fixed count.",
+      ),
     initialScene: teachingSceneInputSchema
-      .describe(`For explain or mixed lessons, prefer a complete multi-beat micro-step scene with local navigation. Code explanations should use one semantic target per beat for the exact token, single line, or contiguous multi-line range being discussed and include registered visual effects for that target. Do not create artificial learner waits merely to keep explanations visible. On a final coding exercise, use at most ${DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems} criteria and make the final beat list one guide supporting item for every criterion on its mapped lesson step, in matching order, so the visible requirements and validation total stay aligned.`)
+      .describe(`For explain or mixed lessons, prefer a complete multi-beat micro-step scene with local navigation. Choose the beat count from the content: keep simple lessons concise, use 10, 15, or more beats when distinct concepts need them, and never add filler or compress concepts to meet a quota. Code explanations should use one semantic target per beat for the exact token, single line, or contiguous multi-line range being discussed and include registered visual effects for that target. Do not create artificial learner waits merely to keep explanations visible. On a final coding exercise, use at most ${DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems} criteria and omit the final beat's guide supportingItems because Lessonique derives the numbered list from each criterion's requirement in matching order.`)
       .optional(),
   }),
 );
@@ -475,8 +486,7 @@ const lessonPlanOperationSchema = z.discriminatedUnion("type", [
     type: z.literal("replace_steps"),
     steps: z
       .array(lessonStepInputSchema)
-      .min(1)
-      .max(DEFAULT_SYSTEM_LIMITS.maxLessonSteps),
+      .min(1),
   }),
   z.strictObject({
     type: z.literal("insert_step"),

@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createP0WorkspaceRuntime } from "@/providers/p0";
 
+import type { TeachingSceneInput } from "./contracts";
 import { createEarlyWebMCPToolRegistry } from "./mock-handlers";
+import { toTeachingScene } from "./teaching-scene-tools";
 
 describe("classroom WebMCP tools", () => {
   it("creates and replaces a real guided lesson through the shared runtime", async () => {
@@ -89,6 +91,60 @@ describe("classroom WebMCP tools", () => {
     await runtime.scene.runner.control("cancel", "scene.initial");
   });
 
+  it("creates two distinct JavaScript guides with content-driven scene lengths", async () => {
+    const runtime = createP0WorkspaceRuntime();
+    const registry = createRegistry(runtime);
+    const functionsGuide = createJavaScriptGuideInput({
+      lessonId: "lesson.javascript-functions",
+      topic: "functions",
+      beatCount: 5,
+      withExercise: true,
+    });
+
+    const first = await registry.invoke("create_guided_lesson", functionsGuide);
+    const preparedExercise = runtime.scene.runner.validate(
+      toTeachingScene(functionsGuide.initialScene),
+    );
+
+    expect(first).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: "completed",
+        data: expect.objectContaining({
+          lesson: expect.objectContaining({ id: "lesson.javascript-functions" }),
+          scene: expect.objectContaining({ beatCount: 5 }),
+        }),
+      }),
+    );
+    expect(preparedExercise.beats.at(-1)?.guide?.supportingItems).toEqual([
+      "Define the `practiceFunction` function.",
+      "Run the function without console errors.",
+    ]);
+
+    const arraysGuide = createJavaScriptGuideInput({
+      lessonId: "lesson.javascript-arrays",
+      topic: "arrays",
+      beatCount: 15,
+      withExercise: false,
+    });
+    const second = await registry.invoke("create_guided_lesson", arraysGuide);
+
+    expect(second).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: "completed",
+        data: expect.objectContaining({
+          lesson: expect.objectContaining({ id: "lesson.javascript-arrays" }),
+          scene: expect.objectContaining({ beatCount: 15 }),
+        }),
+      }),
+    );
+    expect(runtime.scene.store.getSnapshot()).toEqual(
+      expect.objectContaining({ id: "scene.javascript-arrays", beatCount: 15 }),
+    );
+    await runtime.scene.runner.control("cancel", "scene.javascript-arrays");
+  });
+
   it("rejects invalid capability input before replacing an active lesson", async () => {
     const runtime = createP0WorkspaceRuntime();
     const registry = createRegistry(runtime);
@@ -157,7 +213,7 @@ describe("classroom WebMCP tools", () => {
     });
   });
 
-  it("preserves the classroom when final exercise requirements do not match its criteria", async () => {
+  it("derives final exercise requirements from criteria instead of parallel guide items", async () => {
     const runtime = createP0WorkspaceRuntime();
     const registry = createRegistry(runtime);
     await registry.invoke(
@@ -176,11 +232,13 @@ describe("classroom WebMCP tools", () => {
           criteria: [
             {
               id: "criterion.section",
+              requirement: "Add a `section` element.",
               validatorId: "validator.html-element-exists",
               input: { filePath: "index.html", tagName: "section" },
             },
             {
               id: "criterion.no-errors",
+              requirement: "Run the page without console errors.",
               validatorId: "validator.no-console-errors",
             },
           ],
@@ -211,18 +269,54 @@ describe("classroom WebMCP tools", () => {
 
     const result = await registry.invoke("create_guided_lesson", replacement);
 
+    expect(result).toEqual(expect.objectContaining({ ok: true, status: "completed" }));
+    expect(runtime.lessonStore.getSnapshot()).not.toBe(previousLesson);
+    expect(runtime.store.getSnapshot()).not.toBe(previousWorkspace);
+    const prepared = runtime.scene.runner.validate(
+      toTeachingScene(replacement.initialScene),
+    );
+    expect(prepared.beats.at(-1)?.guide?.supportingItems).toEqual([
+      "Add a `section` element.",
+      "Run the page without console errors.",
+    ]);
+    await runtime.scene.runner.control("cancel", "scene.misaligned-exercise");
+  });
+
+  it("returns the exact schema path when a generated criterion omits its requirement", async () => {
+    const runtime = createP0WorkspaceRuntime();
+    const registry = createRegistry(runtime);
+    const invalid = {
+      ...createLessonInput("lesson.missing-requirement"),
+      steps: [
+        {
+          id: "step.exercise",
+          title: "Exercise",
+          objective: "Validate the generated draft.",
+          criteria: [
+            {
+              id: "criterion.missing-requirement",
+              validatorId: "validator.no-console-errors",
+              input: {},
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = await registry.invoke("create_guided_lesson", invalid);
+
     expect(result).toEqual(
       expect.objectContaining({
         ok: false,
         error: expect.objectContaining({
-          code: "invalid_teaching_scene",
-          message: expect.stringContaining("2 criteria, 1 supporting items"),
+          code: "invalid_input",
+          message: expect.stringContaining("steps[0].criteria[0].requirement"),
           recoverable: true,
         }),
       }),
     );
-    expect(runtime.lessonStore.getSnapshot()).toBe(previousLesson);
-    expect(runtime.store.getSnapshot()).toBe(previousWorkspace);
+    expect(runtime.lessonStore.getSnapshot().status).toBe("idle");
+    expect(runtime.store.getSnapshot().status).toBe("idle");
   });
 
   it("resets the classroom idempotently through the real lifecycle", async () => {
@@ -327,5 +421,99 @@ function createLessonInput(lessonId: string) {
             effects?: Array<{ effectId: string }>;
           }>;
         },
+  };
+}
+
+function createJavaScriptGuideInput(options: {
+  lessonId: string;
+  topic: string;
+  beatCount: number;
+  withExercise: boolean;
+}) {
+  const explanationCount = options.withExercise
+    ? options.beatCount - 1
+    : options.beatCount;
+  const explanationStepId = `step.${options.topic}`;
+  const exerciseStepId = `step.${options.topic}-exercise`;
+  const beats: Array<TeachingSceneInput["beats"][number]> = Array.from(
+    { length: explanationCount },
+    (_, index) => ({
+      id: `beat.${options.topic}-${index + 1}`,
+      lessonStepId: explanationStepId,
+      type: "explanation" as const,
+      guide: {
+        body: `Explain ${options.topic} concept ${index + 1} as one focused idea.`,
+      },
+    }),
+  );
+  if (options.withExercise) {
+    beats.push({
+      id: `beat.${options.topic}-exercise`,
+      lessonStepId: exerciseStepId,
+      type: "interaction",
+      guide: { body: "Complete the focused JavaScript exercise." },
+      wait: {
+        kind: "interaction" as const,
+        eventTypeId: "interaction.editor-change",
+      },
+    });
+  }
+  return {
+    lessonId: options.lessonId,
+    lessonMode: options.withExercise ? ("mixed" as const) : ("explain" as const),
+    title: `JavaScript ${options.topic}`,
+    objective: `Learn JavaScript ${options.topic} progressively.`,
+    environment: {
+      profileId: "profile.javascript-console",
+      runtimeProviderId: "runtime.sandpack-vanilla",
+      languageIds: ["language.javascript"],
+      activeFile: "script.js",
+      activeSurfaceId: "editor",
+    },
+    files: [
+      {
+        path: "script.js",
+        languageId: "language.javascript",
+        content: options.withExercise
+          ? "function practiceFunction() { return true; }\npracticeFunction();"
+          : "const values = [1, 2, 3];\nconst doubled = values.map((value) => value * 2);\nconsole.log(doubled);",
+      },
+    ],
+    steps: [
+      {
+        id: explanationStepId,
+        title: `Understand ${options.topic}`,
+        objective: `Explain JavaScript ${options.topic} clearly.`,
+      },
+      ...(options.withExercise
+        ? [
+            {
+              id: exerciseStepId,
+              title: "Apply the concept",
+              objective: "Keep the practice function valid and error-free.",
+              criteria: [
+                {
+                  id: "criterion.practice-function",
+                  requirement: "Define the `practiceFunction` function.",
+                  validatorId: "validator.javascript-function-exists",
+                  input: { filePath: "script.js", name: "practiceFunction" },
+                },
+                {
+                  id: "criterion.no-console-errors",
+                  requirement: "Run the function without console errors.",
+                  validatorId: "validator.no-console-errors",
+                  input: {},
+                },
+              ],
+            },
+          ]
+        : []),
+    ],
+    initialScene: {
+      id: `scene.javascript-${options.topic}`,
+      cleanupPolicy: "replace" as const,
+      allowManualNavigation: true,
+      beats,
+    },
   };
 }

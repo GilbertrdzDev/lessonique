@@ -176,6 +176,7 @@ export function createResponsiveMenuLessonFixture(
         criteria: [
           {
             id: "criterion.responsive-menu-navigation",
+            requirement: "Create the `site-navigation` navigation region.",
             validatorId: "validator.html-element-exists",
             input: {
               filePath: "index.html",
@@ -197,6 +198,7 @@ export function createResponsiveMenuLessonFixture(
         criteria: [
           {
             id: "criterion.responsive-menu-controls",
+            requirement: "Connect the menu button with `aria-controls`.",
             validatorId: "validator.html-attribute-exists",
             input: {
               filePath: "index.html",
@@ -219,6 +221,7 @@ export function createResponsiveMenuLessonFixture(
         criteria: [
           {
             id: "criterion.responsive-menu-media-query",
+            requirement: "Add the `max-width: 48rem` media query.",
             validatorId: "validator.css-media-query-exists",
             input: {
               filePath: "styles.css",
@@ -240,6 +243,7 @@ export function createResponsiveMenuLessonFixture(
         criteria: [
           {
             id: "criterion.responsive-menu-click-handler",
+            requirement: "Handle `menuToggle` clicks.",
             validatorId: "validator.javascript-event-listener-exists",
             input: {
               filePath: "script.js",
@@ -262,6 +266,7 @@ export function createResponsiveMenuLessonFixture(
         criteria: [
           {
             id: "criterion.responsive-menu-preview",
+            requirement: "Render the `menu-toggle` button in the preview.",
             validatorId: "validator.preview-element-exists",
             input: {
               filePath: "index.html",
@@ -271,6 +276,7 @@ export function createResponsiveMenuLessonFixture(
           },
           {
             id: "criterion.responsive-menu-console",
+            requirement: "Run the menu without console errors.",
             validatorId: "validator.no-console-errors",
             input: {},
           },

@@ -1,5 +1,3 @@
-import { DEFAULT_SYSTEM_LIMITS } from "@/core/platform/contracts";
-
 import type {
   LessonDefinition,
   LessonPlanState,
@@ -123,11 +121,6 @@ function assertValidStepDefinitions(
 ): void {
   if (definitions.length === 0) {
     throw new Error("A lesson plan requires at least one step.");
-  }
-  if (definitions.length > DEFAULT_SYSTEM_LIMITS.maxLessonSteps) {
-    throw new Error(
-      `A lesson plan supports at most ${DEFAULT_SYSTEM_LIMITS.maxLessonSteps} steps.`,
-    );
   }
   const stepIds = new Set<string>();
   const criterionIds = new Set<string>();

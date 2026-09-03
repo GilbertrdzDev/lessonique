@@ -24,6 +24,12 @@ describe("SceneRunner", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
+  it("accepts a content-driven scene with 15 distinct beats", () => {
+    const { runner } = createHarness();
+
+    expect(runner.validate(scene("scene.long-form", 15)).beats).toHaveLength(15);
+  });
+
   it("rejects more final criteria than the numbered guide can represent", () => {
     const { runner } = createHarness({
       exerciseEvaluator: {
@@ -35,6 +41,7 @@ describe("SceneRunner", () => {
       },
       finalStepCriteria: Array.from({ length: 6 }, (_, index) => ({
         id: `criterion.${index + 1}`,
+        requirement: `Requirement ${index + 1}`,
         validatorId: "validator.no-console-errors",
       })),
     });
@@ -217,11 +224,13 @@ describe("SceneRunner", () => {
       finalStepCriteria: [
         {
           id: "criterion.function",
+          requirement: "Create `describeFavorite`.",
           validatorId: "validator.javascript-function-exists",
           input: { filePath: "index.js", name: "describeFavorite" },
         },
         {
           id: "criterion.call",
+          requirement: "Call `describeFavorite`.",
           validatorId: "validator.javascript-call-exists",
           input: { filePath: "index.js", calleeName: "describeFavorite" },
         },
@@ -248,10 +257,6 @@ describe("SceneRunner", () => {
           effects: [],
           guide: {
             body: "Create and call describeFavorite.",
-            supportingItems: [
-              "Create `describeFavorite`.",
-              "Call `describeFavorite`.",
-            ],
           },
           wait: {
             kind: "interaction",
@@ -271,24 +276,37 @@ describe("SceneRunner", () => {
       ],
     };
 
+    const submittedScene = {
+      ...exerciseScene,
+      beats: [
+        exerciseScene.beats[0]!,
+        {
+          ...exerciseScene.beats[1]!,
+          guide: {
+            body: "Create and call describeFavorite.",
+            supportingItems: ["An independently generated item."],
+          },
+        },
+      ],
+    };
+    const preparedScene = runner.validate(submittedScene);
+
+    expect(preparedScene.beats.at(-1)?.guide?.supportingItems).toEqual([
+      "Create `describeFavorite`.",
+      "Call `describeFavorite`.",
+    ]);
+    expect(submittedScene.beats.at(-1)?.guide?.supportingItems).toEqual([
+      "An independently generated item.",
+    ]);
     expect(() =>
       runner.validate({
         ...exerciseScene,
         beats: [
           exerciseScene.beats[0]!,
-          {
-            ...exerciseScene.beats[1]!,
-            guide: {
-              body: "Create and call describeFavorite.",
-              supportingItems: ["Create `describeFavorite`."],
-            },
-          },
+          { ...exerciseScene.beats[1]!, guide: undefined },
         ],
       }),
-    ).toThrow(
-      /2 criteria, 1 supporting items.*technical checks such as console errors/u,
-    );
-    expect(() => runner.validate(exerciseScene)).not.toThrow();
+    ).toThrow(/requires a visual guide/u);
 
     await runner.start(exerciseScene);
     await vi.advanceTimersByTimeAsync(0);

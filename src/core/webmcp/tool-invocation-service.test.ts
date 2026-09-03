@@ -81,16 +81,19 @@ describe("ToolInvocationService", () => {
       { include: ["unknown-section"], privateValue: "must-not-leak" },
     );
 
-    expect(result).toEqual({
-      ok: false,
-      operationId: "operation.invalid",
-      status: "failed",
-      error: {
-        code: "invalid_input",
-        message: "The tool input did not match the closed schema.",
-        recoverable: true,
-      },
-    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        operationId: "operation.invalid",
+        status: "failed",
+        error: expect.objectContaining({
+          code: "invalid_input",
+          message: expect.stringContaining("include[0]"),
+          recoverable: true,
+        }),
+      }),
+    );
+    expect(result.error?.message).toContain("privateValue");
     expect(capabilityCheck).not.toHaveBeenCalled();
     expect(handler).not.toHaveBeenCalled();
     expect(JSON.stringify(service.activityLogger.getSnapshot())).not.toContain("must-not-leak");
