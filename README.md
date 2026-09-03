@@ -2,7 +2,7 @@
 
 Lessonique is an agent-guided coding classroom built for WebMCP. ChatGPT discovers a closed catalog of Site Tools, configures the learning environment, presents structured visual guidance, follows semantic targets across the editor and preview, waits for learner interactions locally, and evaluates declared criteria without solving the exercise for the learner.
 
-[Open Lessonique](https://lessonique.vercel.app/)
+[Open Lessonique](https://lessonique.com/)
 
 ## Why it matters
 
@@ -158,6 +158,16 @@ Open `http://localhost:3000/`. In a WebMCP-capable ChatGPT session, the page adv
 
 ## Verification
 
+### Judge quick start
+
+1. Open [lessonique.com](https://lessonique.com/) in a WebMCP-capable ChatGPT in-app browser. No account or access code is required.
+2. Confirm that ChatGPT discovers the 13 WebMCP Site Tools registered by the top-level document.
+3. Invoke `get_system_capabilities`; the lobby should change from compatibility detection to a connected state.
+4. Ask ChatGPT to create and guide the responsive-navigation lesson, or expand **WebMCP Dev Panel** after lesson creation to run the staged challenge demo.
+5. Use `reset_classroom` to verify that the lesson, runtime, scenes, waits, overlays, and other owned resources are cleaned up.
+
+The Vercel-generated `lessonique.vercel.app` alias remains available, but `lessonique.com` is the canonical production URL.
+
 ```bash
 pnpm lint
 pnpm typecheck
@@ -173,13 +183,13 @@ The browser suite covers tool discovery, transactional operations, both demo flo
 To run the same desktop suite against the deployed application without starting a local server:
 
 ```bash
-PLAYWRIGHT_BASE_URL=https://lessonique.vercel.app pnpm test:e2e:production
+PLAYWRIGHT_BASE_URL=https://lessonique.com pnpm test:e2e:production
 ```
 
 PowerShell:
 
 ```powershell
-$env:PLAYWRIGHT_BASE_URL = "https://lessonique.vercel.app"
+$env:PLAYWRIGHT_BASE_URL = "https://lessonique.com"
 pnpm test:e2e:production
 ```
 
@@ -197,3 +207,7 @@ src/testing/                 Fake-provider extensibility coverage
 ```
 
 Third-party attribution is available in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+
+## License
+
+Lessonique's original source code is available under the [MIT License](./LICENSE). Third-party software and assets remain governed by their respective terms as documented in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
