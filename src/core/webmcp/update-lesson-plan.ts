@@ -230,6 +230,7 @@ function toLessonCriterion(
 ): LessonCriterion {
   return {
     id: criterion.id,
+    requirement: criterion.requirement,
     validatorId: criterion.validatorId,
     ...(criterion.input ? { input: structuredClone(criterion.input) } : {}),
   };

@@ -30,6 +30,7 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 
 const criterionSchema = z.strictObject({
   id: z.string().min(1).max(120),
+  requirement: z.string().min(1).max(120).optional(),
   validatorId: z.string().min(1).max(120),
   input: z.record(z.string(), jsonValueSchema).optional(),
 });
@@ -64,7 +65,7 @@ const persistedLessonSchema = z.strictObject({
     description: z.string().max(1_000).optional(),
     locale: z.string().max(20).optional(),
   }),
-  steps: z.array(stepSchema).min(1).max(10),
+  steps: z.array(stepSchema).min(1),
   activeStepId: z.string().min(1).max(120).optional(),
   agentMessage: z.string().max(500).optional(),
   revision: z.number().int().min(0),

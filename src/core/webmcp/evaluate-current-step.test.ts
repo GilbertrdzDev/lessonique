@@ -13,11 +13,13 @@ describe("evaluate_current_step", () => {
       lessonInput([
         {
           id: "criterion.file",
+          requirement: "Keep `index.html` in the workspace.",
           validatorId: "validator.file-exists",
           input: { filePath: "index.html" },
         },
         {
           id: "criterion.text",
+          requirement: "Include `Lessonique` in `index.html`.",
           validatorId: "validator.text-exists",
           input: { filePath: "index.html", text: "Lessonique" },
         },
@@ -84,11 +86,13 @@ describe("evaluate_current_step", () => {
       lessonInput([
         {
           id: "criterion.file",
+          requirement: "Keep `index.html` in the workspace.",
           validatorId: "validator.file-exists",
           input: { filePath: "index.html" },
         },
         {
           id: "criterion.missing",
+          requirement: "Include the requested content in `index.html`.",
           validatorId: "validator.text-exists",
           input: { filePath: "index.html", text: "Missing content" },
         },
@@ -130,6 +134,7 @@ describe("evaluate_current_step", () => {
       lessonInput([
         {
           id: "criterion.file",
+          requirement: "Keep `index.html` in the workspace.",
           validatorId: "validator.file-exists",
           input: { filePath: "index.html" },
         },
@@ -183,11 +188,13 @@ describe("evaluate_current_step", () => {
           criteria: [
             {
               id: "criterion.function",
+              requirement: "Define `describeFavorite`.",
               validatorId: "validator.javascript-function-exists",
               input: { filePath: "index.js", name: "describeFavorite" },
             },
             {
               id: "criterion.call",
+              requirement: "Call `describeFavorite`.",
               validatorId: "validator.javascript-call-exists",
               input: { filePath: "index.js", calleeName: "describeFavorite" },
             },
@@ -274,6 +281,7 @@ function createRegistry(runtime: ReturnType<typeof createP0WorkspaceRuntime>) {
 function lessonInput(
   criteria: Array<{
     id: string;
+    requirement: string;
     validatorId: string;
     input: Record<string, string>;
   }>,

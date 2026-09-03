@@ -93,10 +93,11 @@ describe("CapabilityCatalog", () => {
     expect(capabilities.limits).toEqual(
       expect.objectContaining({
         maxFiles: 8,
-        maxSceneBeats: 12,
         maxVisualGuideBodyCharacters: 500,
       }),
     );
+    expect(capabilities.limits).not.toHaveProperty("maxLessonSteps");
+    expect(capabilities.limits).not.toHaveProperty("maxSceneBeats");
 
     const serializedCapabilities = JSON.stringify(capabilities);
     expect(serializedCapabilities).not.toMatch(
@@ -189,7 +190,7 @@ describe("CapabilityCatalog", () => {
       "fixture.exists",
     ]);
     expect(capabilities.limits.maxFiles).toBe(4);
-    expect(capabilities.limits.maxSceneBeats).toBe(12);
+    expect(capabilities.limits).not.toHaveProperty("maxSceneBeats");
   });
 
   it("rejects inconsistent registry references before publishing capabilities", () => {

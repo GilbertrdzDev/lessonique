@@ -1848,11 +1848,13 @@ test.describe("classroom shell", () => {
           criteria: [
             {
               id: "criterion.function",
+              requirement: "Create the `describeFavorite` function.",
               validatorId: "validator.javascript-function-exists",
               input: { filePath: "index.js", name: "describeFavorite" },
             },
             {
               id: "criterion.call",
+              requirement: "Call `describeFavorite`.",
               validatorId: "validator.javascript-call-exists",
               input: { filePath: "index.js", calleeName: "describeFavorite" },
             },
@@ -1887,10 +1889,6 @@ test.describe("classroom shell", () => {
             guide: {
               title: "Small coding challenge",
               body: "Create describeFavorite, return a sentence, and call it.",
-              supportingItems: [
-                "Create the `describeFavorite` function.",
-                "Call `describeFavorite`.",
-              ],
             },
             wait: {
               kind: "interaction",

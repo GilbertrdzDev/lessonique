@@ -59,6 +59,29 @@ describe("LessonPersistence", () => {
       }),
     ).toBe(false);
   });
+
+  it("round-trips a content-driven 15-step lesson plan", () => {
+    const storage = createMemoryStorage();
+    const persistence = new LessonPersistence(storage);
+    const steps = Array.from({ length: 15 }, (_, index) => ({
+      id: `step.${index + 1}`,
+      title: `Step ${index + 1}`,
+      objective: `Teach concept ${index + 1}.`,
+      criteria: [],
+      hints: [],
+    }));
+    const state = createActiveLessonState(
+      {
+        id: "lesson.long-form",
+        title: "Long-form lesson",
+        objective: "Preserve every necessary teaching step.",
+      },
+      steps,
+    );
+
+    expect(persistence.save(state)).toBe(true);
+    expect(persistence.load()?.plan.steps).toHaveLength(15);
+  });
 });
 
 function createMemoryStorage(): LessonStorage {

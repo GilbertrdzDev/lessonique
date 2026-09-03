@@ -22,10 +22,13 @@ describe("ToolRegistry", () => {
       "exact token, single line, or contiguous multi-line range",
     );
     expect(registry.require("create_guided_lesson").description).toContain(
-      "correspond one-to-one and in the same order with every criterion",
+      "derives the numbered list from those criterion requirements",
     );
     expect(registry.require("play_teaching_scene").description).toContain(
       "one small concept per explanation beat",
+    );
+    expect(registry.require("play_teaching_scene").description).toContain(
+      "10, 15, or more beats",
     );
     expect(registry.require("play_teaching_scene").description).toContain(
       "single backticks",
@@ -67,11 +70,11 @@ describe("ToolRegistry", () => {
       expect.objectContaining({
         ok: false,
         status: "failed",
-        error: {
+        error: expect.objectContaining({
           code: "invalid_input",
-          message: "The tool input did not match the closed schema.",
+          message: expect.stringContaining("shellCommand"),
           recoverable: true,
-        },
+        }),
       }),
     );
   });

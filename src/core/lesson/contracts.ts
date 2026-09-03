@@ -56,6 +56,7 @@ export interface LessonDefinition {
 
 export interface LessonCriterion {
   id: LessonCriterionId;
+  requirement?: string;
   validatorId: ValidatorId;
   input?: Readonly<Record<string, JsonValue>>;
 }

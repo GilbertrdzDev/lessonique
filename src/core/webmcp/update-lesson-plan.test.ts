@@ -23,6 +23,7 @@ describe("UpdateLessonPlanService", () => {
             criteria: [
               {
                 id: "criterion.inserted",
+                requirement: "Keep `lessonReady` in `script.js`.",
                 validatorId: "validator.text-exists",
                 input: { filePath: "script.js", text: "lessonReady" },
               },
@@ -99,6 +100,7 @@ describe("UpdateLessonPlanService", () => {
             criteria: [
               {
                 id: "criterion.invalid",
+                requirement: "Keep the required text in `script.js`.",
                 validatorId: "validator.text-exists",
                 input: { filePath: "script.js", unexpected: true },
               },
