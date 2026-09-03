@@ -688,6 +688,13 @@ export class SceneRunner {
           }
           const tracked = tracker?.getSnapshot();
           if (!tracked) return;
+          const currentPresentation = this.#presentation.getSnapshot();
+          if (
+            exerciseStepId &&
+            currentPresentation.targetSnapshot?.status === "resolved"
+          ) {
+            return;
+          }
           this.#presentation.patch((current) => ({
             ...current,
             targetSnapshot: structuredClone(tracked.resolved),
@@ -826,15 +833,22 @@ export class SceneRunner {
       ) {
         return;
       }
-      this.#presentation.patch((current) => ({
-        ...current,
-        phase: "validating",
-        navigation: {
-          ...current.navigation,
-          nextBlocked: true,
-          exerciseValidation: { status: "validating" },
-        },
-      }));
+      this.#presentation.patch((current) =>
+        current.phase === "validating" &&
+        current.navigation.nextBlocked &&
+        current.navigation.exerciseValidation?.status === "validating" &&
+        current.navigation.exerciseValidation.message === undefined
+          ? current
+          : {
+              ...current,
+              phase: "validating",
+              navigation: {
+                ...current.navigation,
+                nextBlocked: true,
+                exerciseValidation: { status: "validating" },
+              },
+            },
+      );
       clearTimeout(exercise.debounceTimer);
       exercise.debounceTimer = setTimeout(() => {
         void this.#validateExercise(active, exercise, "automatic");
@@ -861,15 +875,22 @@ export class SceneRunner {
     const sequence = ++exercise.sequence;
     const signal = AbortSignal.any([active.scope.signal, validationAbort.signal]);
     if (source !== "initial") {
-      this.#presentation.patch((current) => ({
-        ...current,
-        phase: "validating",
-        navigation: {
-          ...current.navigation,
-          nextBlocked: true,
-          exerciseValidation: { status: "validating" },
-        },
-      }));
+      this.#presentation.patch((current) =>
+        current.phase === "validating" &&
+        current.navigation.nextBlocked &&
+        current.navigation.exerciseValidation?.status === "validating" &&
+        current.navigation.exerciseValidation.message === undefined
+          ? current
+          : {
+              ...current,
+              phase: "validating",
+              navigation: {
+                ...current.navigation,
+                nextBlocked: true,
+                exerciseValidation: { status: "validating" },
+              },
+            },
+      );
       this.#actor.setState("assistant.thinking", "waiting");
     }
     try {
@@ -896,18 +917,26 @@ export class SceneRunner {
         : source === "initial"
           ? undefined
           : `${result.passedCriteria} of ${result.totalCriteria} requirements passed.`;
-      this.#presentation.patch((current) => ({
-        ...current,
-        phase: result.passed ? "feedback" : "interaction",
-        navigation: {
-          ...current.navigation,
-          nextBlocked: !result.passed,
-          exerciseValidation: {
-            status,
-            ...(message ? { message } : {}),
-          },
-        },
-      }));
+      const phase = result.passed ? "feedback" : "interaction";
+      this.#presentation.patch((current) =>
+        current.phase === phase &&
+        current.navigation.nextBlocked === !result.passed &&
+        current.navigation.exerciseValidation?.status === status &&
+        current.navigation.exerciseValidation.message === message
+          ? current
+          : {
+              ...current,
+              phase,
+              navigation: {
+                ...current.navigation,
+                nextBlocked: !result.passed,
+                exerciseValidation: {
+                  status,
+                  ...(message ? { message } : {}),
+                },
+              },
+            },
+      );
       this.#actor.setState(
         result.passed ? "assistant.success" : "assistant.waiting",
         result.passed ? "presenting" : "waiting",
@@ -921,18 +950,23 @@ export class SceneRunner {
       if (isAbortError(error)) {
         return { passed: false, passedCriteria: 0, totalCriteria };
       }
-      this.#presentation.patch((current) => ({
-        ...current,
-        phase: "interaction",
-        navigation: {
-          ...current.navigation,
-          nextBlocked: true,
-          exerciseValidation: {
-            status: "error",
-            message: "Validation could not run. Please try again.",
-          },
-        },
-      }));
+      const message = "Validation could not run. Please try again.";
+      this.#presentation.patch((current) =>
+        current.phase === "interaction" &&
+        current.navigation.nextBlocked &&
+        current.navigation.exerciseValidation?.status === "error" &&
+        current.navigation.exerciseValidation.message === message
+          ? current
+          : {
+              ...current,
+              phase: "interaction",
+              navigation: {
+                ...current.navigation,
+                nextBlocked: true,
+                exerciseValidation: { status: "error", message },
+              },
+            },
+      );
       this.#actor.setState("assistant.warning", "waiting");
       return { passed: false, passedCriteria: 0, totalCriteria };
     }

@@ -168,7 +168,7 @@ describe("SceneRunner", () => {
         };
       }),
     };
-    const { runner, lesson } = createHarness({
+    const { runner, lesson, targetHandle } = createHarness({
       beatDurationMs: 30_000,
       exerciseEvaluator,
       interactions,
@@ -200,6 +200,10 @@ describe("SceneRunner", () => {
           type: "interaction",
           lessonStepId: "step.2",
           prepare: { surfaceId: "editor", filePath: "index.js" },
+          target: {
+            resolverId: "target.surface-anchor",
+            input: { anchorId: "anchor.workspace-editor" },
+          },
           effects: [],
           guide: { body: "Create and call describeFavorite." },
           wait: {
@@ -231,6 +235,15 @@ describe("SceneRunner", () => {
       nextBlocked: true,
       exerciseValidation: { status: "idle" },
     });
+    const stableExercisePosition = runner.presentation.getSnapshot().assistant.position;
+    targetHandle.update({
+      status: "resolved",
+      geometry: { left: 180, top: 220, width: 360, height: 180 },
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(runner.presentation.getSnapshot().assistant.position).toEqual(
+      stableExercisePosition,
+    );
     await expect(runner.control("next")).rejects.toThrow(
       /Complete the required learner interaction/u,
     );
@@ -250,40 +263,50 @@ describe("SceneRunner", () => {
     );
 
     passed = true;
-    interactionListener?.({
-      id: "editor-change-1",
-      typeId: "interaction.editor-change",
-      surfaceId: "editor",
-      environmentRevision: 1,
-      occurredAt: "2026-09-02T00:00:00.000Z",
-    });
+    const presentationListener = vi.fn();
+    const unsubscribePresentation = runner.presentation.subscribe(presentationListener);
+    for (let index = 1; index <= 3; index += 1) {
+      interactionListener?.({
+        id: `editor-change-${index}`,
+        typeId: "interaction.editor-change",
+        surfaceId: "editor",
+        environmentRevision: 1,
+        occurredAt: `2026-09-02T00:00:0${index}.000Z`,
+      });
+    }
     expect(runner.presentation.getSnapshot().navigation).toMatchObject({
       nextBlocked: true,
       exerciseValidation: { status: "validating" },
     });
-    await vi.advanceTimersByTimeAsync(350);
+    expect(interactions.subscribe).toHaveBeenCalledTimes(1);
+    expect(presentationListener).toHaveBeenCalledTimes(1);
+    expect(exerciseEvaluator.evaluate).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(349);
+    expect(exerciseEvaluator.evaluate).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
     expect(runner.presentation.getSnapshot().navigation).toMatchObject({
       nextBlocked: false,
       exerciseValidation: { status: "passed" },
     });
+    unsubscribePresentation();
 
     interactionListener?.({
-      id: "editor-change-2",
+      id: "editor-change-4",
       typeId: "interaction.editor-change",
       surfaceId: "editor",
       environmentRevision: 1,
-      occurredAt: "2026-09-02T00:00:01.000Z",
+      occurredAt: "2026-09-02T00:00:04.000Z",
     });
     await vi.advanceTimersByTimeAsync(350);
     expect(runner.presentation.getSnapshot().navigation.nextBlocked).toBe(false);
 
     passed = false;
     interactionListener?.({
-      id: "editor-change-3",
+      id: "editor-change-5",
       typeId: "interaction.editor-change",
       surfaceId: "editor",
       environmentRevision: 1,
-      occurredAt: "2026-09-02T00:00:02.000Z",
+      occurredAt: "2026-09-02T00:00:05.000Z",
     });
     expect(runner.presentation.getSnapshot().navigation.nextBlocked).toBe(true);
     await vi.advanceTimersByTimeAsync(350);

@@ -118,7 +118,10 @@ export class ScenePresentationStore {
       current: ScenePresentationSnapshot,
     ) => ScenePresentationSnapshot,
   ): void {
-    this.commit(update(this.getSnapshot()));
+    const current = this.getSnapshot();
+    const next = update(current);
+    if (next === current) return;
+    this.commit(next);
   }
 
   clear(options: { reducedMotion?: boolean } = {}): void {
