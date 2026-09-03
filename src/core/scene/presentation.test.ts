@@ -61,3 +61,21 @@ describe("GuidanceMotionEngine", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe("Scene presentation updates", () => {
+  it("does not notify subscribers for identity patches or repeated assistant state", () => {
+    const store = new ScenePresentationStore();
+    const actor = new AssistantActor(store);
+    const listener = vi.fn();
+    const unsubscribe = store.subscribe(listener);
+
+    store.patch((current) => current);
+    expect(listener).not.toHaveBeenCalled();
+
+    actor.setState("assistant.thinking", "waiting");
+    actor.setState("assistant.thinking", "waiting");
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+});
