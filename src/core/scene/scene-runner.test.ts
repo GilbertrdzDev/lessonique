@@ -24,6 +24,47 @@ describe("SceneRunner", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
+  it("rejects more final criteria than the numbered guide can represent", () => {
+    const { runner } = createHarness({
+      exerciseEvaluator: {
+        evaluate: vi.fn(async () => ({
+          passed: false,
+          passedCriteria: 0,
+          totalCriteria: 6,
+        })),
+      },
+      finalStepCriteria: Array.from({ length: 6 }, (_, index) => ({
+        id: `criterion.${index + 1}`,
+        validatorId: "validator.no-console-errors",
+      })),
+    });
+
+    expect(() =>
+      runner.validate({
+        ...scene("scene.too-many-requirements", 1),
+        beats: [
+          {
+            id: "beat.exercise",
+            type: "interaction",
+            lessonStepId: "step.1",
+            effects: [],
+            guide: {
+              body: "Complete the final exercise.",
+              supportingItems: Array.from(
+                { length: 5 },
+                (_, index) => `Requirement ${index + 1}`,
+              ),
+            },
+            wait: {
+              kind: "interaction",
+              eventTypeId: "interaction.editor-change",
+            },
+          },
+        ],
+      }),
+    ).toThrow(/has 6 criteria.*supports at most 5 numbered requirements/u);
+  });
+
   it("starts immediately, presents structured guidance, and cleans up on completion", async () => {
     const { runner, lifecycle } = createHarness();
     const started = await runner.start(scene("scene.complete", 1, false));
@@ -205,7 +246,13 @@ describe("SceneRunner", () => {
             input: { anchorId: "anchor.workspace-editor" },
           },
           effects: [],
-          guide: { body: "Create and call describeFavorite." },
+          guide: {
+            body: "Create and call describeFavorite.",
+            supportingItems: [
+              "Create `describeFavorite`.",
+              "Call `describeFavorite`.",
+            ],
+          },
           wait: {
             kind: "interaction",
             eventTypeId: "interaction.editor-change",
@@ -223,6 +270,25 @@ describe("SceneRunner", () => {
         },
       ],
     };
+
+    expect(() =>
+      runner.validate({
+        ...exerciseScene,
+        beats: [
+          exerciseScene.beats[0]!,
+          {
+            ...exerciseScene.beats[1]!,
+            guide: {
+              body: "Create and call describeFavorite.",
+              supportingItems: ["Create `describeFavorite`."],
+            },
+          },
+        ],
+      }),
+    ).toThrow(
+      /2 criteria, 1 supporting items.*technical checks such as console errors/u,
+    );
+    expect(() => runner.validate(exerciseScene)).not.toThrow();
 
     await runner.start(exerciseScene);
     await vi.advanceTimersByTimeAsync(0);

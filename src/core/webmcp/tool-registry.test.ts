@@ -21,6 +21,9 @@ describe("ToolRegistry", () => {
     expect(registry.require("create_guided_lesson").description).toContain(
       "exact token, single line, or contiguous multi-line range",
     );
+    expect(registry.require("create_guided_lesson").description).toContain(
+      "correspond one-to-one and in the same order with every criterion",
+    );
     expect(registry.require("play_teaching_scene").description).toContain(
       "one small concept per explanation beat",
     );

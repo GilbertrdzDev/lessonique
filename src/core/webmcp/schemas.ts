@@ -127,6 +127,9 @@ const visualGuideSchema = z.strictObject({
         .describe(GUIDE_INLINE_CODE_SYNTAX_DESCRIPTION),
     )
     .max(DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems)
+    .describe(
+      `For a final coding exercise, provide exactly one learner-visible requirement for each validation criterion on the mapped lesson step, in the same order, including technical gates such as no console errors. Final exercises therefore support at most ${DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems} criteria.`,
+    )
     .optional(),
 });
 
@@ -312,7 +315,7 @@ export const createGuidedLessonInputSchema = withP0Safety(
       .min(1)
       .max(DEFAULT_SYSTEM_LIMITS.maxLessonSteps),
     initialScene: teachingSceneInputSchema
-      .describe("For explain or mixed lessons, prefer a complete multi-beat micro-step scene with local navigation. Code explanations should use one semantic target per beat for the exact token, single line, or contiguous multi-line range being discussed and include registered visual effects for that target. Do not create artificial learner waits merely to keep explanations visible.")
+      .describe(`For explain or mixed lessons, prefer a complete multi-beat micro-step scene with local navigation. Code explanations should use one semantic target per beat for the exact token, single line, or contiguous multi-line range being discussed and include registered visual effects for that target. Do not create artificial learner waits merely to keep explanations visible. On a final coding exercise, use at most ${DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems} criteria and make the final beat list one guide supporting item for every criterion on its mapped lesson step, in matching order, so the visible requirements and validation total stay aligned.`)
       .optional(),
   }),
 );

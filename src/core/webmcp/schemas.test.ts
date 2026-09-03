@@ -129,6 +129,9 @@ describe("WebMCP tool schemas", () => {
     expect(lessonProperties.initialScene.description).toContain(
       "exact token, single line, or contiguous multi-line range",
     );
+    expect(lessonProperties.initialScene.description).toContain(
+      "one guide supporting item for every criterion",
+    );
     expect(beatSchema.type.description).toContain("one small concept");
     expect(
       playTeachingSceneInputSchema.safeParse({
@@ -154,6 +157,9 @@ describe("WebMCP tool schemas", () => {
       expect(guideProperties.body.description).toContain("single backticks");
       expect(guideProperties.supportingItems.items?.description).toContain(
         "single backticks",
+      );
+      expect(guideProperties.supportingItems.description).toContain(
+        "exactly one learner-visible requirement for each validation criterion",
       );
       expect(beatProperties.caption.description).toContain("single backticks");
     }
