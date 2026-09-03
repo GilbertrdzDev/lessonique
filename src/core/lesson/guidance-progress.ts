@@ -40,6 +40,26 @@ export class GuidanceProgressCoordinator {
     return this.#commitProgress(managedStepIds, () => "completed");
   }
 
+  completeSection(
+    orderedStepIds: readonly string[],
+    completedStepId: string,
+  ): LessonState {
+    const managedStepIds = uniqueStepIds(orderedStepIds);
+    const completedIndex = managedStepIds.indexOf(completedStepId);
+    if (completedIndex < 0) {
+      throw new Error(
+        `Guidance section "${completedStepId}" is not part of the active scene.`,
+      );
+    }
+    return this.#commitProgress(managedStepIds, (_stepId, managedIndex) =>
+      managedIndex <= completedIndex
+        ? "completed"
+        : managedIndex === completedIndex + 1
+          ? "active"
+          : "pending",
+    );
+  }
+
   #commitProgress(
     managedStepIds: readonly string[],
     resolveManagedStatus: (

@@ -944,6 +944,7 @@ function TargetHighlight({
 }: Readonly<{ geometry: TargetGeometry; spotlightActive: boolean }>) {
   const block = continuousTargetBlock(geometry);
   const padding = spotlightActive ? 0 : 4;
+  const borderWidth = spotlightActive ? 0 : 2;
   return (
     <div
       aria-hidden="true"
@@ -960,7 +961,7 @@ function TargetHighlight({
       }
       data-guidance-highlight-padding={padding}
       data-guidance-shape="continuous"
-      style={targetStyle(block, padding)}
+      style={targetStyle(block, padding, borderWidth)}
     />
   );
 }
@@ -1324,12 +1325,17 @@ function offsetGeometry(
     : undefined;
 }
 
-function targetStyle(geometry: TargetRectangle, padding: number) {
+function targetStyle(
+  geometry: TargetRectangle,
+  padding: number,
+  borderWidth = 0,
+) {
+  const inset = padding + borderWidth;
   return {
-    left: geometry.left - padding,
-    top: geometry.top - padding,
-    width: geometry.width + padding * 2,
-    height: geometry.height + padding * 2,
+    left: geometry.left - inset,
+    top: geometry.top - inset,
+    width: geometry.width + inset * 2,
+    height: geometry.height + inset * 2,
   };
 }
 

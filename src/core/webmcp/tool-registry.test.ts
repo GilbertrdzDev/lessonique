@@ -28,7 +28,7 @@ describe("ToolRegistry", () => {
       "one small concept per explanation beat",
     );
     expect(registry.require("play_teaching_scene").description).toContain(
-      "10, 15, or more beats",
+      "at most 15",
     );
     expect(registry.require("play_teaching_scene").description).toContain(
       "single backticks",
