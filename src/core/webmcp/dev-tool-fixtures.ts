@@ -51,6 +51,7 @@ export const DEV_TOOL_FIXTURES = {
         criteria: [
           {
             id: "criterion.dev-panel",
+            requirement: "Keep the `lessonReady` declaration in `script.js`.",
             validatorId: "validator.text-exists",
             input: { filePath: "script.js", text: "lessonReady" },
           },

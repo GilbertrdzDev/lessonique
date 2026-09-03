@@ -33,8 +33,7 @@ export class TeachingSceneToolService {
   validate(input: TeachingSceneInput, lesson?: LessonState): TeachingScene {
     const scene = toTeachingScene(input);
     try {
-      this.#runner.validate(scene, lesson);
-      return scene;
+      return this.#runner.validate(scene, lesson);
     } catch (error) {
       throw normalizeSceneValidationError(error);
     }

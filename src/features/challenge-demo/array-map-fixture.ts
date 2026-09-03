@@ -86,6 +86,7 @@ export function createArrayMapLessonFixture(): CreateGuidedLessonInput {
         criteria: [
           {
             id: ARRAY_MAP_DEMO_IDS.mapCriterion,
+            requirement: "Transform the `scores` array with `map()`.",
             validatorId: "validator.javascript-call-exists",
             input: {
               filePath: "script.js",
@@ -107,6 +108,7 @@ export function createArrayMapLessonFixture(): CreateGuidedLessonInput {
         criteria: [
           {
             id: ARRAY_MAP_DEMO_IDS.outputCriterion,
+            requirement: "Log `Scaled scores: 6, 10, 16`.",
             validatorId: "validator.console-output-matches",
             input: {
               text: "Scaled scores: 6, 10, 16",
@@ -116,6 +118,7 @@ export function createArrayMapLessonFixture(): CreateGuidedLessonInput {
           },
           {
             id: ARRAY_MAP_DEMO_IDS.consoleCriterion,
+            requirement: "Run the lesson without console errors.",
             validatorId: "validator.no-console-errors",
             input: {},
           },

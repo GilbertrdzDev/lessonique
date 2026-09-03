@@ -214,22 +214,18 @@ export class SceneRunner {
   validate(
     scene: TeachingScene,
     lesson: LessonState = this.#lesson.getSnapshot(),
-  ): void {
+  ): TeachingScene {
     rejectForbiddenSceneFields(scene);
     if (scene.cleanupPolicy !== "replace") {
       throw new SceneValidationError("Teaching scenes must use the replace cleanup policy.");
     }
-    if (
-      scene.beats.length === 0 ||
-      scene.beats.length > DEFAULT_SYSTEM_LIMITS.maxSceneBeats
-    ) {
-      throw new SceneValidationError(
-        `Teaching scenes require between 1 and ${DEFAULT_SYSTEM_LIMITS.maxSceneBeats} beats.`,
-      );
+    if (scene.beats.length === 0) {
+      throw new SceneValidationError("Teaching scenes require at least one beat.");
     }
+    const prepared = this.#deriveFinalExerciseRequirements(scene, lesson);
     const beatIds = new Set<string>();
     let previousPlanIndex = -1;
-    for (const beat of scene.beats) {
+    for (const beat of prepared.beats) {
       if (beatIds.has(beat.id)) {
         throw new SceneValidationError(`Scene beat "${beat.id}" is duplicated.`);
       }
@@ -247,12 +243,12 @@ export class SceneRunner {
         previousPlanIndex = planIndex;
       }
     }
-    this.#validateFinalExerciseRequirements(scene, lesson);
+    return prepared;
   }
 
   async start(scene: TeachingScene): Promise<SceneSnapshot> {
-    this.validate(scene);
-    return this.#startValidated(scene);
+    const prepared = this.validate(scene);
+    return this.#startValidated(prepared);
   }
 
   canReplayLast(): boolean {
@@ -290,11 +286,11 @@ export class SceneRunner {
         "There is no completed teaching scene available for this lesson.",
       );
     }
-    this.validate(
+    const prepared = this.validate(
       replayable.scene,
       createReplayValidationLesson(lesson, replayable.initialLessonStepId),
     );
-    return this.#startValidated(replayable.scene, replayable);
+    return this.#startValidated(prepared, replayable);
   }
 
   async #startValidated(
@@ -1098,10 +1094,10 @@ export class SceneRunner {
     }
   }
 
-  #validateFinalExerciseRequirements(
+  #deriveFinalExerciseRequirements(
     scene: TeachingScene,
     lesson: LessonState,
-  ): void {
+  ): TeachingScene {
     const beat = scene.beats.at(-1);
     if (
       !scene.allowManualNavigation ||
@@ -1109,11 +1105,11 @@ export class SceneRunner {
       beat?.wait?.kind !== "interaction" ||
       !this.#exerciseInteractionTypeIds.has(beat.wait.eventTypeId)
     ) {
-      return;
+      return scene;
     }
     const stepId = beat.lessonStepId ?? lesson.plan.activeStepId;
     const step = lesson.plan.steps.find(({ id }) => id === stepId);
-    if (!step?.criteria.length) return;
+    if (!step?.criteria.length) return scene;
 
     if (step.criteria.length > DEFAULT_SYSTEM_LIMITS.maxVisualGuideItems) {
       throw new SceneValidationError(
@@ -1121,12 +1117,32 @@ export class SceneRunner {
       );
     }
 
-    const requirementCount = beat.guide?.supportingItems?.length ?? 0;
-    if (requirementCount === step.criteria.length) return;
-
-    throw new SceneValidationError(
-      `Final exercise beat "${beat.id}" must provide exactly one guide supporting item for each validation criterion in Learning Plan step "${step.id}", in the same order (${step.criteria.length} criteria, ${requirementCount} supporting items). Include learner-visible items for technical checks such as console errors.`,
+    if (!beat.guide) {
+      throw new SceneValidationError(
+        `Final exercise beat "${beat.id}" requires a visual guide so Lessonique can present its numbered requirements.`,
+      );
+    }
+    const requirements = step.criteria.map(({ requirement }) => requirement);
+    const missingRequirementIndex = requirements.findIndex(
+      (requirement) => !requirement,
     );
+    if (missingRequirementIndex >= 0) {
+      throw new SceneValidationError(
+        `Final exercise criterion "${step.criteria[missingRequirementIndex]!.id}" requires learner-visible requirement text before Lessonique can create the numbered guide.`,
+      );
+    }
+    const beats = scene.beats.map((candidate, index) =>
+      index === scene.beats.length - 1
+        ? {
+            ...candidate,
+            guide: {
+              ...candidate.guide!,
+              supportingItems: requirements as string[],
+            },
+          }
+        : candidate,
+    );
+    return { ...scene, beats };
   }
 
   #validateEffect(

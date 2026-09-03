@@ -10,7 +10,7 @@ import {
 import { LessonStore } from "./store";
 
 describe("lesson plan state", () => {
-  it.each([3, 8])("creates an active provider-neutral %i-step plan", (stepCount) => {
+  it.each([3, 8, 15])("creates an active provider-neutral %i-step plan", (stepCount) => {
     const plan = createLessonPlan(createSteps(stepCount));
 
     expect(plan.steps).toHaveLength(stepCount);
@@ -19,9 +19,8 @@ describe("lesson plan state", () => {
     expect(plan.steps.slice(1).every((step) => step.status === "pending")).toBe(true);
   });
 
-  it("enforces plan limits and unique step and criterion IDs", () => {
+  it("requires a non-empty plan and unique step and criterion IDs", () => {
     expect(() => createLessonPlan([])).toThrow("at least one step");
-    expect(() => createLessonPlan(createSteps(11))).toThrow("at most 10 steps");
     expect(() => createLessonPlan([createSteps(1)[0]!, createSteps(1)[0]!])).toThrow(
       'Lesson step ID "step.1" must be unique.',
     );

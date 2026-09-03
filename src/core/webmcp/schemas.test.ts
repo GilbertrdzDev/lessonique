@@ -16,7 +16,9 @@ import { WEBMCP_TOOL_NAMES } from "./tool-names";
 type JsonSchemaNode = {
   description?: string;
   items?: JsonSchemaNode;
+  maxItems?: number;
   properties?: Record<string, JsonSchemaNode>;
+  required?: string[];
 };
 
 describe("WebMCP tool schemas", () => {
@@ -59,6 +61,7 @@ describe("WebMCP tool schemas", () => {
           criteria: [
             {
               id: "criterion.fixture",
+              requirement: "Satisfy the future provider validation.",
               validatorId: "validator.future",
               input: { expected: true },
             },
@@ -114,6 +117,8 @@ describe("WebMCP tool schemas", () => {
         Record<string, unknown>
       >
     );
+    const lessonStepSchema = lessonProperties.steps.items as JsonSchemaNode;
+    const criterionSchema = lessonStepSchema.properties?.criteria.items;
 
     expect(lessonSchema.required).toContain("lessonMode");
     expect(lessonProperties.lessonMode.description).toContain("complete examples");
@@ -126,11 +131,21 @@ describe("WebMCP tool schemas", () => {
     expect((sceneProperties.beats.items as { required?: string[] }).required).toContain(
       "type",
     );
+    expect((sceneProperties.beats as JsonSchemaNode).description).toContain(
+      "without filler or concept compression",
+    );
     expect(lessonProperties.initialScene.description).toContain(
       "exact token, single line, or contiguous multi-line range",
     );
     expect(lessonProperties.initialScene.description).toContain(
-      "one guide supporting item for every criterion",
+      "omit the final beat's guide supportingItems",
+    );
+    expect(lessonProperties.steps.description).toContain(
+      "do not add filler or compress distinct concepts",
+    );
+    expect(criterionSchema?.required).toContain("requirement");
+    expect(criterionSchema?.properties?.requirement.description).toContain(
+      "learner-visible language",
     );
     expect(beatSchema.type.description).toContain("one small concept");
     expect(
@@ -159,7 +174,7 @@ describe("WebMCP tool schemas", () => {
         "single backticks",
       );
       expect(guideProperties.supportingItems.description).toContain(
-        "exactly one learner-visible requirement for each validation criterion",
+        "Omit this field on the final coding-exercise beat",
       );
       expect(beatProperties.caption.description).toContain("single backticks");
     }
@@ -235,25 +250,22 @@ describe("WebMCP tool schemas", () => {
     ).toThrow();
   });
 
-  it("enforces visual guidance and scene limits", () => {
+  it("enforces visual guidance limits without a fixed scene length", () => {
     expect(
       playTeachingSceneInputSchema.safeParse({
         id: "scene.fixture",
         beats: Array.from(
-          { length: DEFAULT_SYSTEM_LIMITS.maxSceneBeats },
+          { length: 15 },
           (_, index) => ({ id: `beat.${index}`, type: "explanation" }),
         ),
       }).success,
     ).toBe(true);
-    expect(() =>
-      playTeachingSceneInputSchema.parse({
-        id: "scene.fixture",
-        beats: Array.from(
-          { length: DEFAULT_SYSTEM_LIMITS.maxSceneBeats + 1 },
-          (_, index) => ({ id: `beat.${index}`, type: "explanation" }),
-        ),
-      }),
-    ).toThrow();
+    expect(
+      (getWebMCPToolJsonSchema("play_teaching_scene").properties as Record<
+        string,
+        JsonSchemaNode
+      >).beats.maxItems,
+    ).toBeUndefined();
     expect(() =>
       playTeachingSceneInputSchema.parse({
         id: "scene.fixture",
@@ -387,7 +399,7 @@ describe("WebMCP tool schemas", () => {
     expect(result.success).toBe(true);
   });
 
-  it("enforces file, lesson-step, file-byte, and inspection-retention limits", () => {
+  it("enforces bounded fields without imposing a lesson-step count", () => {
     const lesson = createValidLessonInput();
 
     expect(
@@ -399,15 +411,23 @@ describe("WebMCP tool schemas", () => {
           content: "",
         })),
         steps: Array.from(
-          { length: DEFAULT_SYSTEM_LIMITS.maxLessonSteps },
+          { length: 15 },
           (_, index) => ({
             id: `step.${index}`,
             title: `Step ${index}`,
-            objective: "Stay within the declared lesson limit.",
+            objective: "Keep each concept pedagogically distinct.",
           }),
         ),
       }).success,
     ).toBe(true);
+    expect(
+      (
+        getWebMCPToolJsonSchema("create_guided_lesson").properties as Record<
+          string,
+          JsonSchemaNode
+        >
+      ).steps.maxItems,
+    ).toBeUndefined();
     expect(
       createGuidedLessonInputSchema.safeParse({
         ...lesson,
@@ -431,19 +451,6 @@ describe("WebMCP tool schemas", () => {
             content: "é".repeat(DEFAULT_SYSTEM_LIMITS.maxFileBytes / 2 + 1),
           },
         ],
-      }).success,
-    ).toBe(false);
-    expect(
-      createGuidedLessonInputSchema.safeParse({
-        ...lesson,
-        steps: Array.from(
-          { length: DEFAULT_SYSTEM_LIMITS.maxLessonSteps + 1 },
-          (_, index) => ({
-            id: `step.${index}`,
-            title: `Step ${index}`,
-            objective: "Exceed the declared lesson limit.",
-          }),
-        ),
       }).success,
     ).toBe(false);
     expect(

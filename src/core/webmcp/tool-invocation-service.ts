@@ -23,6 +23,7 @@ import {
 } from "./tool-activity-presentation";
 
 const MAX_ERROR_MESSAGE_LENGTH = 240;
+const MAX_SCHEMA_ISSUE_MESSAGE_LENGTH = 72;
 const MAX_ALTERNATIVES = 10;
 let fallbackOperationSequence = 0;
 
@@ -203,11 +204,19 @@ export class ToolInvocationService {
 
 export function toCompactToolError(error: unknown): ToolResultError {
   if (error instanceof ZodError) {
-    return {
+    const details = error.issues.slice(0, 2).map((issue) => {
+      const path = formatSchemaPath(issue.path);
+      const message =
+        issue.message.length <= MAX_SCHEMA_ISSUE_MESSAGE_LENGTH
+          ? issue.message
+          : `${issue.message.slice(0, MAX_SCHEMA_ISSUE_MESSAGE_LENGTH - 1)}…`;
+      return `${path || "input"}: ${message}`;
+    });
+    return compactToolError({
       code: "invalid_input",
-      message: "The tool input did not match the closed schema.",
+      message: `The tool input did not match the closed schema. ${details.join("; ")}`,
       recoverable: true,
-    };
+    });
   }
   if (error instanceof CapabilityValidationError) {
     return compactToolError({
@@ -232,6 +241,14 @@ export function toCompactToolError(error: unknown): ToolResultError {
     message: "The tool invocation failed unexpectedly.",
     recoverable: false,
   };
+}
+
+function formatSchemaPath(path: readonly PropertyKey[]): string {
+  return path.reduce<string>((formatted, segment) => {
+    if (typeof segment === "number") return `${formatted}[${segment}]`;
+    const key = String(segment);
+    return formatted ? `${formatted}.${key}` : key;
+  }, "");
 }
 
 function normalizeExecutionResult(
