@@ -168,6 +168,8 @@ Open `http://localhost:3000/`. In a WebMCP-capable ChatGPT session, the page adv
 
 The Vercel-generated `lessonique.vercel.app` alias remains available, but `lessonique.com` is the canonical production URL.
 
+Anonymous visitor and page-view metrics are available in the [Lessonique Web Analytics dashboard](https://vercel.com/gilbertrdzdevs-projects/lessonique/analytics). Vercel does not identify individual visitors. The current Hobby plan does not include custom events, so classroom actions are not counted separately.
+
 ```bash
 pnpm lint
 pnpm typecheck

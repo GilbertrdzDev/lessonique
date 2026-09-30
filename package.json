@@ -26,6 +26,7 @@
     "@base-ui/react": "^1.7.0",
     "@codesandbox/sandpack-react": "^2.20.0",
     "@monaco-editor/react": "^4.7.0",
+    "@vercel/analytics": "2.0.1",
     "acorn": "^8.18.0",
     "acorn-loose": "^8.5.2",
     "class-variance-authority": "^0.7.1",
