@@ -6,17 +6,18 @@ import { WebMCPRegistrationProvider } from "@/components/webmcp/webmcp-registrat
 import { WorkspaceRuntimeProvider } from "@/components/workspace/workspace-runtime-provider";
 
 import { ExperienceHeader } from "./experience-header";
+import { PrivacyProvider } from "@/components/privacy/privacy-provider";
 
 describe("ExperienceHeader", () => {
   it("keeps Reset without duplicating the workspace runtime control", () => {
     const markup = renderToStaticMarkup(
       createElement(
-        WorkspaceRuntimeProvider,
+        PrivacyProvider,
         null,
         createElement(
-          WebMCPRegistrationProvider,
+          WorkspaceRuntimeProvider,
           null,
-          createElement(ExperienceHeader, { experienceState: "classroom" }),
+          createElement(WebMCPRegistrationProvider, null, createElement(ExperienceHeader, { experienceState: "classroom" })),
         ),
       ),
     );

@@ -168,7 +168,11 @@ Open `http://localhost:3000/`. In a WebMCP-capable ChatGPT session, the page adv
 
 The Vercel-generated `lessonique.vercel.app` alias remains available, but `lessonique.com` is the canonical production URL.
 
-Anonymous visitor and page-view metrics are available in the [Lessonique Web Analytics dashboard](https://vercel.com/gilbertrdzdevs-projects/lessonique/analytics). Vercel does not identify individual visitors. The current Hobby plan does not include custom events, so classroom actions are not counted separately.
+Anonymous visitor and page-view metrics are available in the [Lessonique Web Analytics dashboard](https://vercel.com/gilbertrdzdevs-projects/lessonique/analytics) only for visitors who accept optional analytics. Visitors can reject analytics, decide later, or withdraw through **Privacy settings** without losing classroom access. Choices are remembered for 180 days; invalid or expired choices disable analytics. The current Hobby plan does not include custom events, so classroom actions are not counted separately.
+
+The `/privacy` and `/storage` pages explain classroom browser storage, connected WebMCP inspection, Sandpack execution, hosting, and analytics. These pages are drafts with `noindex` metadata until the operator's legal name, public privacy email, country, and provider/minor wording review are supplied. Do not promote this policy draft to production. **Clear classroom data** resets the active classroom in this tab and removes its saved workspace and lesson, retaining theme and privacy preferences; other active tabs can have their own classroom data.
+
+Privacy browser tests intercept analytics endpoints rather than sending visitor data. To verify withdrawal against the deployed Vercel runtime, capture its script to a local temporary file and set `VERCEL_ANALYTICS_TEST_SCRIPT` to that absolute file path before running `pnpm exec playwright test e2e/privacy.spec.ts`. Without that variable the tests use an SDK-protocol fixture.
 
 ```bash
 pnpm lint

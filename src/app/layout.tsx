@@ -1,14 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import type { ReactNode } from "react";
-import { Analytics } from "@vercel/analytics/next";
 import "tippy.js/animations/scale.css";
 import "tippy.js/dist/tippy.css";
 
 import { ThemeProvider } from "@/components/theme-provider";
-import { ControlTooltipProvider } from "@/components/ui/control-tooltip-provider";
-import { WebMCPRegistrationProvider } from "@/components/webmcp/webmcp-registration-provider";
-import { WorkspaceRuntimeProvider } from "@/components/workspace/workspace-runtime-provider";
+import { PrivacyProvider } from "@/components/privacy/privacy-provider";
 
 import "./globals.css";
 
@@ -38,13 +35,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="en" className={geist.variable} suppressHydrationWarning>
       <body>
         <ThemeProvider>
-          <ControlTooltipProvider>
-            <WorkspaceRuntimeProvider>
-              <WebMCPRegistrationProvider>{children}</WebMCPRegistrationProvider>
-            </WorkspaceRuntimeProvider>
-          </ControlTooltipProvider>
+          <PrivacyProvider>{children}</PrivacyProvider>
         </ThemeProvider>
-        <Analytics />
       </body>
     </html>
   );

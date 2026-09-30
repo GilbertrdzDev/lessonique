@@ -4,6 +4,8 @@ import { GraduationCap, LoaderCircle, RotateCcw } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 
 import { ThemeToggle } from "@/components/classroom/theme-toggle";
+import { PrivacySettingsButton } from "@/components/privacy/privacy-settings";
+import { clearClassroomData } from "@/features/privacy/clear-classroom-data";
 import { Button } from "@/components/ui/button";
 import { useWebMCPRuntime } from "@/components/webmcp/webmcp-registration-provider";
 import { useWorkspaceRuntime } from "@/components/workspace/workspace-runtime-provider";
@@ -118,6 +120,7 @@ export function ExperienceHeader({
             </Button>
           </>
         ) : null}
+        <PrivacySettingsButton onClearClassroom={() => clearClassroomData(workspace.resetClassroom, () => window.localStorage, () => window.sessionStorage)} />
         <ThemeToggle />
       </div>
       {errorMessage ? (
