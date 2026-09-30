@@ -6,17 +6,18 @@ import { WebMCPRegistrationProvider } from "@/components/webmcp/webmcp-registrat
 import { WorkspaceRuntimeProvider } from "@/components/workspace/workspace-runtime-provider";
 
 import HomePage from "./page";
+import { PrivacyProvider } from "@/components/privacy/privacy-provider";
 
 describe("HomePage", () => {
   it("renders the root lobby without mounting a fictional classroom", () => {
     const markup = renderToStaticMarkup(
       createElement(
-        WorkspaceRuntimeProvider,
+        PrivacyProvider,
         null,
         createElement(
-          WebMCPRegistrationProvider,
+          WorkspaceRuntimeProvider,
           null,
-          createElement(HomePage),
+          createElement(WebMCPRegistrationProvider, null, createElement(HomePage)),
         ),
       ),
     );

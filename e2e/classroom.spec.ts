@@ -3516,18 +3516,13 @@ test.describe("classroom shell", () => {
     );
     expect(editorScrollerIndex).toBeGreaterThanOrEqual(0);
     const editorScroller = monacoScrollers.nth(editorScrollerIndex);
-    const initialEditorScroll = await editorScroller.evaluate((element) =>
-      element.scrollTop,
-    );
-    await editorScroller.evaluate((element) => {
-      const maximumScroll = element.scrollHeight - element.clientHeight;
-      element.scrollTop = element.scrollTop > 40
-        ? element.scrollTop - 40
-        : Math.min(maximumScroll, element.scrollTop + 40);
-    });
+    const visibleLines = editorScroller.locator(".view-lines .view-line");
+    const initialVisibleLines = await visibleLines.allTextContents();
+    await editorScroller.hover({ position: { x: 20, y: 20 } });
+    await page.mouse.wheel(0, -180);
     await expect
-      .poll(() => editorScroller.evaluate((element) => element.scrollTop))
-      .not.toBe(initialEditorScroll);
+      .poll(() => visibleLines.allTextContents())
+      .not.toEqual(initialVisibleLines);
     await expect(guide).toBeVisible();
     await expect(highlight).toHaveCount(1);
 

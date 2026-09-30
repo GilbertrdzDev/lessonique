@@ -20,7 +20,7 @@ export function AppShell({
       className={cn("min-h-0 min-w-0 flex-1", className)}
       data-slot="app-shell"
     >
-      <div className="mx-auto grid h-full min-h-0 min-w-0 max-w-[120rem] grid-cols-1 gap-2 sm:gap-2.5 2xl:grid-cols-[minmax(34rem,1fr)_auto]">
+      <div className="mx-auto grid min-h-0 min-w-0 max-w-[120rem] grid-cols-1 gap-2 sm:gap-2.5 2xl:h-full 2xl:grid-cols-[minmax(34rem,1fr)_auto]">
         <div className="order-1 flex min-h-0 min-w-0 flex-col gap-2 sm:gap-2.5 2xl:order-none">
           {sessionInfo}
           {workspace}

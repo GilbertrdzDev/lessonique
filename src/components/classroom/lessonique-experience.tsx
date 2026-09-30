@@ -173,7 +173,7 @@ export function LessoniqueExperience() {
 
   return (
     <div
-      className="flex min-h-dvh flex-col overflow-x-hidden p-2 sm:p-2.5 2xl:h-dvh 2xl:overflow-y-hidden"
+      className="flex h-full min-h-0 flex-col overflow-x-hidden p-2 sm:p-2.5 2xl:overflow-y-hidden"
       data-experience-state={experienceState}
       data-slot="lessonique-experience"
     >

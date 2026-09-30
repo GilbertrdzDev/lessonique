@@ -38,7 +38,7 @@ export function ClassroomHeader() {
 
   return (
     <header
-      className="grid min-h-24 grid-cols-1 overflow-hidden rounded-[1.25rem] border bg-card shadow-panel xl:grid-cols-[1.15fr_0.85fr_1fr]"
+      className="grid min-h-24 grid-cols-1 overflow-hidden rounded-[1.25rem] border bg-card shadow-panel lg:grid-cols-[1.15fr_0.85fr_1fr]"
       data-scene-obstruction="true"
       data-webmcp-availability={availability}
     >
@@ -58,7 +58,7 @@ export function ClassroomHeader() {
 
       <div
         aria-live="polite"
-        className="flex min-w-0 items-center gap-3 border-y px-5 py-4 xl:border-x xl:border-y-0"
+        className="flex min-w-0 items-center gap-3 border-y px-5 py-4 lg:border-x lg:border-y-0"
         role="status"
       >
         <span
