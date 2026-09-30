@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import type { ReactNode } from "react";
+import { Analytics } from "@vercel/analytics/next";
 import "tippy.js/animations/scale.css";
 import "tippy.js/dist/tippy.css";
 
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
             </WorkspaceRuntimeProvider>
           </ControlTooltipProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
